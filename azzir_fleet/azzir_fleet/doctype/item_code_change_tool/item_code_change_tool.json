@@ -1,0 +1,182 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "ICCT-.#####",
+ "creation": "2026-06-09 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "status",
+  "section_format",
+  "code_expression",
+  "expression_help",
+  "column_format",
+  "counter_start",
+  "counter_reset",
+  "section_filter",
+  "apply_to",
+  "item_group",
+  "brand",
+  "column_filter",
+  "include_disabled",
+  "custom_filters",
+  "section_preview",
+  "preview_summary",
+  "preview_items",
+  "section_log",
+  "run_log"
+ ],
+ "fields": [
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Draft\nPreviewed\nQueued\nCompleted\nFailed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_format",
+   "fieldtype": "Section Break",
+   "label": "New Code Format"
+  },
+  {
+   "default": "AZ-{{ item.item_group[:3] | upper }}-{{ counter | zfill(4) }}",
+   "fieldname": "code_expression",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Code Format Expression",
+   "reqd": 1,
+   "description": "Jinja expression evaluated per item. Variables: item (all item fields), counter (running number), idx."
+  },
+  {
+   "fieldname": "expression_help",
+   "fieldtype": "HTML",
+   "label": "Expression Help",
+   "options": "<div class='text-muted small'><b>Examples</b><br><code>AZ-{{ counter | zfill(4) }}</code> &rarr; AZ-0001<br><code>{{ item.brand }}-{{ counter }}</code> &rarr; TOYOTA-1<br><code>{{ item.item_group[:3] | upper }}-{{ counter | zfill(3) }}</code> &rarr; ENG-001<br><br>Available: <code>item.&lt;any field&gt;</code>, <code>counter</code>, <code>idx</code>. Filters: <code>upper</code>, <code>lower</code>, <code>zfill(n)</code>, slicing <code>[:3]</code>.</div>"
+  },
+  {
+   "fieldname": "column_format",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "fieldname": "counter_start",
+   "fieldtype": "Int",
+   "label": "Counter Start",
+   "description": "The first counter value."
+  },
+  {
+   "default": "Global",
+   "fieldname": "counter_reset",
+   "fieldtype": "Select",
+   "label": "Counter Reset",
+   "options": "Global\nPer Item Group\nPer Brand",
+   "description": "Global = 1,2,3 across all items. Per Group/Brand = restart counter for each."
+  },
+  {
+   "fieldname": "section_filter",
+   "fieldtype": "Section Break",
+   "label": "Which Items"
+  },
+  {
+   "default": "Filtered",
+   "fieldname": "apply_to",
+   "fieldtype": "Select",
+   "label": "Apply To",
+   "options": "Filtered\nAll Items",
+   "reqd": 1
+  },
+  {
+   "depends_on": "eval:doc.apply_to=='Filtered'",
+   "fieldname": "item_group",
+   "fieldtype": "Link",
+   "label": "Item Group",
+   "options": "Item Group"
+  },
+  {
+   "depends_on": "eval:doc.apply_to=='Filtered'",
+   "fieldname": "brand",
+   "fieldtype": "Link",
+   "label": "Brand",
+   "options": "Brand"
+  },
+  {
+   "fieldname": "column_filter",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "include_disabled",
+   "fieldtype": "Check",
+   "label": "Include Disabled Items"
+  },
+  {
+   "depends_on": "eval:doc.apply_to=='Filtered'",
+   "fieldname": "custom_filters",
+   "fieldtype": "Code",
+   "label": "Advanced Filters (JSON)",
+   "options": "JSON",
+   "description": "Optional. Frappe filter dict, e.g. {\"stock_uom\": \"Nos\"}"
+  },
+  {
+   "fieldname": "section_preview",
+   "fieldtype": "Section Break",
+   "label": "Preview"
+  },
+  {
+   "fieldname": "preview_summary",
+   "fieldtype": "Small Text",
+   "label": "Preview Summary",
+   "read_only": 1
+  },
+  {
+   "fieldname": "preview_items",
+   "fieldtype": "Table",
+   "label": "Changes",
+   "options": "Item Code Change Item",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_log",
+   "fieldtype": "Section Break",
+   "label": "Run Log"
+  },
+  {
+   "fieldname": "run_log",
+   "fieldtype": "Long Text",
+   "label": "Run Log",
+   "read_only": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-06-09 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Azzir Fleet",
+ "name": "Item Code Change Tool",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
