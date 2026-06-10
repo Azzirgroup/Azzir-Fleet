@@ -2,15 +2,15 @@
 # For license information, please see license.txt
 """POS alias-aware item search.
 
-POS uses its own search engine (erpnext ... point_of_sale.get_items), not the
-standard Link-field search, so it needs its own single hook. This override
-resolves an old code to the current item before the original search runs, and
-tags the returned items so the POS client can raise the "old code" toast.
+POS uses its own search engine, so it needs its own hook. This override runs the
+normal POS search, then augments it with any items whose OLD codes match the
+search term (exact OR partial), tagging them so the POS client can announce the
+"old code" resolution.
 """
 
 import frappe
 
-from azzir_fleet.alias import resolve_code
+CHILD_DT = "Item Code Entry"
 
 
 @frappe.whitelist()
@@ -24,28 +24,44 @@ def get_items(
 ):
 	from erpnext.selling.page.point_of_sale.point_of_sale import get_items as _orig_get_items
 
-	old_code = None
-	current = None
-	if search_term:
-		info = resolve_code(search_term)
-		if info and info.get("is_alias"):
-			old_code = info.get("old_code")
-			current = info.get("current_code")
-			search_term = current  # search the live code instead
-
 	result = _orig_get_items(
-		start,
-		page_length,
-		price_list,
-		item_group,
-		pos_profile,
-		search_term=search_term,
+		start, page_length, price_list, item_group, pos_profile, search_term=search_term
+	)
+	if not search_term:
+		return result
+
+	if not isinstance(result, dict):
+		result = {"items": list(result or [])}
+	items = result.get("items") or []
+	present = {i.get("item_code"): i for i in items}
+
+	# Old codes (non-primary rows) matching the term, exact or partial.
+	matches = frappe.get_all(
+		CHILD_DT,
+		filters={"code": ["like", f"%{search_term}%"], "is_primary": 0, "parenttype": "Item"},
+		fields=["code", "parent"],
+		limit=20,
 	)
 
-	# Tag results so the POS client can announce the alias resolution.
-	if old_code and isinstance(result, dict) and result.get("items"):
-		for item in result["items"]:
-			item["azzir_old_code"] = old_code
-			item["azzir_current_code"] = current
+	resolved = {}  # current_code -> old_code that matched
+	for m in matches:
+		resolved.setdefault(m["parent"], m["code"])
 
+	for current, old in resolved.items():
+		if current in present:
+			present[current]["azzir_old_code"] = old
+			present[current]["azzir_current_code"] = current
+			continue
+		# Look the live item up by its current code (uses the normal SQL path).
+		sub = _orig_get_items(
+			start, page_length, price_list, item_group, pos_profile, search_term=current
+		)
+		for it in sub.get("items", []) if isinstance(sub, dict) else []:
+			if it.get("item_code") == current and current not in present:
+				it["azzir_old_code"] = old
+				it["azzir_current_code"] = current
+				items.append(it)
+				present[current] = it
+
+	result["items"] = items
 	return result

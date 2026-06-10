@@ -43,7 +43,7 @@ app_include_js = "/assets/azzir_fleet/js/azzir_alias.js"
 # page_js = {"page" : "public/js/file.js"}
 
 # include js in doctype views
-# doctype_js = {"doctype" : "public/js/doctype.js"}
+doctype_js = {"Item": "public/js/item_codes.js"}
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
@@ -86,7 +86,8 @@ app_include_js = "/assets/azzir_fleet/js/azzir_alias.js"
 # ------------
 
 # before_install = "azzir_fleet.install.before_install"
-# after_install = "azzir_fleet.install.after_install"
+after_install = "azzir_fleet.setup.after_install"
+after_migrate = "azzir_fleet.setup.after_migrate"
 
 # Uninstallation
 # ------------
@@ -134,7 +135,9 @@ app_include_js = "/assets/azzir_fleet/js/azzir_alias.js"
 
 doc_events = {
 	"Item": {
-		"after_rename": "azzir_fleet.alias.capture_alias_after_rename",
+		"validate": "azzir_fleet.item_codes.validate",
+		"on_update": "azzir_fleet.item_codes.on_update",
+		"after_rename": "azzir_fleet.item_codes.after_rename",
 	}
 }
 

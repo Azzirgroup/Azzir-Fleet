@@ -124,15 +124,13 @@ class ItemCodeChangeTool(Document):
 
 	def _code_taken(self, new_code, rename_set):
 		"""True if new_code collides with an item that is NOT being renamed,
-		or with an existing alias."""
+		or with any existing code (current or old) of another item."""
 		if new_code in rename_set:
 			# It's an existing item, but it's in our batch and will move away.
 			return False
-		if frappe.db.exists("Item", new_code):
-			return True
-		if frappe.db.exists("Item Code Alias", new_code):
-			return True
-		return False
+		from azzir_fleet.item_codes import code_owner
+
+		return bool(code_owner(new_code))
 
 	# ------------------------------------------------------------------ #
 	# Run
@@ -180,14 +178,7 @@ def _run_changes_bg(docname):
 				show_alert=False,
 				rebuild_search=False,
 			)
-			# alias is captured automatically by the after_rename hook;
-			# stamp the tool reference for traceability.
-			if frappe.db.exists("Item Code Alias", row.old_code):
-				frappe.db.set_value(
-					"Item Code Alias",
-					row.old_code,
-					{"change_tool": doc.name, "source": "Change Tool"},
-				)
+			# The after_rename hook records the codes in Item.azzir_alias_codes.
 			row.db_set("status", "Done")
 			row.db_set("message", f"Renamed to {row.new_code}")
 			done += 1
