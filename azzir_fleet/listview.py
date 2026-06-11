@@ -43,48 +43,91 @@ def get_count():
 
 
 def _expand_item_alias_filters():
-	fd = frappe.form_dict
-	if fd.get("doctype") != "Item":
-		return
-
-	filters = fd.get("filters")
-	if not filters:
-		return
+	# Must never break a report — fall through to the original on any problem.
 	try:
-		parsed = json.loads(filters) if isinstance(filters, str) else filters
+		_do_expand()
 	except Exception:
-		return
-	if not isinstance(parsed, list):
+		pass
+
+
+def _do_expand():
+	fd = frappe.form_dict
+	doctype = fd.get("doctype")
+	if not doctype:
 		return
 
+	parsed = _parse_json(fd.get("filters"))
+	if not isinstance(parsed, list) or not parsed:
+		return
+
+	has_existing_or = bool(fd.get("or_filters"))
 	kept = []
 	extra_or = []
-	changed = False
+	changed_or = False
+	changed_inplace = False
 
 	for f in parsed:
 		field, op, value = _parse_filter(f)
-		if field == "name" and op in ("like", "=") and value:
-			currents = _resolve_currents(value, op)
-			if currents:
-				# keep the original name match, OR-ed with the resolved item(s)
-				extra_or.append(["Item", "name", op, value])
-				for c in currents:
-					extra_or.append(["Item", "name", "=", c])
-				changed = True
-				continue
-		kept.append(f)
+		if not field or op not in ("like", "=") or not value:
+			kept.append(f)
+			continue
+		if not _is_item_field(doctype, field):
+			kept.append(f)
+			continue
 
-	if not changed:
-		return
+		currents = _resolve_currents(value, op)
+		if not currents:
+			kept.append(f)
+			continue
 
-	fd["filters"] = json.dumps(kept)
-	existing_or = fd.get("or_filters")
+		if has_existing_or:
+			# Don't touch or_filters semantics — just point an exact filter at the
+			# current code in place. (Partial/like is left alone in this case.)
+			if op == "=":
+				kept.append(_set_filter_value(f, list(currents)[0]))
+				changed_inplace = True
+			else:
+				kept.append(f)
+		else:
+			extra_or.append([doctype, field, op, value])
+			for c in currents:
+				extra_or.append([doctype, field, "=", c])
+			changed_or = True
+
+	if changed_or:
+		fd["filters"] = json.dumps(kept)
+		fd["or_filters"] = json.dumps(extra_or)
+	elif changed_inplace:
+		fd["filters"] = json.dumps(kept)
+
+
+def _is_item_field(doctype, field):
+	"""True if `field` identifies an Item: the Item doctype's own name, or a
+	Link-to-Item field on any other doctype."""
+	if doctype == "Item":
+		return field == "name"
 	try:
-		or_parsed = json.loads(existing_or) if isinstance(existing_or, str) else (existing_or or [])
+		df = frappe.get_meta(doctype).get_field(field)
 	except Exception:
-		or_parsed = []
-	or_parsed.extend(extra_or)
-	fd["or_filters"] = json.dumps(or_parsed)
+		return False
+	return bool(df) and df.fieldtype == "Link" and df.options == "Item"
+
+
+def _parse_json(value):
+	if not value:
+		return None
+	if isinstance(value, str):
+		try:
+			return json.loads(value)
+		except Exception:
+			return None
+	return value
+
+
+def _set_filter_value(f, new_value):
+	f = list(f)
+	f[-1] = new_value
+	return f
 
 
 def _parse_filter(f):

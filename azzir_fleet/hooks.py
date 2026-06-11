@@ -184,6 +184,7 @@ override_whitelisted_methods = {
 	"frappe.desk.reportview.get": "azzir_fleet.listview.get",
 	"frappe.desk.reportview.get_list": "azzir_fleet.listview.get_list",
 	"frappe.desk.reportview.get_count": "azzir_fleet.listview.get_count",
+	"erpnext.controllers.queries.item_query": "azzir_fleet.alias.item_query",
 }
 #
 # each overriding function accepts a `data` argument;
