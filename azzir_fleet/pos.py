@@ -43,14 +43,21 @@ def get_items(
 		limit=20,
 	)
 
-	resolved = {}  # current_code -> old_code that matched
+	term_l = search_term.strip().lower()
+	resolved = {}  # current_code -> (old_code, is_exact_match)
 	for m in matches:
-		resolved.setdefault(m["parent"], m["code"])
+		exact = m["code"].strip().lower() == term_l
+		# prefer an exact match if one exists for this item
+		if m["parent"] not in resolved or exact:
+			resolved[m["parent"]] = (m["code"], exact)
 
-	for current, old in resolved.items():
+	for current, (old, exact) in resolved.items():
+		# Only tag (-> client toast) on a COMPLETE old code. Partial typing still
+		# surfaces the item, but without the "old code" announcement.
 		if current in present:
-			present[current]["azzir_old_code"] = old
-			present[current]["azzir_current_code"] = current
+			if exact:
+				present[current]["azzir_old_code"] = old
+				present[current]["azzir_current_code"] = current
 			continue
 		# Look the live item up by its current code (uses the normal SQL path).
 		sub = _orig_get_items(
@@ -58,8 +65,9 @@ def get_items(
 		)
 		for it in sub.get("items", []) if isinstance(sub, dict) else []:
 			if it.get("item_code") == current and current not in present:
-				it["azzir_old_code"] = old
-				it["azzir_current_code"] = current
+				if exact:
+					it["azzir_old_code"] = old
+					it["azzir_current_code"] = current
 				items.append(it)
 				present[current] = it
 

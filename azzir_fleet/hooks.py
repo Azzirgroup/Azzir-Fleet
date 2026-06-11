@@ -181,6 +181,9 @@ doc_events = {
 override_whitelisted_methods = {
 	"frappe.desk.search.search_link": "azzir_fleet.alias.search_link",
 	"erpnext.selling.page.point_of_sale.point_of_sale.get_items": "azzir_fleet.pos.get_items",
+	"frappe.desk.reportview.get": "azzir_fleet.listview.get",
+	"frappe.desk.reportview.get_list": "azzir_fleet.listview.get_list",
+	"frappe.desk.reportview.get_count": "azzir_fleet.listview.get_count",
 }
 #
 # each overriding function accepts a `data` argument;
