@@ -124,6 +124,11 @@ def after_rename(doc, method=None, old=None, new=None, merge=False):
 	if not old or not new or old == new:
 		return
 
+	# ERPNext's before_rename syncs item_name to the new code when item_name == old
+	# code. Honour "rename the code only" — keep the descriptive Item Name unchanged.
+	if not merge and frappe.db.get_value("Item", new, "item_name") == new:
+		frappe.db.set_value("Item", new, "item_name", old, update_modified=False)
+
 	now = now_datetime()
 	# Rows moved to parent=new during rename. Demote all, then set new/old.
 	frappe.db.sql(
