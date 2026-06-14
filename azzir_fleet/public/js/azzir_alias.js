@@ -8,14 +8,45 @@
 
 frappe.provide("azzir_fleet");
 
+azzir_fleet.DEBUG = true;
+
 azzir_fleet._handle_select = function (e) {
 	const native = e.originalEvent || e;
-	const picked = native && native.text; // the chosen Awesomplete suggestion
-	if (!picked) return;
+	const value = native && native.text && native.text.value; // selected (current) code
+	if (azzir_fleet.DEBUG) console.info("[Azzir Fleet] selectcomplete value=", value);
+	if (!value) return;
 
-	const desc = picked.description || "";
+	// The control reference lives on the .frappe-control wrapper (not input data).
+	const wrapper = $(this).closest(".frappe-control").get(0);
+	const field = wrapper && wrapper.fieldobj;
+	if (azzir_fleet.DEBUG)
+		console.info(
+			"[Azzir Fleet] field=",
+			field && field.df && field.df.fieldname,
+			"options=",
+			field && field.df && field.df.options,
+			"doctype=",
+			field && field.doctype
+		);
+	if (!field || !field.df || field.df.options !== "Item" || !field.awesomplete) return;
+
+	// The description (with our "↺ old code:" tag) lives in the awesomplete data,
+	// NOT on the selection event itself.
+	const data = field.awesomplete.get_item(value) || {};
+	const desc = data.description || "";
 	const marker = desc.indexOf("↺ old code:");
-	if (marker === -1) return; // not an alias hit — ignore
+	if (azzir_fleet.DEBUG) console.info("[Azzir Fleet] description=", JSON.stringify(desc));
+
+	const can_store =
+		field.doctype && field.docname && frappe.meta.has_field(field.doctype, "azzir_old_code");
+
+	if (marker === -1) {
+		// Selected via the current code / name — clear any stored old code.
+		if (can_store) {
+			frappe.model.set_value(field.doctype, field.docname, "azzir_old_code", "");
+		}
+		return;
+	}
 
 	// Extract the old code: text after "↺ old code:" up to the " · " separator.
 	let old_code = desc.slice(marker + "↺ old code:".length);
@@ -23,19 +54,25 @@ azzir_fleet._handle_select = function (e) {
 	if (sep !== -1) old_code = old_code.slice(0, sep);
 	old_code = old_code.trim();
 
-	const current = picked.value;
+	// Store the typed old code on the row (used by the print format).
+	if (can_store) {
+		frappe.model.set_value(field.doctype, field.docname, "azzir_old_code", old_code);
+	}
+
 	frappe.show_alert(
 		{
-			message: __('Old code "{0}" — same item, now {1}', [old_code, current]),
+			message: __('Old code "{0}" — same item, now {1}', [old_code, value]),
 			indicator: "orange",
 		},
 		8
 	);
 };
 
-// Awesomplete dispatches a bubbling event on the <input>; a delegated handler on
-// document catches it for every link field, in forms and in grid rows alike.
-$(document).on("awesomplete-selectcomplete", "input", azzir_fleet._handle_select);
+// Awesomplete dispatches a bubbling event on the <input>; catch it on document
+// and use e.target as the input (more robust than delegation for native events).
+$(document).on("awesomplete-selectcomplete", function (e) {
+	azzir_fleet._handle_select.call(e.target, e);
+});
 
 // --------------------------------------------------------------------------- //
 // POS — same behaviour inside Point of Sale (its own search engine).

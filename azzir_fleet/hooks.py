@@ -138,7 +138,19 @@ doc_events = {
 		"validate": "azzir_fleet.item_codes.validate",
 		"on_update": "azzir_fleet.item_codes.on_update",
 		"after_rename": "azzir_fleet.item_codes.after_rename",
-	}
+	},
+	# Maximum Order Qty — buying documents
+	"Material Request": {"validate": "azzir_fleet.qty_limits.validate_buying"},
+	"Purchase Order": {"validate": "azzir_fleet.qty_limits.validate_buying"},
+	"Purchase Receipt": {"validate": "azzir_fleet.qty_limits.validate_buying"},
+	"Purchase Invoice": {"validate": "azzir_fleet.qty_limits.validate_buying"},
+	"Supplier Quotation": {"validate": "azzir_fleet.qty_limits.validate_buying"},
+	# Maximum Sales Qty — selling documents
+	"Quotation": {"validate": "azzir_fleet.qty_limits.validate_selling"},
+	"Sales Order": {"validate": "azzir_fleet.qty_limits.validate_selling"},
+	"Delivery Note": {"validate": "azzir_fleet.qty_limits.validate_selling"},
+	"Sales Invoice": {"validate": "azzir_fleet.qty_limits.validate_selling"},
+	"POS Invoice": {"validate": "azzir_fleet.qty_limits.validate_selling"},
 }
 
 # Scheduled Tasks
