@@ -72,10 +72,16 @@ def after_migrate():
 
 
 def setup_print_format():
-	"""Create a Sales Invoice print format that prints `item_code (old_code)`.
-	Created once; never overwrites later edits."""
+	"""Create/refresh the Sales Invoice print format (proforma style, item code +
+	alternative code in description + preparer name)."""
 	name = "Sales Invoice with Old Code"
 	if frappe.db.exists("Print Format", name):
+		pf = frappe.get_doc("Print Format", name)
+		pf.html = SALES_INVOICE_OLD_CODE_HTML
+		pf.custom_format = 1
+		pf.print_format_type = "Jinja"
+		pf.flags.ignore_permissions = True
+		pf.save(ignore_permissions=True)
 		return
 	frappe.get_doc(
 		{
@@ -96,58 +102,106 @@ def after_install():
 
 
 SALES_INVOICE_OLD_CODE_HTML = """
-<div class="azzir-invoice">
-	<h2 style="margin-bottom:0;">{{ doc.company }}</h2>
-	<h4 style="margin-top:4px;">Tax Invoice</h4>
-	<table style="width:100%; margin-bottom:10px;">
+<div class="azzir-invoice" style="font-size:12px; color:#000;">
+	{%- set company_tin = frappe.db.get_value("Company", doc.company, "tax_id") -%}
+
+	<!-- Title -->
+	<div style="text-align:right; margin-bottom:8px;">
+		<span style="font-size:22px; font-style:italic; font-weight:bold;">PROFORMA INVOICE</span>
+	</div>
+
+	<!-- Customer + meta -->
+	<table style="width:100%; margin-bottom:12px;">
 		<tr>
-			<td><b>Invoice #:</b> {{ doc.name }}<br>
-				<b>Date:</b> {{ frappe.utils.formatdate(doc.posting_date) }}</td>
-			<td style="text-align:right;"><b>Customer:</b> {{ doc.customer_name or doc.customer }}
-				{% if doc.po_no %}<br><b>PO #:</b> {{ doc.po_no }}{% endif %}</td>
+			<td style="vertical-align:top; width:55%;">
+				<b>Customer:</b> {{ doc.customer_name or doc.customer }}
+				<div style="border:1px solid #999; padding:6px; margin-top:4px; min-height:70px;">
+					<b>{{ doc.customer_name or doc.customer }}</b><br>
+					{% if doc.address_display %}{{ doc.address_display }}{% endif %}
+				</div>
+			</td>
+			<td style="vertical-align:top; padding-left:15px;">
+				<table style="width:100%; border-collapse:collapse;">
+					<tr><td style="text-align:right; padding:2px 6px;"><b>Ref :</b></td>
+						<td style="border:1px solid #999; padding:2px 6px; text-align:center;">{{ doc.po_no or doc.name }}</td></tr>
+					<tr><td style="text-align:right; padding:2px 6px;"><b>Date :</b></td>
+						<td style="border:1px solid #999; padding:2px 6px; text-align:center;">{{ frappe.utils.formatdate(doc.posting_date) }}</td></tr>
+					<tr><td style="text-align:right; padding:2px 6px;"><b>Currency :</b></td>
+						<td style="border:1px solid #999; padding:2px 6px; text-align:center;">{{ doc.currency }}</td></tr>
+					<tr><td style="text-align:right; padding:2px 6px;"><b>S-TIN :</b></td>
+						<td style="border:1px solid #999; padding:2px 6px; text-align:center;">{{ company_tin or "" }}</td></tr>
+					<tr><td style="text-align:right; padding:2px 6px;"><b>S-VRN :</b></td>
+						<td style="border:1px solid #999; padding:2px 6px; text-align:center;">{{ doc.company_tax_id or "" }}</td></tr>
+				</table>
+			</td>
 		</tr>
 	</table>
-	<table class="table table-bordered" style="width:100%; border-collapse:collapse;">
+
+	<!-- Items -->
+	<table style="width:100%; border-collapse:collapse;">
 		<thead>
-			<tr>
-				<th style="width:5%;">#</th>
-				<th style="width:45%;">Item</th>
-				<th style="width:12%; text-align:right;">Qty</th>
-				<th style="width:18%; text-align:right;">Rate</th>
-				<th style="width:20%; text-align:right;">Amount</th>
+			<tr style="border-top:2px solid #000; border-bottom:1px solid #000;">
+				<th style="padding:5px; text-align:left;">Item Code</th>
+				<th style="padding:5px; text-align:left;">Description</th>
+				<th style="padding:5px; text-align:right;">Qty</th>
+				<th style="padding:5px; text-align:right;">Price</th>
+				<th style="padding:5px; text-align:right;">Disc</th>
+				<th style="padding:5px; text-align:right;">Tax</th>
+				<th style="padding:5px; text-align:right;">Total (Excl)</th>
 			</tr>
 		</thead>
 		<tbody>
 			{% for row in doc.items %}
-			<tr>
-				<td>{{ row.idx }}</td>
-				<td>
-					<b>{{ row.item_code }}{% if row.azzir_old_code %} ({{ row.azzir_old_code }}){% endif %}</b>
-					{% if row.item_name and row.item_name != row.item_code %}<br>{{ row.item_name }}{% endif %}
+			{% set alt = row.get("azzir_old_code") or get_item_old_codes(row.item_code) %}
+			<tr style="border-bottom:1px solid #ddd;">
+				<td style="padding:5px;">{{ row.item_code }}</td>
+				<td style="padding:5px;">
+					{{ row.item_name }}
+					{% if alt %}<br><span style="color:#555;">Alt: {{ alt }}</span>{% endif %}
 				</td>
-				<td style="text-align:right;">{{ row.qty }} {{ row.uom }}</td>
-				<td style="text-align:right;">{{ frappe.utils.fmt_money(row.rate, currency=doc.currency) }}</td>
-				<td style="text-align:right;">{{ frappe.utils.fmt_money(row.amount, currency=doc.currency) }}</td>
+				<td style="padding:5px; text-align:right;">{{ "%.2f"|format(row.qty) }}</td>
+				<td style="padding:5px; text-align:right;">{{ frappe.utils.fmt_money(row.rate, currency=doc.currency) }}</td>
+				<td style="padding:5px; text-align:right;">{{ frappe.utils.fmt_money(row.discount_amount or 0, currency=doc.currency) }}</td>
+				<td style="padding:5px; text-align:right;">{{ frappe.utils.fmt_money(0, currency=doc.currency) }}</td>
+				<td style="padding:5px; text-align:right;">{{ frappe.utils.fmt_money(row.net_amount or row.amount, currency=doc.currency) }}</td>
 			</tr>
 			{% endfor %}
 		</tbody>
 	</table>
-	<table style="width:100%; margin-top:10px;">
+
+	<!-- Notes / Terms (from the invoice's Terms field — nothing hardcoded) -->
+	{% if doc.terms %}<div style="margin:15px 0;">{{ doc.terms }}</div>{% endif %}
+
+	<!-- Terms (left) + totals (right) -->
+	<table style="width:100%; margin-top:20px;">
 		<tr>
-			<td style="text-align:right;"><b>Net Total:</b></td>
-			<td style="text-align:right; width:25%;">{{ frappe.utils.fmt_money(doc.net_total, currency=doc.currency) }}</td>
-		</tr>
-		{% for tax in doc.taxes %}
-		<tr>
-			<td style="text-align:right;">{{ tax.description }}:</td>
-			<td style="text-align:right;">{{ frappe.utils.fmt_money(tax.tax_amount, currency=doc.currency) }}</td>
-		</tr>
-		{% endfor %}
-		<tr>
-			<td style="text-align:right;"><b>Grand Total:</b></td>
-			<td style="text-align:right;"><b>{{ frappe.utils.fmt_money(doc.grand_total, currency=doc.currency) }}</b></td>
+			<td style="vertical-align:bottom; width:50%;">
+				<table>
+					<tr><td><b>Payment Terms:</b></td><td style="padding-left:10px;">{{ doc.payment_terms_template or "" }}</td></tr>
+					<tr><td><b>Validity:</b></td><td style="padding-left:10px;">{{ doc.get("validity") or "" }}</td></tr>
+					<tr><td colspan="2" style="padding-top:25px;"><b>Prepared By:</b> {{ frappe.db.get_value("User", doc.owner, "full_name") or doc.owner }}</td></tr>
+					<tr><td colspan="2" style="padding-top:15px;"><b>Signature:</b> _____________________</td></tr>
+				</table>
+			</td>
+			<td style="vertical-align:top;">
+				<table style="width:100%;">
+					<tr style="border-top:1px solid #000;">
+						<td style="text-align:right; padding:4px;"><b>SUB TOTAL (Excl) :</b></td>
+						<td style="text-align:right; padding:4px; width:40%;">{{ frappe.utils.fmt_money(doc.net_total, currency=doc.currency) }}</td>
+					</tr>
+					<tr>
+						<td style="text-align:right; padding:4px;"><b>VAT :</b></td>
+						<td style="text-align:right; padding:4px;">{{ frappe.utils.fmt_money(doc.total_taxes_and_charges, currency=doc.currency) }}</td>
+					</tr>
+					<tr style="border-top:1px solid #000; border-bottom:2px solid #000;">
+						<td style="text-align:right; padding:4px;"><b>INVOICE TOTAL ({{ doc.currency }}) :</b></td>
+						<td style="text-align:right; padding:4px;"><b>{{ frappe.utils.fmt_money(doc.grand_total, currency=doc.currency) }}</b></td>
+					</tr>
+				</table>
+			</td>
 		</tr>
 	</table>
-	{% if doc.in_words %}<p style="margin-top:8px;"><b>In Words:</b> {{ doc.in_words }}</p>{% endif %}
+
+	{% if doc.in_words %}<p style="margin-top:10px;"><b>In Words:</b> {{ doc.in_words }}</p>{% endif %}
 </div>
 """

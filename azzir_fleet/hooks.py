@@ -77,10 +77,9 @@ doctype_js = {"Item": "public/js/item_codes.js"}
 # ----------
 
 # add methods and filters to jinja environment
-# jinja = {
-# 	"methods": "azzir_fleet.utils.jinja_methods",
-# 	"filters": "azzir_fleet.utils.jinja_filters"
-# }
+jinja = {
+	"methods": ["azzir_fleet.alias.get_item_old_codes"],
+}
 
 # Installation
 # ------------

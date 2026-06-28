@@ -131,6 +131,19 @@ def item_query(
 # --------------------------------------------------------------------------- #
 # Helper API (used by POS / client JS / anywhere)
 # --------------------------------------------------------------------------- #
+def get_item_old_codes(item_code):
+	"""Comma-joined alternative (old) codes of an item — for print formats."""
+	if not item_code:
+		return ""
+	codes = frappe.get_all(
+		CHILD_DT,
+		filters={"parent": item_code, "parenttype": "Item", "is_primary": 0},
+		pluck="code",
+		order_by="changed_on desc",
+	)
+	return ", ".join(codes)
+
+
 @frappe.whitelist()
 def resolve_code(code: str):
 	"""Return the current item for any code (current or old). None if unknown."""
