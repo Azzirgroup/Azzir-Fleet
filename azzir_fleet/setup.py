@@ -69,6 +69,16 @@ def after_migrate():
 		validate_fields_for_doctype=False,
 	)
 	setup_print_format()
+	# Make it the default print format for Sales Invoice.
+	make_property_setter(
+		"Sales Invoice",
+		None,
+		"default_print_format",
+		"Sales Invoice with Old Code",
+		"Data",
+		for_doctype=True,
+		validate_fields_for_doctype=False,
+	)
 
 
 def setup_print_format():
@@ -105,6 +115,9 @@ SALES_INVOICE_OLD_CODE_HTML = """
 <div class="azzir-invoice" style="font-size:12px; color:#000;">
 	{%- set company_tin = frappe.db.get_value("Company", doc.company, "tax_id") -%}
 
+	<!-- Letter head (custom formats must include it explicitly) -->
+	{% if not no_letterhead and letter_head %}<div class="letter-head">{{ letter_head }}</div>{% endif %}
+
 	<!-- Title -->
 	<div style="text-align:right; margin-bottom:8px;">
 		<span style="font-size:22px; font-style:italic; font-weight:bold;">PROFORMA INVOICE</span>
@@ -116,7 +129,6 @@ SALES_INVOICE_OLD_CODE_HTML = """
 			<td style="vertical-align:top; width:55%;">
 				<b>Customer:</b> {{ doc.customer_name or doc.customer }}
 				<div style="border:1px solid #999; padding:6px; margin-top:4px; min-height:70px;">
-					<b>{{ doc.customer_name or doc.customer }}</b><br>
 					{% if doc.address_display %}{{ doc.address_display }}{% endif %}
 				</div>
 			</td>

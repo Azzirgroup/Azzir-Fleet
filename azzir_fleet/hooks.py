@@ -148,7 +148,12 @@ doc_events = {
 	"Quotation": {"validate": "azzir_fleet.qty_limits.validate_selling"},
 	"Sales Order": {"validate": "azzir_fleet.qty_limits.validate_selling"},
 	"Delivery Note": {"validate": "azzir_fleet.qty_limits.validate_selling"},
-	"Sales Invoice": {"validate": "azzir_fleet.qty_limits.validate_selling"},
+	"Sales Invoice": {
+		"validate": [
+			"azzir_fleet.qty_limits.validate_selling",
+			"azzir_fleet.qty_limits.validate_sales_stock",
+		]
+	},
 	"POS Invoice": {"validate": "azzir_fleet.qty_limits.validate_selling"},
 }
 
