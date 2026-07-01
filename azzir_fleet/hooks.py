@@ -143,16 +143,34 @@ doc_events = {
 	"Purchase Order": {"validate": "azzir_fleet.qty_limits.validate_buying"},
 	"Purchase Receipt": {"validate": "azzir_fleet.qty_limits.validate_buying"},
 	"Purchase Invoice": {"validate": "azzir_fleet.qty_limits.validate_buying"},
-	"Supplier Quotation": {"validate": "azzir_fleet.qty_limits.validate_buying"},
 	# Maximum Sales Qty — selling documents
-	"Quotation": {"validate": "azzir_fleet.qty_limits.validate_selling"},
-	"Sales Order": {"validate": "azzir_fleet.qty_limits.validate_selling"},
-	"Delivery Note": {"validate": "azzir_fleet.qty_limits.validate_selling"},
+	"Quotation": {
+		"before_validate": "azzir_fleet.vat.apply_vat_option",
+		"validate": [
+			"azzir_fleet.qty_limits.validate_selling",
+			"azzir_fleet.quotation.set_quotation_validity",
+		],
+	},
+	"Supplier Quotation": {
+		"validate": [
+			"azzir_fleet.qty_limits.validate_buying",
+			"azzir_fleet.quotation.set_quotation_validity",
+		]
+	},
+	"Sales Order": {
+		"before_validate": "azzir_fleet.vat.apply_vat_option",
+		"validate": "azzir_fleet.qty_limits.validate_selling",
+	},
+	"Delivery Note": {
+		"before_validate": "azzir_fleet.vat.apply_vat_option",
+		"validate": "azzir_fleet.qty_limits.validate_selling",
+	},
 	"Sales Invoice": {
+		"before_validate": "azzir_fleet.vat.apply_vat_option",
 		"validate": [
 			"azzir_fleet.qty_limits.validate_selling",
 			"azzir_fleet.qty_limits.validate_sales_stock",
-		]
+		],
 	},
 	"POS Invoice": {"validate": "azzir_fleet.qty_limits.validate_selling"},
 }

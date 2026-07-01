@@ -53,7 +53,42 @@ CUSTOM_FIELDS = {
 			"no_copy": 1,
 		}
 	],
+	# Default quotation validity per party — used to auto-set Quotation "Valid Till".
+	"Customer": [
+		{
+			"fieldname": "azzir_quotation_validity_days",
+			"label": "Default Quotation Validity (Days)",
+			"fieldtype": "Int",
+			"insert_after": "default_currency",
+			"description": "Quotations for this customer expire this many days after the "
+			"quotation date (auto-filled if Valid Till is empty). 0 = ignore.",
+		}
+	],
+	"Supplier": [
+		{
+			"fieldname": "azzir_quotation_validity_days",
+			"label": "Default Quotation Validity (Days)",
+			"fieldtype": "Int",
+			"insert_after": "default_currency",
+			"description": "Quotations for this supplier expire this many days after the "
+			"quotation date (auto-filled if Valid Till is empty). 0 = ignore.",
+		}
+	],
 }
+
+# "Apply VAT" toggle (default on) — unchecking removes VAT on that document.
+_APPLY_VAT_FIELD = {
+	"fieldname": "azzir_apply_vat",
+	"label": "Apply VAT",
+	"fieldtype": "Check",
+	"default": "1",
+	"insert_after": "taxes_and_charges",
+	"description": "Uncheck to remove VAT from this document.",
+}
+for _dt in ("Sales Invoice", "Sales Order", "Quotation", "Delivery Note"):
+	CUSTOM_FIELDS.setdefault(_dt, []).append(dict(_APPLY_VAT_FIELD))
+
+OVERRIDE_ROLE = "Azzir Stock Override"
 
 
 def after_migrate():
@@ -79,6 +114,47 @@ def after_migrate():
 		for_doctype=True,
 		validate_fields_for_doctype=False,
 	)
+	# Relabel Item Code -> Part Number on the Item master.
+	make_property_setter(
+		"Item", "item_code", "label", "Part Number", "Data", validate_fields_for_doctype=False
+	)
+	_setup_override_role()
+	_enforce_single_session()
+	_enable_multicurrency()
+
+
+def _setup_override_role():
+	"""Role whose holders bypass the min/max/stock qty limits."""
+	if not frappe.db.exists("Role", OVERRIDE_ROLE):
+		frappe.get_doc(
+			{"doctype": "Role", "role_name": OVERRIDE_ROLE, "desk_access": 1}
+		).insert(ignore_permissions=True)
+
+
+def _enforce_single_session():
+	"""One active session per user (logging in elsewhere ends the old session)."""
+	make_property_setter(
+		"User", "simultaneous_sessions", "default", 1, "Data", validate_fields_for_doctype=False
+	)
+	for user in frappe.get_all(
+		"User",
+		filters={"enabled": 1, "name": ["not in", ("Administrator", "Guest")]},
+		pluck="name",
+	):
+		if frappe.db.get_value("User", user, "simultaneous_sessions") != 1:
+			frappe.db.set_value("User", user, "simultaneous_sessions", 1, update_modified=False)
+
+
+def _enable_multicurrency():
+	"""Multi-currency is native; allow multi-currency invoices on a single party account."""
+	try:
+		frappe.db.set_single_value(
+			"Accounts Settings",
+			"allow_multi_currency_invoices_against_single_party_account",
+			1,
+		)
+	except Exception:
+		pass
 
 
 def setup_print_format():
@@ -120,7 +196,7 @@ SALES_INVOICE_OLD_CODE_HTML = """
 
 	<!-- Title -->
 	<div style="text-align:right; margin-bottom:8px;">
-		<span style="font-size:22px; font-style:italic; font-weight:bold;">PROFORMA INVOICE</span>
+		<span style="font-size:30px; font-weight:bold; letter-spacing:1px;">PROFORMA INVOICE</span>
 	</div>
 
 	<!-- Customer + meta -->
@@ -153,7 +229,8 @@ SALES_INVOICE_OLD_CODE_HTML = """
 	<table style="width:100%; border-collapse:collapse;">
 		<thead>
 			<tr style="border-top:2px solid #000; border-bottom:1px solid #000;">
-				<th style="padding:5px; text-align:left;">Item Code</th>
+				<th style="padding:5px; text-align:left;">#</th>
+				<th style="padding:5px; text-align:left;">Part Number</th>
 				<th style="padding:5px; text-align:left;">Description</th>
 				<th style="padding:5px; text-align:right;">Qty</th>
 				<th style="padding:5px; text-align:right;">Price</th>
@@ -166,10 +243,11 @@ SALES_INVOICE_OLD_CODE_HTML = """
 			{% for row in doc.items %}
 			{% set alt = row.get("azzir_old_code") or get_item_old_codes(row.item_code) %}
 			<tr style="border-bottom:1px solid #ddd;">
+				<td style="padding:5px;">{{ loop.index }}</td>
 				<td style="padding:5px;">{{ row.item_code }}</td>
 				<td style="padding:5px;">
 					{{ row.item_name }}
-					{% if alt %}<br><span style="color:#555;">Alt: {{ alt }}</span>{% endif %}
+					{% if alt %}<br><span style="color:#555;">({{ alt }})</span>{% endif %}
 				</td>
 				<td style="padding:5px; text-align:right;">{{ "%.2f"|format(row.qty) }}</td>
 				<td style="padding:5px; text-align:right;">{{ frappe.utils.fmt_money(row.rate, currency=doc.currency) }}</td>

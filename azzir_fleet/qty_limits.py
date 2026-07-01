@@ -6,12 +6,23 @@ import frappe
 from frappe import _
 from frappe.utils import flt
 
+OVERRIDE_ROLE = "Azzir Stock Override"
+
+
+def _can_override():
+	"""Senior users with the override role bypass the min/max/stock limits."""
+	return OVERRIDE_ROLE in frappe.get_roles()
+
 
 def validate_buying(doc, method=None):
+	if _can_override():
+		return
 	_enforce(doc, "max_order_qty", _("ordered or requested"))
 
 
 def validate_selling(doc, method=None):
+	if _can_override():
+		return
 	_enforce(doc, "max_sale_qty", _("sold"))
 
 
@@ -19,7 +30,7 @@ def validate_sales_stock(doc, method=None):
 	"""Block billing more of an item than is in stock (Bin actual_qty) for the
 	row's warehouse. Skipped when the invoice updates stock (ERPNext handles it).
 	"""
-	if doc.get("update_stock"):
+	if doc.get("update_stock") or _can_override():
 		return
 
 	# Sum this invoice's qty per (item, warehouse) — covers the same item on
