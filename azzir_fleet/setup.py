@@ -103,17 +103,7 @@ def after_migrate():
 		"Check",
 		validate_fields_for_doctype=False,
 	)
-	setup_print_format()
-	# Make it the default print format for Sales Invoice.
-	make_property_setter(
-		"Sales Invoice",
-		None,
-		"default_print_format",
-		"Sales Invoice with Old Code",
-		"Data",
-		for_doctype=True,
-		validate_fields_for_doctype=False,
-	)
+	setup_print_formats()
 	# Relabel Item Code -> Part Number on the Item master.
 	make_property_setter(
 		"Item", "item_code", "label", "Part Number", "Data", validate_fields_for_doctype=False
@@ -132,7 +122,12 @@ def _setup_override_role():
 
 
 def _enforce_single_session():
-	"""One active session per user (logging in elsewhere ends the old session)."""
+	"""One active session per user (logging in elsewhere ends the old session).
+
+	The actual switch is System Settings.deny_multiple_sessions — without it,
+	simultaneous_sessions alone does NOT log the user out on a new device.
+	"""
+	frappe.db.set_single_value("System Settings", "deny_multiple_sessions", 1)
 	make_property_setter(
 		"User", "simultaneous_sessions", "default", 1, "Data", validate_fields_for_doctype=False
 	)
@@ -157,38 +152,71 @@ def _enable_multicurrency():
 		pass
 
 
-def setup_print_format():
-	"""Create/refresh the Sales Invoice print format (proforma style, item code +
-	alternative code in description + preparer name)."""
-	name = "Sales Invoice with Old Code"
-	if frappe.db.exists("Print Format", name):
-		pf = frappe.get_doc("Print Format", name)
-		pf.html = SALES_INVOICE_OLD_CODE_HTML
-		pf.custom_format = 1
-		pf.print_format_type = "Jinja"
-		pf.flags.ignore_permissions = True
-		pf.save(ignore_permissions=True)
-		return
-	frappe.get_doc(
-		{
-			"doctype": "Print Format",
-			"name": name,
-			"doc_type": "Sales Invoice",
-			"module": "Azzir Fleet",
-			"print_format_type": "Jinja",
-			"custom_format": 1,
-			"standard": "No",
-			"html": SALES_INVOICE_OLD_CODE_HTML,
-		}
-	).insert(ignore_permissions=True)
+PRINT_FORMATS = [
+	# (print format name, doctype, title, party)
+	("Sales Invoice with Old Code", "Sales Invoice", "PROFORMA INVOICE", "customer"),
+	("Quotation (Azzir)", "Quotation", "PROFORMA INVOICE", "customer"),
+	("Sales Order (Azzir)", "Sales Order", "SALES ORDER", "customer"),
+	("Delivery Note (Azzir)", "Delivery Note", "DELIVERY NOTE", "customer"),
+	("Purchase Order (Azzir)", "Purchase Order", "PURCHASE ORDER", "supplier"),
+	("Purchase Receipt (Azzir)", "Purchase Receipt", "PURCHASE RECEIPT", "supplier"),
+	("Purchase Invoice (Azzir)", "Purchase Invoice", "PURCHASE INVOICE", "supplier"),
+	("Supplier Quotation (Azzir)", "Supplier Quotation", "SUPPLIER QUOTATION", "supplier"),
+]
+
+
+def setup_print_formats():
+	"""Create/refresh proforma-style print formats for all transaction doctypes
+	and set each as its doctype's default."""
+	for name, dt, title, party in PRINT_FORMATS:
+		html = _proforma_html(title, party)
+		if frappe.db.exists("Print Format", name):
+			pf = frappe.get_doc("Print Format", name)
+			pf.html = html
+			pf.custom_format = 1
+			pf.print_format_type = "Jinja"
+			pf.doc_type = dt
+			pf.flags.ignore_permissions = True
+			pf.save(ignore_permissions=True)
+		else:
+			frappe.get_doc(
+				{
+					"doctype": "Print Format",
+					"name": name,
+					"doc_type": dt,
+					"module": "Azzir Fleet",
+					"print_format_type": "Jinja",
+					"custom_format": 1,
+					"standard": "No",
+					"html": html,
+				}
+			).insert(ignore_permissions=True)
+		make_property_setter(
+			dt, None, "default_print_format", name, "Data",
+			for_doctype=True, validate_fields_for_doctype=False,
+		)
+
+
+def _proforma_html(title, party):
+	party_label = "Customer" if party == "customer" else "Supplier"
+	party_value = (
+		"{{ doc.customer_name or doc.customer }}"
+		if party == "customer"
+		else "{{ doc.supplier_name or doc.supplier }}"
+	)
+	return (
+		_PROFORMA_TEMPLATE.replace("__TITLE__", title)
+		.replace("__PARTY_LABEL__", party_label)
+		.replace("__PARTY_VALUE__", party_value)
+	)
 
 
 def after_install():
 	after_migrate()
 
 
-SALES_INVOICE_OLD_CODE_HTML = """
-<div class="azzir-invoice" style="font-size:12px; color:#000;">
+_PROFORMA_TEMPLATE = """
+<div class="azzir-doc" style="font-size:12px; color:#000;">
 	{%- set company_tin = frappe.db.get_value("Company", doc.company, "tax_id") -%}
 
 	<!-- Letter head (custom formats must include it explicitly) -->
@@ -196,30 +224,32 @@ SALES_INVOICE_OLD_CODE_HTML = """
 
 	<!-- Title -->
 	<div style="text-align:right; margin-bottom:8px;">
-		<span style="font-size:30px; font-weight:bold; letter-spacing:1px;">PROFORMA INVOICE</span>
+		<span style="font-size:30px; font-weight:bold; letter-spacing:1px;">__TITLE__</span>
 	</div>
 
-	<!-- Customer + meta -->
+	<!-- Party + meta -->
 	<table style="width:100%; margin-bottom:12px;">
 		<tr>
 			<td style="vertical-align:top; width:55%;">
-				<b>Customer:</b> {{ doc.customer_name or doc.customer }}
+				<b>__PARTY_LABEL__:</b> __PARTY_VALUE__
 				<div style="border:1px solid #999; padding:6px; margin-top:4px; min-height:70px;">
-					{% if doc.address_display %}{{ doc.address_display }}{% endif %}
+					{% if doc.get("address_display") %}{{ doc.address_display }}{% endif %}
 				</div>
 			</td>
 			<td style="vertical-align:top; padding-left:15px;">
 				<table style="width:100%; border-collapse:collapse;">
 					<tr><td style="text-align:right; padding:2px 6px;"><b>Ref :</b></td>
-						<td style="border:1px solid #999; padding:2px 6px; text-align:center;">{{ doc.po_no or doc.name }}</td></tr>
+						<td style="border:1px solid #999; padding:2px 6px; text-align:center;">{{ doc.name }}</td></tr>
 					<tr><td style="text-align:right; padding:2px 6px;"><b>Date :</b></td>
-						<td style="border:1px solid #999; padding:2px 6px; text-align:center;">{{ frappe.utils.formatdate(doc.posting_date) }}</td></tr>
+						<td style="border:1px solid #999; padding:2px 6px; text-align:center;">{{ frappe.utils.formatdate(doc.get("posting_date") or doc.get("transaction_date")) }}</td></tr>
+					{% if doc.get("valid_till") %}
+					<tr><td style="text-align:right; padding:2px 6px;"><b>Valid Till :</b></td>
+						<td style="border:1px solid #999; padding:2px 6px; text-align:center;">{{ frappe.utils.formatdate(doc.valid_till) }}</td></tr>
+					{% endif %}
 					<tr><td style="text-align:right; padding:2px 6px;"><b>Currency :</b></td>
 						<td style="border:1px solid #999; padding:2px 6px; text-align:center;">{{ doc.currency }}</td></tr>
-					<tr><td style="text-align:right; padding:2px 6px;"><b>S-TIN :</b></td>
+					<tr><td style="text-align:right; padding:2px 6px;"><b>TIN :</b></td>
 						<td style="border:1px solid #999; padding:2px 6px; text-align:center;">{{ company_tin or "" }}</td></tr>
-					<tr><td style="text-align:right; padding:2px 6px;"><b>S-VRN :</b></td>
-						<td style="border:1px solid #999; padding:2px 6px; text-align:center;">{{ doc.company_tax_id or "" }}</td></tr>
 				</table>
 			</td>
 		</tr>
@@ -259,16 +289,15 @@ SALES_INVOICE_OLD_CODE_HTML = """
 		</tbody>
 	</table>
 
-	<!-- Notes / Terms (from the invoice's Terms field — nothing hardcoded) -->
-	{% if doc.terms %}<div style="margin:15px 0;">{{ doc.terms }}</div>{% endif %}
+	<!-- Notes / Terms (from the document's Terms field — nothing hardcoded) -->
+	{% if doc.get("terms") %}<div style="margin:15px 0;">{{ doc.terms }}</div>{% endif %}
 
-	<!-- Terms (left) + totals (right) -->
+	<!-- Prepared by (left) + totals (right) -->
 	<table style="width:100%; margin-top:20px;">
 		<tr>
 			<td style="vertical-align:bottom; width:50%;">
 				<table>
-					<tr><td><b>Payment Terms:</b></td><td style="padding-left:10px;">{{ doc.payment_terms_template or "" }}</td></tr>
-					<tr><td><b>Validity:</b></td><td style="padding-left:10px;">{{ doc.get("validity") or "" }}</td></tr>
+					{% if doc.get("payment_terms_template") %}<tr><td><b>Payment Terms:</b></td><td style="padding-left:10px;">{{ doc.payment_terms_template }}</td></tr>{% endif %}
 					<tr><td colspan="2" style="padding-top:25px;"><b>Prepared By:</b> {{ frappe.db.get_value("User", doc.owner, "full_name") or doc.owner }}</td></tr>
 					<tr><td colspan="2" style="padding-top:15px;"><b>Signature:</b> _____________________</td></tr>
 				</table>
@@ -284,7 +313,7 @@ SALES_INVOICE_OLD_CODE_HTML = """
 						<td style="text-align:right; padding:4px;">{{ frappe.utils.fmt_money(doc.total_taxes_and_charges, currency=doc.currency) }}</td>
 					</tr>
 					<tr style="border-top:1px solid #000; border-bottom:2px solid #000;">
-						<td style="text-align:right; padding:4px;"><b>INVOICE TOTAL ({{ doc.currency }}) :</b></td>
+						<td style="text-align:right; padding:4px;"><b>GRAND TOTAL ({{ doc.currency }}) :</b></td>
 						<td style="text-align:right; padding:4px;"><b>{{ frappe.utils.fmt_money(doc.grand_total, currency=doc.currency) }}</b></td>
 					</tr>
 				</table>
@@ -292,6 +321,6 @@ SALES_INVOICE_OLD_CODE_HTML = """
 		</tr>
 	</table>
 
-	{% if doc.in_words %}<p style="margin-top:10px;"><b>In Words:</b> {{ doc.in_words }}</p>{% endif %}
+	{% if doc.get("in_words") %}<p style="margin-top:10px;"><b>In Words:</b> {{ doc.in_words }}</p>{% endif %}
 </div>
 """

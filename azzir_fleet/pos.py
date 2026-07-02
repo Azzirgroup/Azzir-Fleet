@@ -35,21 +35,18 @@ def get_items(
 	items = result.get("items") or []
 	present = {i.get("item_code"): i for i in items}
 
-	# Old codes (non-primary rows) matching the term, exact or partial.
-	matches = frappe.get_all(
-		CHILD_DT,
-		filters={"code": ["like", f"%{search_term}%"], "is_primary": 0, "parenttype": "Item"},
-		fields=["code", "parent"],
-		limit=20,
-	)
+	# Old codes / separator-insensitive codes matching the term.
+	from azzir_fleet.alias import fuzzy_item_matches, _norm
 
-	term_l = search_term.strip().lower()
+	term_n = _norm(search_term)
 	resolved = {}  # current_code -> (old_code, is_exact_match)
-	for m in matches:
-		exact = m["code"].strip().lower() == term_l
-		# prefer an exact match if one exists for this item
-		if m["parent"] not in resolved or exact:
-			resolved[m["parent"]] = (m["code"], exact)
+	for m in fuzzy_item_matches(search_term, limit=20):
+		current = m.get("item")
+		old = m.get("old_code") or current
+		# exact when the normalized old/current code equals the normalized term
+		exact = _norm(old) == term_n or _norm(current) == term_n
+		if current not in resolved or exact:
+			resolved[current] = (m.get("old_code"), exact)
 
 	for current, (old, exact) in resolved.items():
 		# Only tag (-> client toast) on a COMPLETE old code. Partial typing still

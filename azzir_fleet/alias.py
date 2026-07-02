@@ -8,9 +8,50 @@ docs, Item list, ...) resolve those old codes to the current item and tell the
 user the live code.
 """
 
+import re
+
 import frappe
 
 CHILD_DT = "Item Code Entry"
+
+# Characters ignored when matching codes ("100-3402" == "1003402" == "100 3402").
+_NORM_RE = re.compile(r"[^a-z0-9]")
+
+
+def _norm(value):
+	return _NORM_RE.sub("", (value or "").lower())
+
+
+def _norm_sql(col):
+	"""SQL expression that strips separators and lowercases a column."""
+	expr = f"lower({col})"
+	for ch in ("-", " ", ".", "/", "_"):
+		expr = f"replace({expr}, '{ch}', '')"
+	return expr
+
+
+def fuzzy_item_matches(txt, limit=10):
+	"""Items whose current code OR an old code matches txt ignoring separators.
+	Returns list of {'item': current_code, 'old_code': old code or None}."""
+	n = _norm(txt)
+	if not n:
+		return []
+	like = f"%{n}%"
+	current = frappe.db.sql(
+		f"select name as item from `tabItem` where {_norm_sql('name')} like %(n)s limit {int(limit)}",
+		{"n": like},
+		as_dict=True,
+	)
+	aliases = frappe.db.sql(
+		f"""select parent as item, code as old_code from `tab{CHILD_DT}`
+		    where parenttype='Item' and is_primary=0 and {_norm_sql('code')} like %(n)s
+		    limit {int(limit)}""",
+		{"n": like},
+		as_dict=True,
+	)
+	out = [{"item": r["item"], "old_code": None} for r in current]
+	out += [{"item": r["item"], "old_code": r["old_code"]} for r in aliases]
+	return out
 
 
 # --------------------------------------------------------------------------- #
@@ -50,30 +91,25 @@ def search_link(
 
 
 def _inject_item_aliases(results, txt):
-	"""Add/flag results so old codes resolve to the current item (partial match)."""
+	"""Add/flag results so old codes (and separator-insensitive codes) resolve to
+	the current item. '100-3402' is found when the user types '1003402'."""
 	existing_values = {r.get("value") for r in results}
 
-	aliases = frappe.get_all(
-		CHILD_DT,
-		filters={"code": ["like", f"%{txt}%"], "is_primary": 0, "parenttype": "Item"},
-		fields=["code as old_code", "parent as item"],
-		limit=10,
-	)
-
-	for a in aliases:
-		current = a.get("item")
+	for m in fuzzy_item_matches(txt):
+		current = m.get("item")
 		if not current:
 			continue
-		note = f'↺ old code: {a["old_code"]}'
+		note = f'↺ old code: {m["old_code"]}' if m.get("old_code") else None
 		if current in existing_values:
-			for r in results:
-				if r.get("value") == current:
-					desc = r.get("description") or ""
-					if "↺ old code:" not in desc:
-						r["description"] = f"{note} · {desc}".strip(" ·")
-					break
+			if note:
+				for r in results:
+					if r.get("value") == current:
+						desc = r.get("description") or ""
+						if "↺ old code:" not in desc:
+							r["description"] = f"{note} · {desc}".strip(" ·")
+						break
 		else:
-			results.insert(0, {"value": current, "description": note, "label": current})
+			results.insert(0, {"value": current, "description": note or "", "label": current})
 			existing_values.add(current)
 
 	return results
@@ -108,18 +144,12 @@ def item_query(
 		if key:
 			existing.add(key)
 
-	aliases = frappe.get_all(
-		CHILD_DT,
-		filters={"code": ["like", f"%{txt}%"], "is_primary": 0, "parenttype": "Item"},
-		fields=["code as old_code", "parent as item"],
-		limit=10,
-	)
-	for a in aliases:
-		current = a.get("item")
+	for m in fuzzy_item_matches(txt):
+		current = m.get("item")
 		if not current or current in existing:
 			continue
 		existing.add(current)
-		note = f"↺ old code: {a['old_code']}"
+		note = f"↺ old code: {m['old_code']}" if m.get("old_code") else ""
 		if as_dict:
 			results.insert(0, {"name": current, "item_name": note})
 		else:
@@ -157,4 +187,27 @@ def resolve_code(code: str):
 	)
 	if parent:
 		return {"item": parent, "current_code": parent, "is_alias": True, "old_code": code}
+
+	# Separator-insensitive fallback: '1003402' -> '100-3402'.
+	cur = _resolve_normalized(code)
+	if cur:
+		return {"item": cur, "current_code": cur, "is_alias": True, "old_code": code}
 	return None
+
+
+def _resolve_normalized(code):
+	"""Exact match ignoring separators, against item names and old codes."""
+	n = _norm(code)
+	if not n:
+		return None
+	row = frappe.db.sql(
+		f"select name from `tabItem` where {_norm_sql('name')} = %(n)s limit 1", {"n": n}
+	)
+	if row:
+		return row[0][0]
+	row = frappe.db.sql(
+		f"""select parent from `tab{CHILD_DT}`
+		    where parenttype='Item' and is_primary=0 and {_norm_sql('code')} = %(n)s limit 1""",
+		{"n": n},
+	)
+	return row[0][0] if row else None
