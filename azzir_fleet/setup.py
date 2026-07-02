@@ -41,18 +41,6 @@ CUSTOM_FIELDS = {
 			"documents. 0 = no limit.",
 		},
 	],
-	# Stores the old code the user typed to find this item (captured client-side).
-	"Sales Invoice Item": [
-		{
-			"fieldname": "azzir_old_code",
-			"label": "Old Code (entered)",
-			"fieldtype": "Data",
-			"insert_after": "item_code",
-			"read_only": 1,
-			"hidden": 1,
-			"no_copy": 1,
-		}
-	],
 	# Default quotation validity per party — used to auto-set Quotation "Valid Till".
 	"Customer": [
 		{
@@ -87,6 +75,29 @@ _APPLY_VAT_FIELD = {
 }
 for _dt in ("Sales Invoice", "Sales Order", "Quotation", "Delivery Note"):
 	CUSTOM_FIELDS.setdefault(_dt, []).append(dict(_APPLY_VAT_FIELD))
+
+# Stores the specific old code the user typed to find this item (captured
+# client-side). On every transaction item row so the print shows that exact code.
+_OLD_CODE_FIELD = {
+	"fieldname": "azzir_old_code",
+	"label": "Old Code (entered)",
+	"fieldtype": "Data",
+	"insert_after": "item_code",
+	"read_only": 1,
+	"hidden": 1,
+	"no_copy": 1,
+}
+for _dt in (
+	"Sales Invoice Item",
+	"Sales Order Item",
+	"Quotation Item",
+	"Delivery Note Item",
+	"Purchase Order Item",
+	"Purchase Receipt Item",
+	"Purchase Invoice Item",
+	"Supplier Quotation Item",
+):
+	CUSTOM_FIELDS.setdefault(_dt, []).append(dict(_OLD_CODE_FIELD))
 
 OVERRIDE_ROLE = "Azzir Stock Override"
 
