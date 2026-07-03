@@ -142,15 +142,11 @@ def _parse_filter(f):
 
 
 def _resolve_currents(value, op):
-	"""Current item codes whose OLD codes match the typed value (partial or exact)."""
+	"""Current items whose code — current OR old — matches the typed value,
+	ignoring separators so '1003402' resolves '100-3402'."""
 	inner = str(value).strip("%")
 	if not inner:
 		return []
-	code_filter = ["like", f"%{inner}%"] if op == "like" else inner
-	rows = frappe.get_all(
-		CHILD_DT,
-		filters={"code": code_filter, "is_primary": 0, "parenttype": "Item"},
-		fields=["parent"],
-		limit=20,
-	)
-	return list({r["parent"] for r in rows})
+	from azzir_fleet.alias import fuzzy_item_matches
+
+	return list({m["item"] for m in fuzzy_item_matches(inner) if m.get("item")})
