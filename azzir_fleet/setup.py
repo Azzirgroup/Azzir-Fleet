@@ -41,6 +41,29 @@ CUSTOM_FIELDS = {
 			"documents. 0 = no limit.",
 		},
 	],
+	# Live stock columns on the Quotation grid (read-only; filled client-side).
+	"Quotation Item": [
+		{
+			"fieldname": "azzir_wh_stock",
+			"label": "Stock (This WH)",
+			"fieldtype": "Float",
+			"insert_after": "warehouse",
+			"read_only": 1,
+			"in_list_view": 1,
+			"no_copy": 1,
+			"description": "Current stock of this item in the row's warehouse.",
+		},
+		{
+			"fieldname": "azzir_all_stock",
+			"label": "Stock (All WH)",
+			"fieldtype": "Float",
+			"insert_after": "azzir_wh_stock",
+			"read_only": 1,
+			"in_list_view": 1,
+			"no_copy": 1,
+			"description": "Total stock across all warehouses. Click to see the per-warehouse breakdown.",
+		},
+	],
 	# Default quotation validity per party — used to auto-set Quotation "Valid Till".
 	"Customer": [
 		{
