@@ -100,8 +100,19 @@ def get_stock_tree(item_code: str):
 				"is_group": info.is_group,
 				"qty": flt(qty),
 				"lft": info.lft,
+				"depth": _depth(wh, wh_info),
 			}
 		)
 
 	rows.sort(key=lambda r: r["lft"] or 0)
 	return rows
+
+
+def _depth(wh, wh_info):
+	"""How many ancestor warehouses `wh` has (for indentation)."""
+	d = 0
+	parent = (wh_info.get(wh) or {}).get("parent_warehouse")
+	while parent:
+		d += 1
+		parent = (wh_info.get(parent) or {}).get("parent_warehouse")
+	return d

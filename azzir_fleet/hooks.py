@@ -81,7 +81,10 @@ doctype_js = {
 
 # add methods and filters to jinja environment
 jinja = {
-	"methods": ["azzir_fleet.alias.get_item_old_codes"],
+	"methods": [
+		"azzir_fleet.alias.get_item_old_codes",
+		"azzir_fleet.stock_info.get_stock_tree",
+	],
 }
 
 # Installation

@@ -230,6 +230,33 @@ def setup_print_formats():
 			for_doctype=True, validate_fields_for_doctype=False,
 		)
 
+	# Pickup Slip (Sales Invoice) — NOT set as default.
+	_upsert_print_format("Pickup Slip", "Sales Invoice", PICKUP_SLIP_HTML)
+
+
+def _upsert_print_format(name, dt, html):
+	if frappe.db.exists("Print Format", name):
+		pf = frappe.get_doc("Print Format", name)
+		pf.html = html
+		pf.custom_format = 1
+		pf.print_format_type = "Jinja"
+		pf.doc_type = dt
+		pf.flags.ignore_permissions = True
+		pf.save(ignore_permissions=True)
+	else:
+		frappe.get_doc(
+			{
+				"doctype": "Print Format",
+				"name": name,
+				"doc_type": dt,
+				"module": "Azzir Fleet",
+				"print_format_type": "Jinja",
+				"custom_format": 1,
+				"standard": "No",
+				"html": html,
+			}
+		).insert(ignore_permissions=True)
+
 
 def _proforma_html(title, party):
 	party_label = "Customer" if party == "customer" else "Supplier"
@@ -247,6 +274,62 @@ def _proforma_html(title, party):
 
 def after_install():
 	after_migrate()
+
+
+PICKUP_SLIP_HTML = """
+<div class="azzir-pickup" style="font-size:12px; color:#000;">
+	{% if not no_letterhead and letter_head %}<div class="letter-head">{{ letter_head }}</div>{% endif %}
+
+	<h2 style="text-align:center; margin:6px 0; letter-spacing:1px;">PICKUP SLIP</h2>
+
+	<table style="width:100%; margin-bottom:10px;">
+		<tr>
+			<td><b>Invoice:</b> {{ doc.name }}<br><b>Date:</b> {{ frappe.utils.formatdate(doc.posting_date) }}</td>
+			<td style="text-align:right;"><b>Customer:</b> {{ doc.customer_name or doc.customer }}</td>
+		</tr>
+	</table>
+
+	<table style="width:100%; border-collapse:collapse;">
+		<thead>
+			<tr style="border-top:2px solid #000; border-bottom:1px solid #000;">
+				<th style="text-align:left; padding:5px;">#</th>
+				<th style="text-align:left; padding:5px;">Part Number</th>
+				<th style="text-align:left; padding:5px;">Description</th>
+				<th style="text-align:right; padding:5px;">Pick Qty</th>
+				<th style="text-align:left; padding:5px; width:38%;">Location (Warehouse : Stock)</th>
+			</tr>
+		</thead>
+		<tbody>
+			{% for row in doc.items %}
+			<tr style="border-bottom:1px solid #ddd; vertical-align:top;">
+				<td style="padding:5px;">{{ loop.index }}</td>
+				<td style="padding:5px;"><b>{{ row.item_code }}</b></td>
+				<td style="padding:5px;">{{ row.item_name }}</td>
+				<td style="padding:5px; text-align:right;"><b>{{ "%.2f"|format(row.qty) }} {{ row.uom }}</b></td>
+				<td style="padding:5px;">
+					{% set tree = get_stock_tree(row.item_code) %}
+					{% if tree %}
+						{% for w in tree %}
+						<div style="padding-left:{{ w.depth * 16 }}px; {% if w.is_group %}font-weight:600;{% endif %}">
+							{{ '[+]' if w.is_group else '-' }} {{ w.warehouse }} : {{ "%.2f"|format(w.qty) }}
+						</div>
+						{% endfor %}
+					{% else %}
+						<span style="color:#999;">No stock recorded</span>
+					{% endif %}
+				</td>
+			</tr>
+			{% endfor %}
+		</tbody>
+	</table>
+
+	<div style="margin-top:30px;">
+		<b>Picked By:</b> ____________________________
+		&nbsp;&nbsp;&nbsp;&nbsp; <b>Signature:</b> ____________________
+		&nbsp;&nbsp;&nbsp;&nbsp; <b>Date:</b> _____________
+	</div>
+</div>
+"""
 
 
 _PROFORMA_TEMPLATE = """
