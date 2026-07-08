@@ -26,7 +26,10 @@ app_license = "mit"
 
 # include js, css files in header of desk.html
 # app_include_css = "/assets/azzir_fleet/css/azzir_fleet.css"
-app_include_js = "/assets/azzir_fleet/js/azzir_alias.js"
+app_include_js = [
+	"/assets/azzir_fleet/js/azzir_alias.js",
+	"/assets/azzir_fleet/js/azzir_stock.js",
+]
 
 # include js, css files in header of web template
 # web_include_css = "/assets/azzir_fleet/css/azzir_fleet.css"
@@ -46,6 +49,7 @@ app_include_js = "/assets/azzir_fleet/js/azzir_alias.js"
 doctype_js = {
 	"Item": "public/js/item_codes.js",
 	"Quotation": "public/js/quotation.js",
+	"Stock Entry": "public/js/stock_entry.js",
 }
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}

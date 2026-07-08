@@ -41,6 +41,24 @@ CUSTOM_FIELDS = {
 			"documents. 0 = no limit.",
 		},
 	],
+	# Stock Entry row detail (NOT in grid): total stock + a button for the tree dialog.
+	"Stock Entry Detail": [
+		{
+			"fieldname": "azzir_all_stock",
+			"label": "All Warehouses Stock",
+			"fieldtype": "Float",
+			"insert_after": "actual_qty",
+			"read_only": 1,
+			"no_copy": 1,
+			"description": "Total stock of this item across all warehouses.",
+		},
+		{
+			"fieldname": "azzir_view_stock",
+			"label": "View Stock by Warehouse",
+			"fieldtype": "Button",
+			"insert_after": "azzir_all_stock",
+		},
+	],
 	# Live stock columns on the Quotation grid (read-only; filled client-side).
 	"Quotation Item": [
 		{
