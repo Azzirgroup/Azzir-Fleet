@@ -184,6 +184,10 @@ doc_events = {
 		],
 	},
 	"POS Invoice": {"validate": "azzir_fleet.qty_limits.validate_selling"},
+	# Monthly Budget control (Warn/Stop). JE covers Expense Entry too.
+	"Journal Entry": {
+		"validate": "azzir_fleet.azzir_fleet.doctype.monthly_budget.monthly_budget.check_journal_entry_budget"
+	},
 }
 
 # Scheduled Tasks
