@@ -142,9 +142,9 @@ _STOCK_GRID_FIELDS = [
 ]
 _VIEW_STOCK_BUTTON = {
 	"fieldname": "azzir_view_stock",
-	"label": "View Stock by Warehouse",
+	"label": "See All Stock on Warehouse",
 	"fieldtype": "Button",
-	"insert_after": "azzir_all_stock",
+	"insert_after": "item_name",
 }
 for _dt in ("Quotation Item", "Sales Invoice Item"):
 	for _f in _STOCK_GRID_FIELDS:
@@ -381,7 +381,10 @@ _PROFORMA_TEMPLATE = """
 			<td style="vertical-align:top; width:55%;">
 				<b>__PARTY_LABEL__:</b> __PARTY_VALUE__
 				<div style="border:1px solid #999; padding:6px; margin-top:4px; min-height:70px;">
-					{% if doc.get("address_display") %}{{ doc.address_display }}{% endif %}
+					{% if doc.get("address_display") %}{{ doc.address_display }}<br>{% endif %}
+					{% if doc.get("contact_display") %}<b>Attn:</b> {{ doc.contact_display }}<br>{% endif %}
+					{% if doc.get("contact_mobile") %}<b>Phone:</b> {{ doc.contact_mobile }}<br>{% endif %}
+					{% if doc.get("contact_email") %}<b>Email:</b> {{ doc.contact_email }}{% endif %}
 				</div>
 			</td>
 			<td style="vertical-align:top; padding-left:15px;">

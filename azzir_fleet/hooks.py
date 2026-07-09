@@ -154,7 +154,12 @@ doc_events = {
 	"Material Request": {"validate": "azzir_fleet.qty_limits.validate_buying"},
 	"Purchase Order": {"validate": "azzir_fleet.qty_limits.validate_buying"},
 	"Purchase Receipt": {"validate": "azzir_fleet.qty_limits.validate_buying"},
-	"Purchase Invoice": {"validate": "azzir_fleet.qty_limits.validate_buying"},
+	"Purchase Invoice": {
+		"validate": [
+			"azzir_fleet.qty_limits.validate_buying",
+			"azzir_fleet.purchase_invoice.validate_unique_bill_no",
+		]
+	},
 	# Maximum Sales Qty — selling documents
 	"Quotation": {
 		"before_validate": "azzir_fleet.vat.apply_vat_option",
