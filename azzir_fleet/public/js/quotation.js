@@ -8,4 +8,8 @@ frappe.ui.form.on("Quotation Item", {
 	warehouse(frm, cdt, cdn) {
 		azzir_fleet.fetch_row_stock(cdt, cdn);
 	},
+	azzir_view_stock(frm, cdt, cdn) {
+		const row = locals[cdt][cdn];
+		if (row && row.item_code) azzir_fleet.show_stock_dialog(row.item_code);
+	},
 });

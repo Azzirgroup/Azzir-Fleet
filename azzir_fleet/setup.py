@@ -140,9 +140,16 @@ _STOCK_GRID_FIELDS = [
 		"description": "Total stock across all warehouses. Click to see the per-warehouse breakdown.",
 	},
 ]
+_VIEW_STOCK_BUTTON = {
+	"fieldname": "azzir_view_stock",
+	"label": "View Stock by Warehouse",
+	"fieldtype": "Button",
+	"insert_after": "azzir_all_stock",
+}
 for _dt in ("Quotation Item", "Sales Invoice Item"):
 	for _f in _STOCK_GRID_FIELDS:
 		CUSTOM_FIELDS.setdefault(_dt, []).append(dict(_f))
+	CUSTOM_FIELDS[_dt].append(dict(_VIEW_STOCK_BUTTON))
 
 OVERRIDE_ROLE = "Azzir Stock Override"
 
