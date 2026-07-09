@@ -216,23 +216,24 @@ def _enable_multicurrency():
 
 
 PRINT_FORMATS = [
-	# (print format name, doctype, title, party)
-	("Sales Invoice with Old Code", "Sales Invoice", "PROFORMA INVOICE", "customer"),
-	("Quotation (Azzir)", "Quotation", "PROFORMA INVOICE", "customer"),
-	("Sales Order (Azzir)", "Sales Order", "SALES ORDER", "customer"),
-	("Delivery Note (Azzir)", "Delivery Note", "DELIVERY NOTE", "customer"),
-	("Purchase Order (Azzir)", "Purchase Order", "PURCHASE ORDER", "supplier"),
-	("Purchase Receipt (Azzir)", "Purchase Receipt", "PURCHASE RECEIPT", "supplier"),
-	("Purchase Invoice (Azzir)", "Purchase Invoice", "PURCHASE INVOICE", "supplier"),
-	("Supplier Quotation (Azzir)", "Supplier Quotation", "SUPPLIER QUOTATION", "supplier"),
+	# (print format name, doctype, title, party, show_prices)
+	("Sales Invoice with Old Code", "Sales Invoice", "PROFORMA INVOICE", "customer", True),
+	("Quotation (Azzir)", "Quotation", "PROFORMA INVOICE", "customer", True),
+	("Sales Order (Azzir)", "Sales Order", "SALES ORDER", "customer", True),
+	# Delivery Note = goods slip: quantities only, no prices/taxes/totals.
+	("Delivery Note (Azzir)", "Delivery Note", "DELIVERY NOTE", "customer", False),
+	("Purchase Order (Azzir)", "Purchase Order", "PURCHASE ORDER", "supplier", True),
+	("Purchase Receipt (Azzir)", "Purchase Receipt", "PURCHASE RECEIPT", "supplier", True),
+	("Purchase Invoice (Azzir)", "Purchase Invoice", "PURCHASE INVOICE", "supplier", True),
+	("Supplier Quotation (Azzir)", "Supplier Quotation", "SUPPLIER QUOTATION", "supplier", True),
 ]
 
 
 def setup_print_formats():
 	"""Create/refresh proforma-style print formats for all transaction doctypes
 	and set each as its doctype's default."""
-	for name, dt, title, party in PRINT_FORMATS:
-		html = _proforma_html(title, party)
+	for name, dt, title, party, show_prices in PRINT_FORMATS:
+		html = _proforma_html(title, party, show_prices)
 		if frappe.db.exists("Print Format", name):
 			pf = frappe.get_doc("Print Format", name)
 			pf.html = html
@@ -287,7 +288,7 @@ def _upsert_print_format(name, dt, html):
 		).insert(ignore_permissions=True)
 
 
-def _proforma_html(title, party):
+def _proforma_html(title, party, show_prices=True):
 	party_label = "Customer" if party == "customer" else "Supplier"
 	party_value = (
 		"{{ doc.customer_name or doc.customer }}"
@@ -298,6 +299,7 @@ def _proforma_html(title, party):
 		_PROFORMA_TEMPLATE.replace("__TITLE__", title)
 		.replace("__PARTY_LABEL__", party_label)
 		.replace("__PARTY_VALUE__", party_value)
+		.replace("__PRICES_FLAG__", "True" if show_prices else "False")
 	)
 
 
@@ -366,6 +368,7 @@ PICKUP_SLIP_HTML = """
 _PROFORMA_TEMPLATE = """
 <div class="azzir-doc" style="font-size:12px; color:#000;">
 	{%- set company_tin = frappe.db.get_value("Company", doc.company, "tax_id") -%}
+	{%- set show_prices = __PRICES_FLAG__ -%}
 
 	<!-- Letter head (custom formats must include it explicitly) -->
 	{% if not no_letterhead and letter_head %}<div class="letter-head">{{ letter_head }}</div>{% endif %}
@@ -414,10 +417,12 @@ _PROFORMA_TEMPLATE = """
 				<th style="padding:5px; text-align:left;">Part Number</th>
 				<th style="padding:5px; text-align:left;">Description</th>
 				<th style="padding:5px; text-align:right;">Qty</th>
+				{% if show_prices %}
 				<th style="padding:5px; text-align:right;">Price</th>
 				<th style="padding:5px; text-align:right;">Disc</th>
 				<th style="padding:5px; text-align:right;">Tax</th>
 				<th style="padding:5px; text-align:right;">Total (Excl)</th>
+				{% endif %}
 			</tr>
 		</thead>
 		<tbody>
@@ -431,10 +436,12 @@ _PROFORMA_TEMPLATE = """
 					{% if alt %}<br><span style="color:#555;">({{ alt }})</span>{% endif %}
 				</td>
 				<td style="padding:5px; text-align:right;">{{ "%.2f"|format(row.qty) }}</td>
+				{% if show_prices %}
 				<td style="padding:5px; text-align:right;">{{ frappe.utils.fmt_money(row.rate, currency=doc.currency) }}</td>
 				<td style="padding:5px; text-align:right;">{{ frappe.utils.fmt_money(row.discount_amount or 0, currency=doc.currency) }}</td>
 				<td style="padding:5px; text-align:right;">{{ frappe.utils.fmt_money(0, currency=doc.currency) }}</td>
 				<td style="padding:5px; text-align:right;">{{ frappe.utils.fmt_money(row.net_amount or row.amount, currency=doc.currency) }}</td>
+				{% endif %}
 			</tr>
 			{% endfor %}
 		</tbody>
@@ -454,6 +461,7 @@ _PROFORMA_TEMPLATE = """
 				</table>
 			</td>
 			<td style="vertical-align:top;">
+				{% if show_prices %}
 				<table style="width:100%;">
 					<tr style="border-top:1px solid #000;">
 						<td style="text-align:right; padding:4px;"><b>SUB TOTAL (Excl) :</b></td>
@@ -468,10 +476,16 @@ _PROFORMA_TEMPLATE = """
 						<td style="text-align:right; padding:4px;"><b>{{ frappe.utils.fmt_money(doc.grand_total, currency=doc.currency) }}</b></td>
 					</tr>
 				</table>
+				{% else %}
+				<table style="width:100%;">
+					<tr><td style="padding-top:25px;"><b>Received By:</b> _____________________</td></tr>
+					<tr><td style="padding-top:15px;"><b>Signature:</b> _____________________</td></tr>
+				</table>
+				{% endif %}
 			</td>
 		</tr>
 	</table>
 
-	{% if doc.get("in_words") %}<p style="margin-top:10px;"><b>In Words:</b> {{ doc.in_words }}</p>{% endif %}
+	{% if show_prices and doc.get("in_words") %}<p style="margin-top:10px;"><b>In Words:</b> {{ doc.in_words }}</p>{% endif %}
 </div>
 """
