@@ -302,7 +302,9 @@ PICKUP_SLIP_HTML = """
 
 	<table style="width:100%; margin-bottom:10px;">
 		<tr>
-			<td><b>Invoice:</b> {{ doc.name }}<br><b>Date:</b> {{ frappe.utils.formatdate(doc.posting_date) }}</td>
+			<td><b>Invoice:</b> {{ doc.name }}<br>
+				<b>Date:</b> {{ frappe.utils.formatdate(doc.posting_date) }}<br>
+				<b>Prepared By:</b> {{ frappe.db.get_value("User", doc.owner, "full_name") or doc.owner }}</td>
 			<td style="text-align:right;"><b>Customer:</b> {{ doc.customer_name or doc.customer }}</td>
 		</tr>
 	</table>
@@ -325,15 +327,15 @@ PICKUP_SLIP_HTML = """
 				<td style="padding:5px;">{{ row.item_name }}</td>
 				<td style="padding:5px; text-align:right;"><b>{{ "%.2f"|format(row.qty) }} {{ row.uom }}</b></td>
 				<td style="padding:5px;">
-					{% set tree = get_stock_tree(row.item_code) %}
-					{% if tree %}
-						{% for w in tree %}
+					{% if row.warehouse %}
+						{% set branch = get_stock_branch(row.item_code, row.warehouse) %}
+						{% for w in branch %}
 						<div style="padding-left:{{ w.depth * 16 }}px; {% if w.is_group %}font-weight:600;{% endif %}">
-							{{ '[+]' if w.is_group else '-' }} {{ w.warehouse }} : {{ "%.2f"|format(w.qty) }}
+							{{ w.warehouse }} : {{ "%.2f"|format(w.qty) }}
 						</div>
 						{% endfor %}
 					{% else %}
-						<span style="color:#999;">No stock recorded</span>
+						<span style="color:#999;">No warehouse set on this line</span>
 					{% endif %}
 				</td>
 			</tr>

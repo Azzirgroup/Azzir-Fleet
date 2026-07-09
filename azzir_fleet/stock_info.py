@@ -108,6 +108,41 @@ def get_stock_tree(item_code: str):
 	return rows
 
 
+@frappe.whitelist()
+def get_stock_branch(item_code: str, warehouse: str | None = None):
+	"""Stock for the item in the picked warehouse and its immediate parent only."""
+	if not item_code or not warehouse:
+		return []
+	info = frappe.db.get_value(
+		"Warehouse", warehouse, ["parent_warehouse", "is_group", "lft"], as_dict=True
+	)
+	if not info:
+		return []
+
+	rows = []
+	if info.parent_warehouse:
+		pinfo = frappe.db.get_value(
+			"Warehouse", info.parent_warehouse, ["is_group", "lft"], as_dict=True
+		) or {}
+		rows.append(
+			{
+				"warehouse": info.parent_warehouse,
+				"is_group": pinfo.get("is_group", 1),
+				"qty": _warehouse_stock(item_code, info.parent_warehouse),
+				"depth": 0,
+			}
+		)
+	rows.append(
+		{
+			"warehouse": warehouse,
+			"is_group": info.is_group,
+			"qty": _warehouse_stock(item_code, warehouse),
+			"depth": 1 if info.parent_warehouse else 0,
+		}
+	)
+	return rows
+
+
 def _depth(wh, wh_info):
 	"""How many ancestor warehouses `wh` has (for indentation)."""
 	d = 0
