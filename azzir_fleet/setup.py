@@ -59,29 +59,6 @@ CUSTOM_FIELDS = {
 			"insert_after": "azzir_all_stock",
 		},
 	],
-	# Live stock columns on the Quotation grid (read-only; filled client-side).
-	"Quotation Item": [
-		{
-			"fieldname": "azzir_wh_stock",
-			"label": "Stock (This WH)",
-			"fieldtype": "Float",
-			"insert_after": "warehouse",
-			"read_only": 1,
-			"in_list_view": 1,
-			"no_copy": 1,
-			"description": "Current stock of this item in the row's warehouse.",
-		},
-		{
-			"fieldname": "azzir_all_stock",
-			"label": "Stock (All WH)",
-			"fieldtype": "Float",
-			"insert_after": "azzir_wh_stock",
-			"read_only": 1,
-			"in_list_view": 1,
-			"no_copy": 1,
-			"description": "Total stock across all warehouses. Click to see the per-warehouse breakdown.",
-		},
-	],
 	# Default quotation validity per party — used to auto-set Quotation "Valid Till".
 	"Customer": [
 		{
@@ -139,6 +116,33 @@ for _dt in (
 	"Supplier Quotation Item",
 ):
 	CUSTOM_FIELDS.setdefault(_dt, []).append(dict(_OLD_CODE_FIELD))
+
+# Live stock columns (read-only, filled client-side) — Quotation + Sales Invoice grids.
+_STOCK_GRID_FIELDS = [
+	{
+		"fieldname": "azzir_wh_stock",
+		"label": "Stock (This WH)",
+		"fieldtype": "Float",
+		"insert_after": "warehouse",
+		"read_only": 1,
+		"in_list_view": 1,
+		"no_copy": 1,
+		"description": "Current stock of this item in the row's warehouse.",
+	},
+	{
+		"fieldname": "azzir_all_stock",
+		"label": "Stock (All WH)",
+		"fieldtype": "Float",
+		"insert_after": "azzir_wh_stock",
+		"read_only": 1,
+		"in_list_view": 1,
+		"no_copy": 1,
+		"description": "Total stock across all warehouses. Click to see the per-warehouse breakdown.",
+	},
+]
+for _dt in ("Quotation Item", "Sales Invoice Item"):
+	for _f in _STOCK_GRID_FIELDS:
+		CUSTOM_FIELDS.setdefault(_dt, []).append(dict(_f))
 
 OVERRIDE_ROLE = "Azzir Stock Override"
 

@@ -4,6 +4,24 @@
 
 frappe.provide("azzir_fleet");
 
+frappe.ui.form.on("Stock Entry", {
+	setup(frm) {
+		// Only show items that have stock in the source warehouse (row's source,
+		// else the document's default source). No source set -> all items.
+		frm.set_query("item_code", "items", function (doc, cdt, cdn) {
+			const row = locals[cdt][cdn];
+			const wh = (row && row.s_warehouse) || doc.from_warehouse;
+			if (wh) {
+				return {
+					query: "azzir_fleet.stock_info.items_with_stock",
+					filters: { warehouse: wh },
+				};
+			}
+			return {};
+		});
+	},
+});
+
 frappe.ui.form.on("Stock Entry Detail", {
 	item_code(frm, cdt, cdn) {
 		const row = locals[cdt] && locals[cdt][cdn];

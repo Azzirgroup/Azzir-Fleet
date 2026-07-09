@@ -1,8 +1,29 @@
 // Copyright (c) 2026, Azzir and contributors
-// Shared: per-warehouse stock breakdown dialog (used by Quotation, Stock Entry, ...).
+// Shared stock helpers: fetch per-row stock + per-warehouse tree dialog.
+// Used by Quotation, Sales Invoice, Stock Entry, ...
 
 frappe.provide("azzir_fleet");
 
+// Fill azzir_wh_stock (row warehouse) + azzir_all_stock (all warehouses) on a row.
+azzir_fleet.fetch_row_stock = function (cdt, cdn) {
+	const row = locals[cdt] && locals[cdt][cdn];
+	if (!row || !row.item_code) return;
+	frappe.call({
+		method: "azzir_fleet.stock_info.get_item_stock",
+		args: { item_code: row.item_code, warehouse: row.warehouse || "" },
+		callback(r) {
+			if (!r.message) return;
+			if (frappe.meta.has_field(cdt, "azzir_wh_stock")) {
+				frappe.model.set_value(cdt, cdn, "azzir_wh_stock", r.message.wh_stock);
+			}
+			if (frappe.meta.has_field(cdt, "azzir_all_stock")) {
+				frappe.model.set_value(cdt, cdn, "azzir_all_stock", r.message.all_stock);
+			}
+		},
+	});
+};
+
+// Per-warehouse tree breakdown dialog.
 azzir_fleet.show_stock_dialog = function (item_code) {
 	if (!item_code) return;
 	frappe.call({
@@ -47,3 +68,15 @@ azzir_fleet.show_stock_dialog = function (item_code) {
 		},
 	});
 };
+
+// Click any "Stock (All WH)" grid cell (any doctype) -> the tree dialog.
+$(document).on("click", '.grid-row [data-fieldname="azzir_all_stock"]', function () {
+	const cdn = $(this).closest("[data-name]").attr("data-name");
+	const wrapper = $(this).closest(".frappe-control").get(0);
+	const grid_field = wrapper && wrapper.fieldobj;
+	const child_dt = grid_field && grid_field.df && grid_field.df.options;
+	const row = child_dt && cdn && locals[child_dt] && locals[child_dt][cdn];
+	if (row && row.item_code) azzir_fleet.show_stock_dialog(row.item_code);
+});
+
+$('<style>.grid-row [data-fieldname="azzir_all_stock"]{cursor:pointer;color:#1a73e8;text-decoration:underline;}</style>').appendTo("head");
