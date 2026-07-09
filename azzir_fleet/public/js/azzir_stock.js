@@ -70,13 +70,24 @@ azzir_fleet.show_stock_dialog = function (item_code) {
 };
 
 // Click any "Stock (All WH)" grid cell (any doctype) -> the tree dialog.
-$(document).on("click", '.grid-row [data-fieldname="azzir_all_stock"]', function () {
-	const cdn = $(this).closest("[data-name]").attr("data-name");
-	const wrapper = $(this).closest(".frappe-control").get(0);
-	const grid_field = wrapper && wrapper.fieldobj;
-	const child_dt = grid_field && grid_field.df && grid_field.df.options;
-	const row = child_dt && cdn && locals[child_dt] && locals[child_dt][cdn];
-	if (row && row.item_code) azzir_fleet.show_stock_dialog(row.item_code);
-});
+// Capture phase + stopPropagation so it fires BEFORE Frappe opens the row editor.
+document.addEventListener(
+	"click",
+	function (e) {
+		const cell =
+			e.target && e.target.closest && e.target.closest('.grid-row [data-fieldname="azzir_all_stock"]');
+		if (!cell) return;
+		e.stopPropagation();
+		e.preventDefault();
+		const nameEl = cell.closest("[data-name]");
+		const cdn = nameEl && nameEl.getAttribute("data-name");
+		const wrapper = cell.closest(".frappe-control");
+		const grid_field = wrapper && wrapper.fieldobj;
+		const child_dt = grid_field && grid_field.df && grid_field.df.options;
+		const row = child_dt && cdn && locals[child_dt] && locals[child_dt][cdn];
+		if (row && row.item_code) azzir_fleet.show_stock_dialog(row.item_code);
+	},
+	true
+);
 
 $('<style>.grid-row [data-fieldname="azzir_all_stock"]{cursor:pointer;color:#1a73e8;text-decoration:underline;}</style>').appendTo("head");
