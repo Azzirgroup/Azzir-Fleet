@@ -157,26 +157,35 @@ OVERRIDE_ROLE = "Azzir Stock Override"
 
 
 def after_migrate():
-	create_custom_fields(CUSTOM_FIELDS, ignore_validate=True)
-	# Keep the Units of Measure section (which now holds the Item Codes table)
-	# always expanded.
-	make_property_setter(
-		"Item",
-		"unit_of_measure_conversion",
-		"collapsible",
-		0,
-		"Check",
-		validate_fields_for_doctype=False,
-	)
-	setup_print_formats()
-	# Relabel Item Code -> Part Number on the Item master.
-	make_property_setter(
-		"Item", "item_code", "label", "Part Number", "Data", validate_fields_for_doctype=False
-	)
-	_setup_override_role()
-	_enforce_single_session()
-	_enable_multicurrency()
-	_setup_customer_statement_report()
+	# Each step runs independently — a failure in one must not stop the others
+	# (that's why the Customer Statement report, being last, could go missing).
+	steps = [
+		("custom_fields", lambda: create_custom_fields(CUSTOM_FIELDS, ignore_validate=True)),
+		(
+			"uom_section",
+			lambda: make_property_setter(
+				"Item", "unit_of_measure_conversion", "collapsible", 0, "Check",
+				validate_fields_for_doctype=False,
+			),
+		),
+		("print_formats", setup_print_formats),
+		(
+			"item_code_label",
+			lambda: make_property_setter(
+				"Item", "item_code", "label", "Part Number", "Data",
+				validate_fields_for_doctype=False,
+			),
+		),
+		("override_role", _setup_override_role),
+		("single_session", _enforce_single_session),
+		("multicurrency", _enable_multicurrency),
+		("customer_statement", _setup_customer_statement_report),
+	]
+	for label, fn in steps:
+		try:
+			fn()
+		except Exception:
+			frappe.log_error(title=f"azzir_fleet after_migrate failed: {label}")
 
 
 def _setup_customer_statement_report():
@@ -216,7 +225,7 @@ def _setup_customer_statement_report():
 			"ref_doctype": "GL Entry",
 			"report_type": "Custom Report",
 			"is_standard": "No",
-			"module": "Azzir Fleet",
+			"module": "Accounts",
 			"json": json.dumps({"columns": columns, "filters": filters}),
 			"roles": [
 				{"role": "Accounts User"},
