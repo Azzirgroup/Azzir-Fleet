@@ -27,6 +27,7 @@ app_license = "mit"
 # include js, css files in header of desk.html
 # app_include_css = "/assets/azzir_fleet/css/azzir_fleet.css"
 app_include_js = [
+	"/assets/azzir_fleet/js/azzir_compat.js",
 	"/assets/azzir_fleet/js/azzir_alias.js",
 	"/assets/azzir_fleet/js/azzir_stock.js",
 ]
@@ -93,6 +94,12 @@ jinja = {
 	],
 }
 
+# Session
+# ----------
+# Cap concurrent logins per user (phone + desktop). Must NOT use System Settings
+# .deny_multiple_sessions — that force-clears ALL other sessions.
+on_session_creation = "azzir_fleet.session.enforce_session_limit"
+
 # Installation
 # ------------
 
@@ -149,6 +156,10 @@ doc_events = {
 		"validate": "azzir_fleet.item_codes.validate",
 		"on_update": "azzir_fleet.item_codes.on_update",
 		"after_rename": "azzir_fleet.item_codes.after_rename",
+	},
+	# Maker-checker: the creator of a Stock Entry draft cannot submit it.
+	"Stock Entry": {
+		"before_submit": "azzir_fleet.stock_entry_approval.block_self_submit"
 	},
 	# Maximum Order Qty — buying documents
 	"Material Request": {"validate": "azzir_fleet.qty_limits.validate_buying"},

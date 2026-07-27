@@ -2,8 +2,6 @@
 # For license information, please see license.txt
 """App setup — installs the Item Codes child table on Item."""
 
-import json
-
 import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 from frappe.custom.doctype.property_setter.property_setter import make_property_setter
@@ -177,63 +175,14 @@ def after_migrate():
 			),
 		),
 		("override_role", _setup_override_role),
-		("single_session", _enforce_single_session),
+		("session_limit", _enforce_session_limit),
 		("multicurrency", _enable_multicurrency),
-		("customer_statement", _setup_customer_statement_report),
 	]
 	for label, fn in steps:
 		try:
 			fn()
 		except Exception:
 			frappe.log_error(title=f"azzir_fleet after_migrate failed: {label}")
-
-
-def _setup_customer_statement_report():
-	"""Customer Statement — a Custom Report on top of ERPNext's General Ledger,
-	with the same columns/filters as the source app. Created once."""
-	name = "Customer Statement"
-	if frappe.db.exists("Report", name):
-		return
-	if not frappe.db.exists("Report", "General Ledger"):
-		return  # erpnext not installed / report missing
-
-	columns = [
-		{"label": "Party", "fieldname": "party", "width": 100},
-		{"label": "Against Account", "fieldname": "against", "width": 140},
-		{"label": "Credit", "fieldname": "credit", "fieldtype": "Currency", "options": "presentation_currency", "width": 130},
-		{"label": "Balance", "fieldname": "balance", "fieldtype": "Currency", "options": "presentation_currency", "width": 130},
-		{"label": "Voucher Type", "fieldname": "voucher_type", "width": 120},
-		{"label": "Debit", "fieldname": "debit", "fieldtype": "Currency", "options": "presentation_currency", "width": 130},
-		{"label": "Posting Date", "fieldname": "posting_date", "fieldtype": "Date", "width": 120},
-	]
-	filters = {
-		"company": "",
-		"account": [],
-		"party_type": "Customer",
-		"party": [],
-		"categorize_by": "Categorize by Voucher (Consolidated)",
-		"cost_center": [],
-		"project": [],
-		"include_dimensions": 1,
-		"include_default_book_entries": 1,
-	}
-	frappe.get_doc(
-		{
-			"doctype": "Report",
-			"report_name": name,
-			"reference_report": "General Ledger",
-			"ref_doctype": "GL Entry",
-			"report_type": "Custom Report",
-			"is_standard": "No",
-			"module": "Accounts",
-			"json": json.dumps({"columns": columns, "filters": filters}),
-			"roles": [
-				{"role": "Accounts User"},
-				{"role": "Accounts Manager"},
-				{"role": "Auditor"},
-			],
-		}
-	).insert(ignore_permissions=True)
 
 
 def _setup_override_role():
@@ -244,23 +193,31 @@ def _setup_override_role():
 		).insert(ignore_permissions=True)
 
 
-def _enforce_single_session():
-	"""One active session per user (logging in elsewhere ends the old session).
+def _enforce_session_limit():
+	"""Allow MAX_SESSIONS logins per user (e.g. phone + desktop), not just one.
 
-	The actual switch is System Settings.deny_multiple_sessions — without it,
-	simultaneous_sessions alone does NOT log the user out on a new device.
+	deny_multiple_sessions must stay OFF: it calls clear_sessions(force=True),
+	which ignores simultaneous_sessions and kills every other session, so users
+	were bounced the moment they signed in on a second device and their open tab
+	then failed with "Method Not Allowed" on search_link. The cap is enforced on
+	login instead — see azzir_fleet.session.enforce_session_limit.
 	"""
-	frappe.db.set_single_value("System Settings", "deny_multiple_sessions", 1)
+	from azzir_fleet.session import MAX_SESSIONS
+
+	frappe.db.set_single_value("System Settings", "deny_multiple_sessions", 0)
 	make_property_setter(
-		"User", "simultaneous_sessions", "default", 1, "Data", validate_fields_for_doctype=False
+		"User", "simultaneous_sessions", "default", MAX_SESSIONS, "Data",
+		validate_fields_for_doctype=False,
 	)
 	for user in frappe.get_all(
 		"User",
 		filters={"enabled": 1, "name": ["not in", ("Administrator", "Guest")]},
 		pluck="name",
 	):
-		if frappe.db.get_value("User", user, "simultaneous_sessions") != 1:
-			frappe.db.set_value("User", user, "simultaneous_sessions", 1, update_modified=False)
+		if frappe.db.get_value("User", user, "simultaneous_sessions") != MAX_SESSIONS:
+			frappe.db.set_value(
+				"User", user, "simultaneous_sessions", MAX_SESSIONS, update_modified=False
+			)
 
 
 def _enable_multicurrency():
