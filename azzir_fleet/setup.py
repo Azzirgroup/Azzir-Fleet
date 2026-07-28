@@ -444,7 +444,7 @@ _PROFORMA_TEMPLATE = """
 		</thead>
 		<tbody>
 			{% for row in doc.items %}
-			{% set alt = row.get("azzir_old_code") or get_item_old_codes(row.item_code) %}
+			{% set alt = row.get("azzir_old_code") or get_item_previous_code(row.item_code) %}
 			<tr style="border-bottom:1px solid #ddd;">
 				<td style="padding:5px;">{{ loop.index }}</td>
 				<td style="padding:5px;">{{ row.item_code }}</td>

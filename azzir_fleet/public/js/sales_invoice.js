@@ -2,6 +2,22 @@
 // Sales Invoice items grid: same live stock columns as Quotation
 // (dialog + click handled in the shared azzir_stock.js).
 
+frappe.ui.form.on("Sales Invoice", {
+	refresh(frm) {
+		// Reverse-flow convenience: spin up a Quotation from this invoice.
+		frm.add_custom_button(
+			__("Quotation"),
+			function () {
+				frappe.model.open_mapped_doc({
+					method: "azzir_fleet.sales_invoice.make_quotation",
+					frm: frm,
+				});
+			},
+			__("Create")
+		);
+	},
+});
+
 frappe.ui.form.on("Sales Invoice Item", {
 	item_code(frm, cdt, cdn) {
 		azzir_fleet.fetch_row_stock(cdt, cdn);

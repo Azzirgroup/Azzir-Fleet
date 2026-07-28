@@ -174,6 +174,23 @@ def get_item_old_codes(item_code):
 	return ", ".join(codes)
 
 
+def get_item_previous_code(item_code):
+	"""The single most recent old code of an item (the one it was renamed from) —
+	for print formats that want only the last previous part number, not the whole
+	alias history."""
+	if not item_code:
+		return ""
+	return (
+		frappe.db.get_value(
+			CHILD_DT,
+			{"parent": item_code, "parenttype": "Item", "is_primary": 0},
+			"code",
+			order_by="changed_on desc",
+		)
+		or ""
+	)
+
+
 @frappe.whitelist()
 def resolve_code(code: str):
 	"""Return the current item for any code (current or old). None if unknown."""
