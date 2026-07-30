@@ -16,6 +16,7 @@ def make_quotation(source_name: str, target_doc: str | None = None) -> dict:
 	def set_missing_values(source, target):
 		target.quotation_to = "Customer"
 		target.party_name = source.customer
+		target.azzir_source_sales_invoice = source.name  # marks the reverse flow
 		target.ignore_pricing_rule = 1  # keep the invoice's rates, don't re-price
 		target.run_method("set_missing_values")
 		target.run_method("calculate_taxes_and_totals")

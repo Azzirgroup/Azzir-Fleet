@@ -94,6 +94,39 @@ _APPLY_VAT_FIELD = {
 for _dt in ("Sales Invoice", "Sales Order", "Quotation", "Delivery Note"):
 	CUSTOM_FIELDS.setdefault(_dt, []).append(dict(_APPLY_VAT_FIELD))
 
+# Marks a Quotation that was generated FROM a Sales Invoice (reverse re-quote
+# flow). When set, the "Create > Sales Invoice" button is hidden so you don't
+# loop invoice -> quotation -> invoice.
+CUSTOM_FIELDS.setdefault("Quotation", []).append(
+	{
+		"fieldname": "azzir_source_sales_invoice",
+		"label": "Source Sales Invoice",
+		"fieldtype": "Link",
+		"options": "Sales Invoice",
+		"insert_after": "order_type",
+		"read_only": 1,
+		"no_copy": 1,
+		"print_hide": 1,
+		"description": "Set automatically when this quotation was created from a Sales Invoice.",
+	}
+)
+
+# Records which Quotation a Sales Invoice was generated from (reverse flow), so the
+# quotation's "Create > Sales Invoice" button hides once it has been invoiced.
+CUSTOM_FIELDS.setdefault("Sales Invoice", []).append(
+	{
+		"fieldname": "azzir_source_quotation",
+		"label": "Source Quotation",
+		"fieldtype": "Link",
+		"options": "Quotation",
+		"insert_after": "customer",
+		"read_only": 1,
+		"no_copy": 1,
+		"print_hide": 1,
+		"description": "Set automatically when this invoice was created from a Quotation.",
+	}
+)
+
 # Stores the specific old code the user typed to find this item (captured
 # client-side). On every transaction item row so the print shows that exact code.
 _OLD_CODE_FIELD = {

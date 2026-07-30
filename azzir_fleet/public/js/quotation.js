@@ -1,5 +1,37 @@
 // Copyright (c) 2026, Azzir and contributors
-// Quotation items grid: fill live stock columns (dialog + click handled in azzir_stock.js).
+// Quotation: swap the standard "Create > Sales Order" for "Create > Sales Invoice"
+// (hidden when the quotation itself came from a Sales Invoice), plus live stock cols.
+
+frappe.ui.form.on("Quotation", {
+	refresh(frm) {
+		const drop_sales_order = () => frm.remove_custom_button(__("Sales Order"), __("Create"));
+		// Remove now and again shortly after, in case ERPNext adds it late.
+		drop_sales_order();
+		setTimeout(drop_sales_order, 500);
+
+		// Offer Sales Invoice only on a submitted quotation that (a) did NOT originate
+		// from a Sales Invoice (avoids invoice -> quotation -> invoice loop) and
+		// (b) has not already been invoiced (no submitted SI points back to it).
+		if (frm.doc.docstatus === 1 && !frm.doc.azzir_source_sales_invoice) {
+			frappe.db
+				.get_value("Sales Invoice", { azzir_source_quotation: frm.doc.name, docstatus: 1 }, "name")
+				.then((r) => {
+					const already_invoiced = r && r.message && r.message.name;
+					if (already_invoiced) return;
+					frm.add_custom_button(
+						__("Sales Invoice"),
+						function () {
+							frappe.model.open_mapped_doc({
+								method: "azzir_fleet.quotation.make_sales_invoice",
+								frm: frm,
+							});
+						},
+						__("Create")
+					);
+				});
+		}
+	},
+});
 
 frappe.ui.form.on("Quotation Item", {
 	item_code(frm, cdt, cdn) {
