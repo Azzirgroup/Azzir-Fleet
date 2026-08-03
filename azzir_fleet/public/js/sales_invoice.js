@@ -15,6 +15,21 @@ frappe.ui.form.on("Sales Invoice", {
 			},
 			__("Create")
 		);
+
+		// Create a Delivery Note from a submitted invoice (works even when the
+		// invoice didn't keep stock / came after a Sales Order).
+		if (frm.doc.docstatus === 1) {
+			frm.add_custom_button(
+				__("Delivery Note"),
+				function () {
+					frappe.model.open_mapped_doc({
+						method: "erpnext.accounts.doctype.sales_invoice.sales_invoice.make_delivery_note",
+						frm: frm,
+					});
+				},
+				__("Create")
+			);
+		}
 	},
 });
 

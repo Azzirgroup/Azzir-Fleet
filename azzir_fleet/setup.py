@@ -215,6 +215,7 @@ def after_migrate():
 			),
 		),
 		("print_formats", setup_print_formats),
+		("lock_print_formats", _lock_print_formats),
 		(
 			"item_code_label",
 			lambda: make_property_setter(
@@ -327,6 +328,26 @@ def setup_print_formats():
 
 	# Pickup Slip (Sales Invoice) — NOT set as default.
 	_upsert_print_format("Pickup Slip", "Sales Invoice", PICKUP_SLIP_HTML)
+
+
+def _lock_print_formats():
+	"""Make the Azzir formats the ONLY print formats for their doctypes: disable
+	every other Print Format (standard ones included). Re-runs each migrate so any
+	standard format re-synced from files gets disabled again.
+
+	Note: the built-in auto "Standard" print (not a Print Format record) can't be
+	removed; our format is set as each doctype's default so it's never the fallback.
+	"""
+	keep = {name for (name, *_rest) in PRINT_FORMATS}
+	keep.add("Pickup Slip")
+	doctypes = {dt for (_n, dt, *_rest) in PRINT_FORMATS}
+	for dt in doctypes:
+		for pf in frappe.get_all(
+			"Print Format",
+			filters={"doc_type": dt, "name": ["not in", list(keep)], "disabled": 0},
+			pluck="name",
+		):
+			frappe.db.set_value("Print Format", pf, "disabled", 1, update_modified=False)
 
 
 def _upsert_print_format(name, dt, html):

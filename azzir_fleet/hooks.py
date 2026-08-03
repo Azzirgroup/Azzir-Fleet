@@ -30,6 +30,7 @@ app_include_js = [
 	"/assets/azzir_fleet/js/azzir_compat.js",
 	"/assets/azzir_fleet/js/azzir_alias.js",
 	"/assets/azzir_fleet/js/azzir_stock.js",
+	"/assets/azzir_fleet/js/azzir_vat.js",
 ]
 
 # include js, css files in header of web template
@@ -172,12 +173,13 @@ doc_events = {
 			"azzir_fleet.purchase_invoice.validate_unique_bill_no",
 		]
 	},
-	# Maximum Sales Qty — selling documents
+	# Maximum Sales Qty — selling documents.
+	# apply_vat_option runs LAST on validate (after ERPNext re-applies default taxes).
 	"Quotation": {
-		"before_validate": "azzir_fleet.vat.apply_vat_option",
 		"validate": [
 			"azzir_fleet.qty_limits.validate_selling",
 			"azzir_fleet.quotation.set_quotation_validity",
+			"azzir_fleet.vat.apply_vat_option",
 		],
 	},
 	"Supplier Quotation": {
@@ -187,18 +189,22 @@ doc_events = {
 		]
 	},
 	"Sales Order": {
-		"before_validate": "azzir_fleet.vat.apply_vat_option",
-		"validate": "azzir_fleet.qty_limits.validate_selling",
+		"validate": [
+			"azzir_fleet.qty_limits.validate_selling",
+			"azzir_fleet.vat.apply_vat_option",
+		],
 	},
 	"Delivery Note": {
-		"before_validate": "azzir_fleet.vat.apply_vat_option",
-		"validate": "azzir_fleet.qty_limits.validate_selling",
+		"validate": [
+			"azzir_fleet.qty_limits.validate_selling",
+			"azzir_fleet.vat.apply_vat_option",
+		],
 	},
 	"Sales Invoice": {
-		"before_validate": "azzir_fleet.vat.apply_vat_option",
 		"validate": [
 			"azzir_fleet.qty_limits.validate_selling",
 			"azzir_fleet.qty_limits.validate_sales_stock",
+			"azzir_fleet.vat.apply_vat_option",
 		],
 		"on_submit": "azzir_fleet.sales_invoice.mark_quotation_invoiced",
 		"on_cancel": "azzir_fleet.sales_invoice.unmark_quotation_invoiced",
