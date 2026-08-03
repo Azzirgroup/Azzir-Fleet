@@ -43,6 +43,12 @@ frappe.ui.form.on("Stock Entry Detail", {
 
 	azzir_view_stock(frm, cdt, cdn) {
 		const row = locals[cdt] && locals[cdt][cdn];
-		if (row && row.item_code) azzir_fleet.show_stock_dialog(row.item_code);
+		if (row && row.item_code) {
+			// Stock Entry rows have source (s_warehouse) / target (t_warehouse), not
+			// a single `warehouse` — set the source, which is the "has stock" one.
+			azzir_fleet.show_stock_dialog(row.item_code, (wh) =>
+				frappe.model.set_value(cdt, cdn, "s_warehouse", wh)
+			);
+		}
 	},
 });

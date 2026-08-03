@@ -27,6 +27,10 @@ frappe.ui.form.on("Sales Invoice Item", {
 	},
 	azzir_view_stock(frm, cdt, cdn) {
 		const row = locals[cdt][cdn];
-		if (row && row.item_code) azzir_fleet.show_stock_dialog(row.item_code);
+		if (row && row.item_code) {
+			azzir_fleet.show_stock_dialog(row.item_code, (wh) =>
+				frappe.model.set_value(cdt, cdn, "warehouse", wh)
+			);
+		}
 	},
 });

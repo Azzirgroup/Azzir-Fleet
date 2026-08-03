@@ -111,6 +111,21 @@ CUSTOM_FIELDS.setdefault("Quotation", []).append(
 	}
 )
 
+# Set when a Sales Invoice generated from this quotation is submitted (cleared on
+# cancel). Drives hiding the "Create > Sales Invoice" button once invoiced.
+CUSTOM_FIELDS.setdefault("Quotation", []).append(
+	{
+		"fieldname": "azzir_invoiced",
+		"label": "Invoiced",
+		"fieldtype": "Check",
+		"insert_after": "azzir_source_sales_invoice",
+		"read_only": 1,
+		"no_copy": 1,
+		"print_hide": 1,
+		"description": "Set when a Sales Invoice created from this quotation is submitted.",
+	}
+)
+
 # Records which Quotation a Sales Invoice was generated from (reverse flow), so the
 # quotation's "Create > Sales Invoice" button hides once it has been invoiced.
 CUSTOM_FIELDS.setdefault("Sales Invoice", []).append(

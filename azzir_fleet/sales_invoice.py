@@ -58,3 +58,22 @@ def _reset_item_flags(source, target, source_parent):
 	# Drop invoice-only links so the Quotation row is clean.
 	target.sales_invoice_item = None
 	target.against_sales_invoice = None
+
+
+def mark_quotation_invoiced(doc, method=None):
+	"""On submit, flag the source Quotation as invoiced (hides its Create button)."""
+	q = doc.get("azzir_source_quotation")
+	if q and frappe.db.exists("Quotation", q):
+		frappe.db.set_value("Quotation", q, "azzir_invoiced", 1, update_modified=False)
+
+
+def unmark_quotation_invoiced(doc, method=None):
+	"""On cancel, clear the flag unless another submitted invoice still points here."""
+	q = doc.get("azzir_source_quotation")
+	if not q or not frappe.db.exists("Quotation", q):
+		return
+	other = frappe.db.exists(
+		"Sales Invoice",
+		{"azzir_source_quotation": q, "docstatus": 1, "name": ["!=", doc.name]},
+	)
+	frappe.db.set_value("Quotation", q, "azzir_invoiced", 1 if other else 0, update_modified=False)

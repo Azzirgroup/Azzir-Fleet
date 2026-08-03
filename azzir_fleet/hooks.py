@@ -200,6 +200,8 @@ doc_events = {
 			"azzir_fleet.qty_limits.validate_selling",
 			"azzir_fleet.qty_limits.validate_sales_stock",
 		],
+		"on_submit": "azzir_fleet.sales_invoice.mark_quotation_invoiced",
+		"on_cancel": "azzir_fleet.sales_invoice.unmark_quotation_invoiced",
 	},
 	"POS Invoice": {"validate": "azzir_fleet.qty_limits.validate_selling"},
 	# Monthly Budget control (Warn/Stop). JE covers Expense Entry too.
