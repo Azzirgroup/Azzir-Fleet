@@ -1,6 +1,6 @@
 // Copyright (c) 2026, Azzir and contributors
 // Apply VAT toggle — immediate UI feedback. The server (azzir_fleet.vat) is the
-// source of truth on save; this just updates the form live when you tick/untick.
+// source of truth on save; this mirrors it live when you tick/untick.
 
 ["Sales Invoice", "Sales Order", "Quotation", "Delivery Note"].forEach(function (dt) {
 	frappe.ui.form.on(dt, {
@@ -12,13 +12,27 @@
 					frm.set_value("taxes_and_charges", null);
 				}
 				frm.refresh_field("taxes");
-				frm.cscript && frm.cscript.calculate_taxes_and_totals
-					? frm.cscript.calculate_taxes_and_totals()
-					: frm.trigger("calculate_taxes_and_totals");
-			} else {
-				// VAT back on: re-apply the company default tax template.
-				frm.trigger("taxes_and_charges");
+				frm.trigger("calculate_taxes_and_totals");
+				return;
 			}
+			// VAT on: if nothing is there yet, auto-apply the VAT account.
+			if ((frm.doc.taxes || []).length) return;
+			frappe.call({
+				method: "azzir_fleet.vat.get_vat_row",
+				args: { company: frm.doc.company },
+				callback(r) {
+					if (!r.message || !r.message.account_head) {
+						frappe.show_alert({
+							message: __("No VAT account found for this company."),
+							indicator: "orange",
+						});
+						return;
+					}
+					const row = frm.add_child("taxes", r.message);
+					frm.refresh_field("taxes");
+					frm.trigger("calculate_taxes_and_totals");
+				},
+			});
 		},
 	});
 });

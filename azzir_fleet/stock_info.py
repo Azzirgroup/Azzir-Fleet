@@ -42,6 +42,52 @@ def items_with_stock(
 
 
 @frappe.whitelist()
+def warehouses_with_stock(
+	doctype: str,
+	txt: str,
+	searchfield: str,
+	start: int,
+	page_len: int,
+	filters: dict | str | None = None,
+	**kwargs,
+):
+	"""Link-field query: warehouses that hold stock of filters['item_code'] (so the
+	user picks a source warehouse straight from those with qty). No item -> all
+	non-group warehouses."""
+	if isinstance(filters, str):
+		filters = frappe.parse_json(filters)
+	filters = filters or {}
+	item_code = filters.get("item_code")
+	company = filters.get("company")
+	like = f"%{txt or ''}%"
+
+	if not item_code:
+		conds = "is_group = 0 and disabled = 0 and (name like %(t)s or warehouse_name like %(t)s)"
+		vals = {"t": like, "s": start, "p": page_len}
+		if company:
+			conds += " and company = %(c)s"
+			vals["c"] = company
+		return frappe.db.sql(
+			f"""select name, warehouse_name from `tabWarehouse`
+			   where {conds} order by name limit %(s)s, %(p)s""",
+			vals,
+		)
+
+	conds = "w.is_group = 0 and w.disabled = 0 and b.item_code = %(it)s and b.actual_qty > 0"
+	vals = {"it": item_code, "t": like, "s": start, "p": page_len}
+	if company:
+		conds += " and w.company = %(c)s"
+		vals["c"] = company
+	return frappe.db.sql(
+		f"""select distinct w.name, w.warehouse_name
+		   from `tabWarehouse` w join `tabBin` b on b.warehouse = w.name
+		   where {conds} and (w.name like %(t)s or w.warehouse_name like %(t)s)
+		   order by b.actual_qty desc, w.name limit %(s)s, %(p)s""",
+		vals,
+	)
+
+
+@frappe.whitelist()
 def get_item_stock(item_code: str, warehouse: str | None = None):
 	"""Return the item's stock in `warehouse` (incl. child warehouses if it's a
 	group) and its total across all warehouses."""

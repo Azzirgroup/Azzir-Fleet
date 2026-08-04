@@ -18,6 +18,19 @@ function set_stock_item_query(frm) {
 		}
 		return {};
 	});
+
+	// Reverse: once the item is chosen, the row's Source Warehouse lists only the
+	// warehouses that actually hold that item — no hunting for where the stock is.
+	frm.set_query("s_warehouse", "items", function (doc, cdt, cdn) {
+		const row = locals[cdt][cdn];
+		if (row && row.item_code) {
+			return {
+				query: "azzir_fleet.stock_info.warehouses_with_stock",
+				filters: { item_code: row.item_code, company: doc.company },
+			};
+		}
+		return {};
+	});
 }
 
 frappe.ui.form.on("Stock Entry", {
