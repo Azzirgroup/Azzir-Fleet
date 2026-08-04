@@ -26,12 +26,9 @@ app_license = "mit"
 
 # include js, css files in header of desk.html
 # app_include_css = "/assets/azzir_fleet/css/azzir_fleet.css"
-app_include_js = [
-	"/assets/azzir_fleet/js/azzir_compat.js",
-	"/assets/azzir_fleet/js/azzir_alias.js",
-	"/assets/azzir_fleet/js/azzir_stock.js",
-	"/assets/azzir_fleet/js/azzir_vat.js",
-]
+# One content-hashed bundle (see public/js/azzir_fleet.bundle.js) so the desk
+# scripts cache-bust on every build instead of going stale per device.
+app_include_js = ["azzir_fleet.bundle.js"]
 
 # include js, css files in header of web template
 # web_include_css = "/assets/azzir_fleet/css/azzir_fleet.css"
