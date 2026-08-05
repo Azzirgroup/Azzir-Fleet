@@ -126,6 +126,17 @@ CUSTOM_FIELDS.setdefault("Quotation", []).append(
 	}
 )
 
+# Doc-level toggle to hide the Part Number column on the proforma printout.
+CUSTOM_FIELDS.setdefault("Quotation", []).append(
+	{
+		"fieldname": "azzir_hide_part_no",
+		"label": "Hide Part Numbers on Print",
+		"fieldtype": "Check",
+		"insert_after": "azzir_invoiced",
+		"description": "Tick to hide the Part Number column on this quotation's printout.",
+	}
+)
+
 # Records which Quotation a Sales Invoice was generated from (reverse flow), so the
 # quotation's "Create > Sales Invoice" button hides once it has been invoiced.
 CUSTOM_FIELDS.setdefault("Sales Invoice", []).append(
@@ -283,7 +294,7 @@ def _enable_multicurrency():
 
 PRINT_FORMATS = [
 	# (print format name, doctype, title, party, show_prices)
-	("Sales Invoice with Old Code", "Sales Invoice", "PROFORMA INVOICE", "customer", True),
+	("Sales Invoice with Old Code", "Sales Invoice", "SALES INVOICE", "customer", True),
 	("Quotation (Azzir)", "Quotation", "PROFORMA INVOICE", "customer", True),
 	("Sales Order (Azzir)", "Sales Order", "SALES ORDER", "customer", True),
 	# Delivery Note = goods slip: quantities only, no prices/taxes/totals.
@@ -455,6 +466,7 @@ _PROFORMA_TEMPLATE = """
 <div class="azzir-doc" style="font-size:12px; color:#000;">
 	{%- set company_tin = frappe.db.get_value("Company", doc.company, "tax_id") -%}
 	{%- set show_prices = __PRICES_FLAG__ -%}
+	{%- set hide_part_no = doc.get("azzir_hide_part_no") -%}
 
 	<!-- Letter head (custom formats must include it explicitly) -->
 	{% if not no_letterhead and letter_head %}<div class="letter-head">{{ letter_head }}</div>{% endif %}
@@ -500,7 +512,7 @@ _PROFORMA_TEMPLATE = """
 		<thead>
 			<tr style="border-top:2px solid #000; border-bottom:1px solid #000;">
 				<th style="padding:5px; text-align:left;">#</th>
-				<th style="padding:5px; text-align:left;">Part Number</th>
+				{% if not hide_part_no %}<th style="padding:5px; text-align:left;">Part Number</th>{% endif %}
 				<th style="padding:5px; text-align:left;">Description</th>
 				<th style="padding:5px; text-align:right;">Qty</th>
 				{% if show_prices %}
@@ -516,9 +528,9 @@ _PROFORMA_TEMPLATE = """
 			{% set alt = row.get("azzir_old_code") or get_item_previous_code(row.item_code) %}
 			<tr style="border-bottom:1px solid #ddd;">
 				<td style="padding:5px;">{{ loop.index }}</td>
-				<td style="padding:5px;">{{ row.item_code }}</td>
+				{% if not hide_part_no %}<td style="padding:5px;">{{ row.item_code }}</td>{% endif %}
 				<td style="padding:5px;">
-					{{ row.item_name }}
+					{{ row.description or row.item_name }}
 					{% if alt %}<br><span style="color:#555;">({{ alt }})</span>{% endif %}
 				</td>
 				<td style="padding:5px; text-align:right;">{{ "%.2f"|format(row.qty) }}</td>

@@ -50,6 +50,7 @@ doctype_js = {
 	"Quotation": "public/js/quotation.js",
 	"Sales Invoice": "public/js/sales_invoice.js",
 	"Stock Entry": "public/js/stock_entry.js",
+	"Delivery Note": "public/js/delivery_note.js",
 }
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
@@ -203,6 +204,7 @@ doc_events = {
 			"azzir_fleet.qty_limits.validate_sales_stock",
 			"azzir_fleet.vat.apply_vat_option",
 		],
+		"before_submit": "azzir_fleet.stock_reservation.check_stock_reservation",
 		"on_submit": "azzir_fleet.sales_invoice.mark_quotation_invoiced",
 		"on_cancel": "azzir_fleet.sales_invoice.unmark_quotation_invoiced",
 	},
