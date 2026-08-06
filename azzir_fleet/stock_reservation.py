@@ -16,11 +16,28 @@ import frappe
 from frappe import _
 from frappe.utils import flt
 
-from azzir_fleet.qty_limits import _can_override
+from azzir_fleet.qty_limits import OVERRIDE_ROLE
+
+
+def _has_override_role() -> bool:
+	"""True only if the current user is EXPLICITLY assigned the override role.
+
+	We can't use frappe.get_roles() here: for Administrator it returns every role
+	in the system, so admin would always bypass the reservation. Checking the
+	User's Has Role rows means only people you actually grant the role can force
+	past a reservation.
+	"""
+	return bool(
+		frappe.get_all(
+			"Has Role",
+			filters={"parent": frappe.session.user, "parenttype": "User", "role": OVERRIDE_ROLE},
+			limit=1,
+		)
+	)
 
 
 def check_stock_reservation(doc, method=None):
-	if _can_override():
+	if _has_override_role():
 		return
 
 	# Sum this invoice's need per (item, warehouse).

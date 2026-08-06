@@ -130,10 +130,10 @@ CUSTOM_FIELDS.setdefault("Quotation", []).append(
 CUSTOM_FIELDS.setdefault("Quotation", []).append(
 	{
 		"fieldname": "azzir_hide_part_no",
-		"label": "Hide Part Numbers on Print",
+		"label": "Hide Alternative Part No on Print",
 		"fieldtype": "Check",
 		"insert_after": "azzir_invoiced",
-		"description": "Tick to hide the Part Number column on this quotation's printout.",
+		"description": "Tick to hide the alternative/previous part number (shown in brackets under the Description) on this quotation's printout. The Part Number column stays.",
 	}
 )
 
@@ -512,7 +512,7 @@ _PROFORMA_TEMPLATE = """
 		<thead>
 			<tr style="border-top:2px solid #000; border-bottom:1px solid #000;">
 				<th style="padding:5px; text-align:left;">#</th>
-				{% if not hide_part_no %}<th style="padding:5px; text-align:left;">Part Number</th>{% endif %}
+				<th style="padding:5px; text-align:left;">Part Number</th>
 				<th style="padding:5px; text-align:left;">Description</th>
 				<th style="padding:5px; text-align:right;">Qty</th>
 				{% if show_prices %}
@@ -528,10 +528,10 @@ _PROFORMA_TEMPLATE = """
 			{% set alt = row.get("azzir_old_code") or get_item_previous_code(row.item_code) %}
 			<tr style="border-bottom:1px solid #ddd;">
 				<td style="padding:5px;">{{ loop.index }}</td>
-				{% if not hide_part_no %}<td style="padding:5px;">{{ row.item_code }}</td>{% endif %}
+				<td style="padding:5px;">{{ row.item_code }}</td>
 				<td style="padding:5px;">
 					{{ row.description or row.item_name }}
-					{% if alt %}<br><span style="color:#555;">({{ alt }})</span>{% endif %}
+					{% if alt and not hide_part_no %}<br><span style="color:#555;">({{ alt }})</span>{% endif %}
 				</td>
 				<td style="padding:5px; text-align:right;">{{ "%.2f"|format(row.qty) }}</td>
 				{% if show_prices %}
