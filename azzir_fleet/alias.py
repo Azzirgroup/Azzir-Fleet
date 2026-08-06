@@ -191,6 +191,34 @@ def get_item_previous_code(item_code):
 	)
 
 
+def description_for_print(item_code, description, hide_alt=0):
+	"""Description text for print formats. When hide_alt is set, the item's
+	alternative (old) part numbers are stripped out of the text — they're often
+	typed into the description itself (e.g. "TIP LONG ... 3G8354 ADAPTER J350"),
+	so hiding the separate "(old code)" line alone isn't enough."""
+	text = description or ""
+	if not hide_alt or not item_code:
+		return text
+
+	codes = set()
+	prev = get_item_previous_code(item_code)
+	if prev:
+		codes.add(prev)
+	for c in (get_item_old_codes(item_code) or "").split(","):
+		c = c.strip()
+		if c:
+			codes.add(c)
+
+	# Longest first so a code that is a substring of another is handled correctly.
+	for c in sorted(codes, key=len, reverse=True):
+		text = re.sub(r"\b" + re.escape(c) + r"\b", "", text)
+
+	# Tidy leftovers: empty brackets, doubled spaces, stray separators.
+	text = re.sub(r"\(\s*\)", "", text)
+	text = re.sub(r"\s{2,}", " ", text)
+	return text.strip(" -,·")
+
+
 @frappe.whitelist()
 def resolve_code(code: str):
 	"""Return the current item for any code (current or old). None if unknown."""

@@ -530,7 +530,7 @@ _PROFORMA_TEMPLATE = """
 				<td style="padding:5px;">{{ loop.index }}</td>
 				<td style="padding:5px;">{{ row.item_code }}</td>
 				<td style="padding:5px;">
-					{{ row.description or row.item_name }}
+					{{ description_for_print(row.item_code, row.description or row.item_name, hide_part_no) }}
 					{% if alt and not hide_part_no %}<br><span style="color:#555;">({{ alt }})</span>{% endif %}
 				</td>
 				<td style="padding:5px; text-align:right;">{{ "%.2f"|format(row.qty) }}</td>

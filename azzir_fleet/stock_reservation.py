@@ -50,17 +50,20 @@ def check_stock_reservation(doc, method=None):
 			continue
 		needed[(code, wh)] = needed.get((code, wh), 0) + flt(row.qty)
 
+	def _n(x):
+		return "%g" % flt(x)  # tidy number: 12 not 12.0
+
 	for (code, wh), qty in needed.items():
 		actual = flt(frappe.db.get_value("Bin", {"item_code": code, "warehouse": wh}, "actual_qty"))
 		reserved = _reserved_by_others(code, wh, doc.name)
-		available = actual - reserved
+		available = max(0.0, actual - reserved)
 		if flt(qty) > available + 1e-9:
 			frappe.throw(
 				_(
-					"Item {0} in {1}: {2} on hand, {3} already reserved by other invoices — "
-					"only {4} available, but this invoice needs {5}. The stock has already been "
+					"Item {0} in {1}: {2} in stock, {3} already reserved by other open invoices, "
+					"so only {4} is free — but this invoice needs {5}. The stock has already been "
 					"reserved and is not enough to submit."
-				).format(frappe.bold(code), wh, actual, reserved, available, qty),
+				).format(frappe.bold(code), wh, _n(actual), _n(reserved), _n(available), _n(qty)),
 				title=_("Stock Already Reserved"),
 			)
 

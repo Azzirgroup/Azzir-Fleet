@@ -89,6 +89,7 @@ jinja = {
 	"methods": [
 		"azzir_fleet.alias.get_item_old_codes",
 		"azzir_fleet.alias.get_item_previous_code",
+		"azzir_fleet.alias.description_for_print",
 		"azzir_fleet.stock_info.get_stock_tree",
 		"azzir_fleet.stock_info.get_stock_branch",
 	],
