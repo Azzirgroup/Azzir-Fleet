@@ -340,6 +340,13 @@ def setup_print_formats():
 	# Pickup Slip (Sales Invoice) — NOT set as default.
 	_upsert_print_format("Pickup Slip", "Sales Invoice", PICKUP_SLIP_HTML)
 
+	# Expense Entry voucher — set as its default print format.
+	_upsert_print_format("Expense Entry (Azzir)", "Expense Entry", EXPENSE_ENTRY_HTML)
+	make_property_setter(
+		"Expense Entry", None, "default_print_format", "Expense Entry (Azzir)", "Data",
+		for_doctype=True, validate_fields_for_doctype=False,
+	)
+
 
 def _lock_print_formats():
 	"""Make the Azzir formats the ONLY print formats for their doctypes: disable
@@ -402,6 +409,77 @@ def _proforma_html(title, party, show_prices=True):
 
 def after_install():
 	after_migrate()
+
+
+EXPENSE_ENTRY_HTML = """
+<div class="azzir-doc" style="font-size:12px; color:#000;">
+	{%- set cur = frappe.db.get_value("Company", doc.company, "default_currency") -%}
+
+	{% if not no_letterhead and letter_head %}<div class="letter-head">{{ letter_head }}</div>{% endif %}
+
+	<div style="text-align:right; margin-bottom:8px;">
+		<span style="font-size:28px; font-weight:bold; letter-spacing:1px;">EXPENSE ENTRY</span>
+	</div>
+
+	<table style="width:100%; margin-bottom:12px;">
+		<tr>
+			<td style="vertical-align:top; width:58%;">
+				<b>Company:</b> {{ doc.company }}<br>
+				<b>Paid From:</b> {{ doc.cash_account or "" }}
+				{% if doc.journal_entry %}<br><b>Journal Entry:</b> {{ doc.journal_entry }}{% endif %}
+			</td>
+			<td style="vertical-align:top; padding-left:15px;">
+				<table style="width:100%; border-collapse:collapse;">
+					<tr><td style="text-align:right; padding:2px 6px;"><b>Ref :</b></td>
+						<td style="border:1px solid #999; padding:2px 6px; text-align:center;">{{ doc.name }}</td></tr>
+					<tr><td style="text-align:right; padding:2px 6px;"><b>Date :</b></td>
+						<td style="border:1px solid #999; padding:2px 6px; text-align:center;">{{ frappe.utils.formatdate(doc.posting_date) }}</td></tr>
+				</table>
+			</td>
+		</tr>
+	</table>
+
+	<table style="width:100%; border-collapse:collapse;">
+		<thead>
+			<tr style="border-top:2px solid #000; border-bottom:1px solid #000;">
+				<th style="padding:5px; text-align:left;">#</th>
+				<th style="padding:5px; text-align:left;">Account</th>
+				<th style="padding:5px; text-align:left;">Remark</th>
+				<th style="padding:5px; text-align:left;">Cost Center</th>
+				<th style="padding:5px; text-align:right;">Amount</th>
+			</tr>
+		</thead>
+		<tbody>
+			{% for row in doc.accounts %}
+			<tr style="border-bottom:1px solid #ddd;">
+				<td style="padding:5px;">{{ loop.index }}</td>
+				<td style="padding:5px;">{{ row.account }}</td>
+				<td style="padding:5px;">{{ row.remark or "" }}</td>
+				<td style="padding:5px;">{{ row.cost_center or "" }}</td>
+				<td style="padding:5px; text-align:right;">{{ frappe.utils.fmt_money(row.amount, currency=cur) }}</td>
+			</tr>
+			{% endfor %}
+		</tbody>
+		<tfoot>
+			<tr style="border-top:2px solid #000; font-weight:bold;">
+				<td colspan="4" style="padding:6px; text-align:right;">TOTAL :</td>
+				<td style="padding:6px; text-align:right;">{{ frappe.utils.fmt_money(doc.total_amount, currency=cur) }}</td>
+			</tr>
+		</tfoot>
+	</table>
+
+	<div style="margin-top:8px;"><b>In Words:</b> {{ frappe.utils.money_in_words(doc.total_amount, cur) }}</div>
+
+	<table style="width:100%; margin-top:45px;">
+		<tr>
+			<td style="width:33%;"><b>Prepared By:</b> ______________<br>
+				<span style="font-size:11px;">{{ frappe.db.get_value("User", doc.owner, "full_name") or doc.owner }}</span></td>
+			<td style="width:33%;"><b>Approved By:</b> ______________</td>
+			<td style="width:33%;"><b>Received By:</b> ______________</td>
+		</tr>
+	</table>
+</div>
+"""
 
 
 PICKUP_SLIP_HTML = """
