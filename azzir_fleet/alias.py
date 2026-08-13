@@ -211,12 +211,22 @@ def description_for_print(item_code, description, hide_alt=0):
 
 	# Longest first so a code that is a substring of another is handled correctly.
 	for c in sorted(codes, key=len, reverse=True):
-		text = re.sub(r"\b" + re.escape(c) + r"\b", "", text)
+		alnum = re.sub(r"[^A-Za-z0-9]", "", c)
+		if not alnum:
+			continue
+		# Match the code separator-insensitively (azzir codes ignore separators):
+		# "100-3402", "100 3402" and "1003402" all match old code "1003402".
+		pattern = (
+			r"(?<![A-Za-z0-9])"
+			+ r"[^A-Za-z0-9]*".join(re.escape(ch) for ch in alnum)
+			+ r"(?![A-Za-z0-9])"
+		)
+		text = re.sub(pattern, "", text, flags=re.IGNORECASE)
 
 	# Tidy leftovers: empty brackets, doubled spaces, stray separators.
 	text = re.sub(r"\(\s*\)", "", text)
 	text = re.sub(r"\s{2,}", " ", text)
-	return text.strip(" -,·")
+	return text.strip(" -,·/")
 
 
 @frappe.whitelist()
