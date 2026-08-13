@@ -2,6 +2,8 @@
 # For license information, please see license.txt
 """App setup — installs the Item Codes child table on Item."""
 
+import json
+
 import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 from frappe.custom.doctype.property_setter.property_setter import make_property_setter
@@ -57,6 +59,17 @@ CUSTOM_FIELDS = {
 			"label": "View Stock by Warehouse",
 			"fieldtype": "Button",
 			"insert_after": "azzir_all_stock",
+		},
+	],
+	# Bundle components (Packed Items): a button to pick the component's warehouse
+	# from those that actually hold it.
+	"Packed Item": [
+		{
+			"fieldname": "azzir_view_stock",
+			"label": "See Stock",
+			"fieldtype": "Button",
+			"insert_after": "warehouse",
+			"in_list_view": 1,
 		},
 	],
 	# Default quotation validity per party — used to auto-set Quotation "Valid Till".
@@ -227,6 +240,8 @@ def after_migrate():
 		),
 		("print_formats", setup_print_formats),
 		("lock_print_formats", _lock_print_formats),
+		("packed_items_position", _position_packed_items),
+		("packed_item_grid", _configure_packed_item_grid),
 		(
 			"item_code_label",
 			lambda: make_property_setter(
@@ -346,6 +361,55 @@ def setup_print_formats():
 		"Expense Entry", None, "default_print_format", "Expense Entry (Azzir)", "Data",
 		for_doctype=True, validate_fields_for_doctype=False,
 	)
+
+
+def _position_packed_items():
+	"""Move the Packing List (bundle components) section to sit right under the
+	Items table so it shows without scrolling. Standard fields reorder only via a
+	DocType 'field_order' property setter (insert_after works for custom fields
+	only). Idempotent."""
+	meta = frappe.get_meta("Sales Invoice")
+	order = [df.fieldname for df in meta.fields if not getattr(df, "is_custom_field", False)]
+	move = ["packing_list", "packed_items", "product_bundle_help"]
+	if "items" not in order or not all(f in order for f in move):
+		return
+	for f in move:
+		order.remove(f)
+	pos = order.index("items") + 1
+	order[pos:pos] = move
+	make_property_setter(
+		"Sales Invoice", None, "field_order", json.dumps(order), "Text",
+		for_doctype=True, validate_fields_for_doctype=False,
+	)
+	# Drop the earlier (ineffective) insert_after property setter if present.
+	frappe.db.delete(
+		"Property Setter",
+		{"doc_type": "Sales Invoice", "field_name": "packing_list", "property": "insert_after"},
+	)
+
+
+def _configure_packed_item_grid():
+	"""Packed Items grid shows only: Parent Item, Item Code, Qty, Warehouse and the
+	See-Stock button. Everything else is hidden from the compact grid view."""
+	for field in ("parent_item", "item_code", "qty", "warehouse"):
+		make_property_setter(
+			"Packed Item", field, "in_list_view", 1, "Check", validate_fields_for_doctype=False
+		)
+	for field in ("description", "rate"):
+		make_property_setter(
+			"Packed Item", field, "in_list_view", 0, "Check", validate_fields_for_doctype=False
+		)
+	# Grid columns render in field order — put Qty right after Item Code so the row
+	# reads: Parent Item | Item Code | Qty | Warehouse | See Stock.
+	meta = frappe.get_meta("Packed Item")
+	order = [df.fieldname for df in meta.fields if not getattr(df, "is_custom_field", False)]
+	if "qty" in order and "item_code" in order:
+		order.remove("qty")
+		order.insert(order.index("item_code") + 1, "qty")
+		make_property_setter(
+			"Packed Item", None, "field_order", json.dumps(order), "Text",
+			for_doctype=True, validate_fields_for_doctype=False,
+		)
 
 
 def _lock_print_formats():
@@ -509,13 +573,19 @@ PICKUP_SLIP_HTML = """
 		</thead>
 		<tbody>
 			{% for row in doc.items %}
+			{% set comps = (doc.packed_items or []) | selectattr("parent_item", "equalto", row.item_code) | list %}
 			<tr style="border-bottom:1px solid #ddd; vertical-align:top;">
 				<td style="padding:5px;">{{ loop.index }}</td>
 				<td style="padding:5px;"><b>{{ row.item_code }}</b></td>
-				<td style="padding:5px;">{{ row.item_name }}</td>
+				<td style="padding:5px;">
+					{{ row.item_name }}
+					{% if comps %}<div style="color:#777; font-size:11px;">(bundle — pick components below)</div>{% endif %}
+				</td>
 				<td style="padding:5px; text-align:right;"><b>{{ "%.2f"|format(row.qty) }} {{ row.uom }}</b></td>
 				<td style="padding:5px;">
-					{% if row.warehouse %}
+					{% if comps %}
+						<span style="color:#999;">See components ↓</span>
+					{% elif row.warehouse %}
 						{% set branch = get_stock_branch(row.item_code, row.warehouse) %}
 						{% for w in branch %}
 						<div style="padding-left:{{ w.depth * 16 }}px; {% if w.is_group %}font-weight:600;{% endif %}">
@@ -527,6 +597,18 @@ PICKUP_SLIP_HTML = """
 					{% endif %}
 				</td>
 			</tr>
+			{% for c in comps %}
+			<tr style="border-bottom:1px solid #f2f2f2; vertical-align:top; background:#fafafa;">
+				<td style="padding:4px 5px;"></td>
+				<td style="padding:4px 5px; padding-left:22px;">└ {{ c.item_code }}</td>
+				<td style="padding:4px 5px;">{{ c.item_name }}</td>
+				<td style="padding:4px 5px; text-align:right;">{{ "%.2f"|format(c.qty) }}</td>
+				<td style="padding:4px 5px;">
+					{% if c.warehouse %}<b>{{ c.warehouse }}</b> : {{ "%.2f"|format(c.actual_qty or 0) }}
+					{% else %}<span style="color:#c0392b;">No warehouse set</span>{% endif %}
+				</td>
+			</tr>
+			{% endfor %}
 			{% endfor %}
 		</tbody>
 	</table>

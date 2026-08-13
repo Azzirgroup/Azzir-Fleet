@@ -250,6 +250,11 @@ doc_events = {
 # 	"Task": "azzir_fleet.custom.task.CustomTaskMixin"
 # }
 
+# Keep Product Bundle components on the Sales Invoice even when Update Stock is OFF.
+override_doctype_class = {
+	"Sales Invoice": "azzir_fleet.overrides.AzzirSalesInvoice",
+}
+
 # Overriding Methods
 # ------------------------------
 #

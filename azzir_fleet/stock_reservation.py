@@ -40,15 +40,21 @@ def check_stock_reservation(doc, method=None):
 	if _has_override_role():
 		return
 
-	# Sum this invoice's need per (item, warehouse).
+	# Sum this invoice's need per (item, warehouse) — plain stock lines PLUS the
+	# exploded bundle components (a bundle item is non-stock; its components are).
 	needed = {}
-	for row in doc.get("items") or []:
-		code, wh = row.get("item_code"), row.get("warehouse")
+
+	def _add(code, wh, qty):
 		if not code or not wh:
-			continue
+			return
 		if not frappe.get_cached_value("Item", code, "is_stock_item"):
-			continue
-		needed[(code, wh)] = needed.get((code, wh), 0) + flt(row.qty)
+			return
+		needed[(code, wh)] = needed.get((code, wh), 0) + flt(qty)
+
+	for row in doc.get("items") or []:
+		_add(row.get("item_code"), row.get("warehouse"), row.get("qty"))
+	for comp in doc.get("packed_items") or []:
+		_add(comp.get("item_code"), comp.get("warehouse"), comp.get("qty"))
 
 	def _n(x):
 		return "%g" % flt(x)  # tidy number: 12 not 12.0
@@ -69,7 +75,10 @@ def check_stock_reservation(doc, method=None):
 
 
 def _reserved_by_others(code: str, wh: str, current_name: str) -> float:
-	rows = frappe.db.sql(
+	vals = {"code": code, "wh": wh, "cur": current_name or ""}
+
+	# Plain Sales Invoice lines (undelivered qty on submitted, no-stock-update ones).
+	from_items = frappe.db.sql(
 		"""
 		select sum(case
 			when si.docstatus = 0 then sii.qty
@@ -81,6 +90,26 @@ def _reserved_by_others(code: str, wh: str, current_name: str) -> float:
 		where sii.item_code = %(code)s and sii.warehouse = %(wh)s
 		  and si.name != %(cur)s and si.docstatus in (0, 1)
 		""",
-		{"code": code, "wh": wh, "cur": current_name or ""},
+		vals,
 	)
-	return flt(rows[0][0]) if rows and rows[0][0] else 0.0
+
+	# Bundle components (Packed Items) on other Sales Invoices. Packed Item has no
+	# delivered_qty, so submitted-no-update-stock rows reserve their full qty.
+	from_components = frappe.db.sql(
+		"""
+		select sum(case
+			when si.docstatus = 0 then pi.qty
+			when si.docstatus = 1 and si.update_stock = 0 then pi.qty
+			else 0 end)
+		from `tabPacked Item` pi
+		join `tabSales Invoice` si on si.name = pi.parent
+		where pi.parenttype = 'Sales Invoice' and pi.item_code = %(code)s
+		  and pi.warehouse = %(wh)s and si.name != %(cur)s and si.docstatus in (0, 1)
+		""",
+		vals,
+	)
+
+	total = (flt(from_items[0][0]) if from_items and from_items[0][0] else 0.0) + (
+		flt(from_components[0][0]) if from_components and from_components[0][0] else 0.0
+	)
+	return total
