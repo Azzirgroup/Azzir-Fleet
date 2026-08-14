@@ -126,12 +126,16 @@ def _warehouse_stock(item_code, warehouse):
 
 
 @frappe.whitelist()
-def get_stock_tree(item_code: str):
+def get_stock_tree(item_code: str, exclude_invoice: str | None = None):
 	"""Per-warehouse stock for the item, grouped by the warehouse tree.
 
 	Returns a flat list (ordered by tree position) of warehouses that hold stock
 	plus their ancestor groups, each with its quantity (a group's quantity is the
 	sum of its descendants). The client renders it as a tree.
+
+	When `exclude_invoice` is provided (the dialog passes the current invoice), the
+	quantities are AVAILABLE stock = physical minus what other open invoices have
+	reserved, so a warehouse whose stock is all reserved shows 0.
 	"""
 	if not item_code:
 		return []
@@ -145,6 +149,14 @@ def get_stock_tree(item_code: str):
 	if not bins:
 		return []
 	stock = {b.warehouse: flt(b.qty) for b in bins}
+
+	if exclude_invoice is not None:
+		from azzir_fleet.stock_reservation import reserved_by_warehouse
+
+		reserved = reserved_by_warehouse(item_code, exclude_invoice)
+		for wh, r in reserved.items():
+			if wh in stock:
+				stock[wh] = max(0.0, flt(stock[wh]) - flt(r))
 
 	wh_info = {
 		w.name: w

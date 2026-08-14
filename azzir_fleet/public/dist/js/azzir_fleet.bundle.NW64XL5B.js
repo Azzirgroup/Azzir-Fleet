@@ -141,9 +141,10 @@
   azzir_fleet.show_stock_dialog = function(item_code, on_select) {
     if (!item_code)
       return;
+    const exclude_invoice = typeof cur_frm !== "undefined" && cur_frm && cur_frm.doc && cur_frm.doc.name || "";
     frappe.call({
       method: "azzir_fleet.stock_info.get_stock_tree",
-      args: { item_code },
+      args: { item_code, exclude_invoice },
       callback(r) {
         const rows = r.message || [];
         const names = new Set(rows.map((x) => x.warehouse));
@@ -174,9 +175,9 @@
         let body = roots.map((rt) => render(rt, 0)).join("");
         const total = roots.reduce((s, x) => s + flt(x.qty), 0);
         if (!body)
-          body = `<p class="text-muted">${__("No stock in any warehouse.")}</p>`;
+          body = `<p class="text-muted">${__("No available stock in any warehouse.")}</p>`;
         const d = new frappe.ui.Dialog({
-          title: __("Stock by Warehouse \u2014 {0}", [item_code]),
+          title: __("Available Stock by Warehouse \u2014 {0}", [item_code]),
           size: "large"
         });
         const hint = on_select ? `<p class="text-muted" style="margin:0 0 8px;">${__("Select a warehouse to set it on this row.")}</p>` : "";
@@ -264,4 +265,4 @@
     });
   });
 })();
-//# sourceMappingURL=azzir_fleet.bundle.XBUJRYX4.js.map
+//# sourceMappingURL=azzir_fleet.bundle.NW64XL5B.js.map

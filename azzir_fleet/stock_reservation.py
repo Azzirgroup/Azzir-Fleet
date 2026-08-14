@@ -74,6 +74,39 @@ def check_stock_reservation(doc, method=None):
 			)
 
 
+def reserved_by_warehouse(item_code: str, exclude_invoice: str | None = None) -> dict:
+	"""{warehouse: reserved_qty} for an item across all open invoices (plain lines
+	AND bundle components), excluding `exclude_invoice`. Powers the "available
+	stock" shown in the warehouse dialog."""
+	vals = {"it": item_code, "ex": exclude_invoice or ""}
+	rows = frappe.db.sql(
+		"""
+		select wh, sum(q) from (
+			select sii.warehouse wh,
+				case when si.docstatus = 0 then sii.qty
+					when si.docstatus = 1 and si.update_stock = 0
+						then greatest(sii.qty - ifnull(sii.delivered_qty, 0), 0)
+					else 0 end q
+			from `tabSales Invoice Item` sii
+			join `tabSales Invoice` si on si.name = sii.parent
+			where sii.item_code = %(it)s and si.name != %(ex)s and si.docstatus in (0, 1)
+			union all
+			select pi.warehouse wh,
+				case when si.docstatus = 0 then pi.qty
+					when si.docstatus = 1 and si.update_stock = 0 then pi.qty
+					else 0 end q
+			from `tabPacked Item` pi
+			join `tabSales Invoice` si on si.name = pi.parent
+			where pi.parenttype = 'Sales Invoice' and pi.item_code = %(it)s
+			  and si.name != %(ex)s and si.docstatus in (0, 1)
+		) t
+		where t.wh is not null and t.wh != '' group by t.wh
+		""",
+		vals,
+	)
+	return {r[0]: flt(r[1]) for r in rows}
+
+
 def _reserved_by_others(code: str, wh: str, current_name: str) -> float:
 	vals = {"code": code, "wh": wh, "cur": current_name or ""}
 

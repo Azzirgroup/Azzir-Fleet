@@ -29,9 +29,13 @@ azzir_fleet.fetch_row_stock = function (cdt, cdn) {
 // on_select and closes the dialog — used to set the warehouse on the row.
 azzir_fleet.show_stock_dialog = function (item_code, on_select) {
 	if (!item_code) return;
+	// Pass the current doc so the dialog shows AVAILABLE stock (physical minus what
+	// other open invoices have reserved). "" for a brand-new unsaved doc.
+	const exclude_invoice =
+		(typeof cur_frm !== "undefined" && cur_frm && cur_frm.doc && cur_frm.doc.name) || "";
 	frappe.call({
 		method: "azzir_fleet.stock_info.get_stock_tree",
-		args: { item_code },
+		args: { item_code, exclude_invoice },
 		callback(r) {
 			const rows = r.message || [];
 			const names = new Set(rows.map((x) => x.warehouse));
@@ -66,10 +70,10 @@ azzir_fleet.show_stock_dialog = function (item_code, on_select) {
 			const roots = by_parent["__root__"] || [];
 			let body = roots.map((rt) => render(rt, 0)).join("");
 			const total = roots.reduce((s, x) => s + flt(x.qty), 0);
-			if (!body) body = `<p class="text-muted">${__("No stock in any warehouse.")}</p>`;
+			if (!body) body = `<p class="text-muted">${__("No available stock in any warehouse.")}</p>`;
 
 			const d = new frappe.ui.Dialog({
-				title: __("Stock by Warehouse — {0}", [item_code]),
+				title: __("Available Stock by Warehouse — {0}", [item_code]),
 				size: "large",
 			});
 			const hint = on_select
