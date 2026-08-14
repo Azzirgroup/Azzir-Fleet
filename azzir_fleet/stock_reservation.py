@@ -9,36 +9,17 @@ Other OPEN invoices hold ("reserve") their stock so it can't be sold twice:
   qty, so they're not counted again.)
 
 On submit, an invoice is blocked if on-hand minus everyone else's reservation is
-less than it needs. Holders of the override role bypass the check.
+less than it needs. This is a HARD block — NO ONE bypasses it, not even
+Administrator or the stock-override role.
 """
 
 import frappe
 from frappe import _
 from frappe.utils import flt
 
-from azzir_fleet.qty_limits import OVERRIDE_ROLE
-
-
-def _has_override_role() -> bool:
-	"""True only if the current user is EXPLICITLY assigned the override role.
-
-	We can't use frappe.get_roles() here: for Administrator it returns every role
-	in the system, so admin would always bypass the reservation. Checking the
-	User's Has Role rows means only people you actually grant the role can force
-	past a reservation.
-	"""
-	return bool(
-		frappe.get_all(
-			"Has Role",
-			filters={"parent": frappe.session.user, "parenttype": "User", "role": OVERRIDE_ROLE},
-			limit=1,
-		)
-	)
-
 
 def check_stock_reservation(doc, method=None):
-	if _has_override_role():
-		return
+	# Hard block for everyone (Administrator included) — no override.
 
 	# Sum this invoice's need per (item, warehouse) — plain stock lines PLUS the
 	# exploded bundle components (a bundle item is non-stock; its components are).
