@@ -81,7 +81,85 @@ CUSTOM_FIELDS = {
 			"insert_after": "default_currency",
 			"description": "Quotations for this customer expire this many days after the "
 			"quotation date (auto-filled if Valid Till is empty). 0 = ignore.",
-		}
+		},
+		{
+			"fieldname": "azzir_customer_logo",
+			"label": "Customer Logo",
+			"fieldtype": "Attach Image",
+			"insert_after": "image",
+			"description": "Shown next to the customer name on the print formats when set.",
+		},
+	],
+	# A picture placed directly on the Quotation — shown on the printout if set.
+	"Quotation": [
+		{
+			"fieldname": "azzir_quotation_image",
+			"label": "Quotation Image",
+			"fieldtype": "Attach Image",
+			"insert_after": "company",
+			"description": "Optional picture shown on this quotation's printout (below the items).",
+		},
+	],
+	# Flag set when any line is sold below buying (valuation) price — drives the
+	# below-cost approval workflow.
+	"Sales Invoice": [
+		{
+			"fieldname": "azzir_below_cost",
+			"label": "Sold Below Buying Price",
+			"fieldtype": "Check",
+			"insert_after": "azzir_source_quotation",
+			"read_only": 1,
+			"no_copy": 1,
+			"description": "Auto-set when any item's rate is below its valuation/buying price.",
+		},
+	],
+	# Tax Inclusive/Exclusive helper on Expense Entry rows.
+	"Expense Entry Account": [
+		{"fieldname": "azzir_tax_type", "label": "Tax Type", "fieldtype": "Select",
+		 "options": "\nInclusive\nExclusive", "insert_after": "amount", "in_list_view": 1},
+		{"fieldname": "azzir_tax_rate", "label": "Tax %", "fieldtype": "Percent",
+		 "insert_after": "azzir_tax_type", "in_list_view": 1},
+		{"fieldname": "azzir_tax_amount", "label": "Tax Amount", "fieldtype": "Currency",
+		 "insert_after": "azzir_tax_rate", "read_only": 1, "in_list_view": 1},
+		{"fieldname": "azzir_net_amount", "label": "Net (excl. Tax)", "fieldtype": "Currency",
+		 "insert_after": "azzir_tax_amount", "read_only": 1},
+	],
+	# Same helper on Journal Entry rows.
+	"Journal Entry Account": [
+		{"fieldname": "azzir_tax_type", "label": "Tax Type", "fieldtype": "Select",
+		 "options": "\nInclusive\nExclusive", "insert_after": "credit_in_account_currency"},
+		{"fieldname": "azzir_tax_rate", "label": "Tax %", "fieldtype": "Percent",
+		 "insert_after": "azzir_tax_type"},
+		{"fieldname": "azzir_tax_amount", "label": "Tax Amount", "fieldtype": "Currency",
+		 "insert_after": "azzir_tax_rate", "read_only": 1},
+		{"fieldname": "azzir_net_amount", "label": "Net (excl. Tax)", "fieldtype": "Currency",
+		 "insert_after": "azzir_tax_amount", "read_only": 1},
+	],
+	# Dynamic intercompany discount — configured PER company (no hardcoding).
+	"Company": [
+		{
+			"fieldname": "azzir_intercompany_discount",
+			"label": "Intercompany Receipt Discount (%)",
+			"fieldtype": "Percent",
+			"insert_after": "default_currency",
+			"description": "When THIS company receives stock from a sister company "
+			"(intercompany transfer), the transfer rate is reduced by this %. 0 = none.",
+		},
+	],
+	# Statutory IDs on Employee.
+	"Employee": [
+		{
+			"fieldname": "azzir_tax_id",
+			"label": "Tax ID",
+			"fieldtype": "Data",
+			"insert_after": "company",
+		},
+		{
+			"fieldname": "azzir_social_security_no",
+			"label": "Social Security Number",
+			"fieldtype": "Data",
+			"insert_after": "azzir_tax_id",
+		},
 	],
 	"Supplier": [
 		{
@@ -250,6 +328,9 @@ def after_migrate():
 			),
 		),
 		("override_role", _setup_override_role),
+		("group_stock_role", _setup_group_stock_role),
+		("overdue_todo_notification", _setup_overdue_todo_notification),
+		("below_cost_workflow", _setup_below_cost_workflow),
 		("session_limit", _enforce_session_limit),
 		("multicurrency", _enable_multicurrency),
 	]
@@ -258,6 +339,89 @@ def after_migrate():
 			fn()
 		except Exception:
 			frappe.log_error(title=f"azzir_fleet after_migrate failed: {label}")
+
+
+def _setup_group_stock_role():
+	"""Holders of this role see ALL companies' stock in the warehouse dialog;
+	everyone else sees only their own default company."""
+	if not frappe.db.exists("Role", "Azzir Group Stock"):
+		frappe.get_doc(
+			{"doctype": "Role", "role_name": "Azzir Group Stock", "desk_access": 1}
+		).insert(ignore_permissions=True)
+
+
+def _setup_overdue_todo_notification():
+	"""Notify the assignee when an assigned task (ToDo) passes its Complete-By date
+	without being done."""
+	if frappe.db.exists("Notification", {"document_type": "ToDo", "subject": ["like", "%overdue%"]}):
+		return
+	if not frappe.db.has_column("ToDo", "date") or not frappe.db.has_column("ToDo", "allocated_to"):
+		return
+	frappe.get_doc(
+		{
+			"doctype": "Notification",
+			"subject": "Your assigned task is overdue",
+			"document_type": "ToDo",
+			"is_standard": 0,
+			"enabled": 1,
+			"channel": "System Notification",
+			"event": "Days After",
+			"date_changed": "date",
+			"days_in_advance": 0,
+			"condition": "doc.status not in ('Closed', 'Cancelled') and doc.allocated_to",
+			"recipients": [{"receiver_by_document_field": "allocated_to"}],
+			"message": (
+				"Your assigned task on {{ doc.reference_type or 'a document' }} "
+				"{{ doc.reference_name or '' }} was due on {{ doc.date }} and is not done yet."
+			),
+		}
+	).insert(ignore_permissions=True)
+
+
+def _setup_below_cost_workflow():
+	"""Route below-cost Sales Invoices through manager approval; normal ones submit
+	directly. Uses the azzir_below_cost flag (set on validate) in the transition
+	conditions."""
+	name = "Sales Below Cost Approval"
+	for state, style in (("Draft", "Danger"), ("Pending Approval", "Warning"), ("Approved", "Success")):
+		if not frappe.db.exists("Workflow State", state):
+			frappe.get_doc(
+				{"doctype": "Workflow State", "workflow_state_name": state, "style": style}
+			).insert(ignore_permissions=True)
+	for action in ("Submit", "Request Approval", "Approve", "Reject"):
+		if not frappe.db.exists("Workflow Action Master", action):
+			frappe.get_doc(
+				{"doctype": "Workflow Action Master", "workflow_action_name": action}
+			).insert(ignore_permissions=True)
+	if frappe.db.exists("Workflow", name):
+		return
+	frappe.get_doc(
+		{
+			"doctype": "Workflow",
+			"workflow_name": name,
+			"document_type": "Sales Invoice",
+			# Built ready but OFF by default — activating it changes ALL Sales Invoice
+			# submits to workflow buttons, so the user switches it on deliberately.
+			"is_active": 0,
+			"send_email_alert": 0,
+			"workflow_state_field": "workflow_state",
+			"states": [
+				{"state": "Draft", "doc_status": "0", "allow_edit": "Accounts User"},
+				{"state": "Pending Approval", "doc_status": "0", "allow_edit": "Accounts Manager"},
+				{"state": "Approved", "doc_status": "1", "allow_edit": "Accounts Manager"},
+			],
+			"transitions": [
+				{"state": "Draft", "action": "Submit", "next_state": "Approved",
+				 "allowed": "Accounts User", "condition": "doc.azzir_below_cost == 0"},
+				{"state": "Draft", "action": "Request Approval", "next_state": "Pending Approval",
+				 "allowed": "Accounts User", "condition": "doc.azzir_below_cost == 1"},
+				{"state": "Pending Approval", "action": "Approve", "next_state": "Approved",
+				 "allowed": "Accounts Manager"},
+				{"state": "Pending Approval", "action": "Reject", "next_state": "Draft",
+				 "allowed": "Accounts Manager"},
+			],
+		}
+	).insert(ignore_permissions=True)
 
 
 def _setup_override_role():
@@ -640,7 +804,10 @@ _PROFORMA_TEMPLATE = """
 	<table style="width:100%; margin-bottom:12px;">
 		<tr>
 			<td style="vertical-align:top; width:55%;">
+				{%- set _cust = doc.get("customer") or (doc.get("party_name") if doc.get("quotation_to") == "Customer" else None) -%}
+				{%- set cust_logo = frappe.db.get_value("Customer", _cust, "azzir_customer_logo") if _cust else None -%}
 				<b>__PARTY_LABEL__:</b> __PARTY_VALUE__
+				{% if cust_logo %}<img src="{{ cust_logo }}" style="height:34px; vertical-align:middle; margin-left:8px;">{% endif %}
 				<div style="border:1px solid #999; padding:6px; margin-top:4px; min-height:70px;">
 					{% if doc.get("address_display") %}{{ doc.address_display }}<br>{% endif %}
 					{% if doc.get("contact_display") %}<b>Attn:</b> {{ doc.contact_display }}<br>{% endif %}
@@ -704,6 +871,13 @@ _PROFORMA_TEMPLATE = """
 			{% endfor %}
 		</tbody>
 	</table>
+
+	<!-- Optional image placed directly on the Quotation -->
+	{% if doc.get("azzir_quotation_image") %}
+	<div style="margin-top:12px; text-align:center;">
+		<img src="{{ doc.azzir_quotation_image }}" style="max-width:60%; max-height:260px;">
+	</div>
+	{% endif %}
 
 	<!-- Notes / Terms (from the document's Terms field — nothing hardcoded) -->
 	{% if doc.get("terms") %}<div style="margin:15px 0;">{{ doc.terms }}</div>{% endif %}

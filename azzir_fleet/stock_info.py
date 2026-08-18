@@ -161,9 +161,22 @@ def get_stock_tree(item_code: str, exclude_invoice: str | None = None):
 	wh_info = {
 		w.name: w
 		for w in frappe.get_all(
-			"Warehouse", fields=["name", "parent_warehouse", "is_group", "lft", "rgt"]
+			"Warehouse", fields=["name", "parent_warehouse", "is_group", "lft", "rgt", "company"]
 		)
 	}
+
+	# Company scope: only holders of "Azzir Group Stock" (or Administrator) see ALL
+	# companies' stock; everyone else sees only their own default company.
+	if not ("Azzir Group Stock" in frappe.get_roles() or frappe.session.user == "Administrator"):
+		user_company = frappe.defaults.get_user_default("Company")
+		if user_company:
+			stock = {
+				wh: q
+				for wh, q in stock.items()
+				if (wh_info.get(wh) or {}).get("company") == user_company
+			}
+			if not stock:
+				return []
 
 	# Include the ancestor groups of every warehouse that holds stock.
 	needed = set(stock)
@@ -194,11 +207,29 @@ def get_stock_tree(item_code: str, exclude_invoice: str | None = None):
 				"qty": flt(qty),
 				"lft": info.lft,
 				"depth": _depth(wh, wh_info),
+				"company": info.company,
 			}
 		)
 
-	rows.sort(key=lambda r: r["lft"] or 0)
+	rows.sort(key=lambda r: (r.get("company") or "", r["lft"] or 0))
 	return rows
+
+
+@frappe.whitelist()
+def last_warehouse(item_code: str, company: str | None = None) -> str:
+	"""The warehouse this item was most recently stored in (last stock ledger
+	entry), even if that warehouse is now empty. For auto-filling receipts."""
+	if not item_code:
+		return ""
+	filters = {"item_code": item_code, "is_cancelled": 0}
+	if company:
+		filters["company"] = company
+	return (
+		frappe.db.get_value(
+			"Stock Ledger Entry", filters, "warehouse", order_by="posting_datetime desc, creation desc"
+		)
+		or ""
+	)
 
 
 @frappe.whitelist()

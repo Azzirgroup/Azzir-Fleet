@@ -51,6 +51,7 @@ doctype_js = {
 	"Sales Invoice": "public/js/sales_invoice.js",
 	"Stock Entry": "public/js/stock_entry.js",
 	"Delivery Note": "public/js/delivery_note.js",
+	"Purchase Receipt": "public/js/purchase_receipt.js",
 }
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
@@ -165,12 +166,16 @@ doc_events = {
 	# Maximum Order Qty — buying documents
 	"Material Request": {"validate": "azzir_fleet.qty_limits.validate_buying"},
 	"Purchase Order": {"validate": "azzir_fleet.qty_limits.validate_buying"},
-	"Purchase Receipt": {"validate": "azzir_fleet.qty_limits.validate_buying"},
 	"Purchase Invoice": {
+		"before_validate": "azzir_fleet.intercompany.apply_intercompany_discount",
 		"validate": [
 			"azzir_fleet.qty_limits.validate_buying",
 			"azzir_fleet.purchase_invoice.validate_unique_bill_no",
-		]
+		],
+	},
+	"Purchase Receipt": {
+		"before_validate": "azzir_fleet.intercompany.apply_intercompany_discount",
+		"validate": "azzir_fleet.qty_limits.validate_buying",
 	},
 	# Maximum Sales Qty — selling documents.
 	# apply_vat_option runs LAST on validate (after ERPNext re-applies default taxes).
@@ -204,6 +209,7 @@ doc_events = {
 			"azzir_fleet.qty_limits.validate_selling",
 			"azzir_fleet.qty_limits.validate_sales_stock",
 			"azzir_fleet.vat.apply_vat_option",
+			"azzir_fleet.below_cost.flag_below_cost",
 		],
 		"before_submit": "azzir_fleet.stock_reservation.check_stock_reservation",
 		"on_submit": "azzir_fleet.sales_invoice.mark_quotation_invoiced",
@@ -212,8 +218,12 @@ doc_events = {
 	"POS Invoice": {"validate": "azzir_fleet.qty_limits.validate_selling"},
 	# Monthly Budget control (Warn/Stop). JE covers Expense Entry too.
 	"Journal Entry": {
-		"validate": "azzir_fleet.azzir_fleet.doctype.monthly_budget.monthly_budget.check_journal_entry_budget"
+		"validate": [
+			"azzir_fleet.azzir_fleet.doctype.monthly_budget.monthly_budget.check_journal_entry_budget",
+			"azzir_fleet.tax_calc.compute_journal_entry_tax",
+		]
 	},
+	"Expense Entry": {"validate": "azzir_fleet.tax_calc.compute_expense_entry_tax"},
 }
 
 # Scheduled Tasks

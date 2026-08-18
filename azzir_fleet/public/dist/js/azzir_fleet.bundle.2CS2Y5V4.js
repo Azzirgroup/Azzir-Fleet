@@ -172,7 +172,15 @@
           return html;
         }
         const roots = by_parent["__root__"] || [];
-        let body = roots.map((rt) => render(rt, 0)).join("");
+        const companies = [...new Set(roots.map((x) => x.company || ""))].sort();
+        let body = "";
+        companies.forEach((co) => {
+          if (companies.length > 1 || co) {
+            body += `<div style="font-weight:700; background:#f4f6f8; padding:6px 8px;
+						margin-top:6px; border-bottom:2px solid #000;">\u{1F3E2} ${frappe.utils.escape_html(co || __("Company"))}</div>`;
+          }
+          roots.filter((rt) => (rt.company || "") === co).forEach((rt) => body += render(rt, 0));
+        });
         const total = roots.reduce((s, x) => s + flt(x.qty), 0);
         if (!body)
           body = `<p class="text-muted">${__("No available stock in any warehouse.")}</p>`;
@@ -264,5 +272,40 @@
       }
     });
   });
+
+  // ../azzir_fleet/azzir_fleet/public/js/azzir_tax.js
+  frappe.provide("azzir_fleet");
+  azzir_fleet.split_tax = function(base, type, rate) {
+    base = flt(base);
+    rate = flt(rate);
+    if (!type || !rate || !base)
+      return [0, base];
+    if (type === "Inclusive") {
+      const net = base / (1 + rate / 100);
+      return [flt(base - net), flt(net)];
+    }
+    return [flt(base * rate / 100), flt(base)];
+  };
+  function apply_calc(frm, cdt, cdn, base) {
+    const r = locals[cdt][cdn];
+    const [tax, net] = azzir_fleet.split_tax(base, r.azzir_tax_type, r.azzir_tax_rate);
+    frappe.model.set_value(cdt, cdn, "azzir_tax_amount", tax);
+    frappe.model.set_value(cdt, cdn, "azzir_net_amount", net);
+  }
+  frappe.ui.form.on("Expense Entry Account", {
+    amount: (frm, cdt, cdn) => apply_calc(frm, cdt, cdn, locals[cdt][cdn].amount),
+    azzir_tax_type: (frm, cdt, cdn) => apply_calc(frm, cdt, cdn, locals[cdt][cdn].amount),
+    azzir_tax_rate: (frm, cdt, cdn) => apply_calc(frm, cdt, cdn, locals[cdt][cdn].amount)
+  });
+  function je_base(cdt, cdn) {
+    const r = locals[cdt][cdn];
+    return flt(r.debit_in_account_currency) || flt(r.credit_in_account_currency);
+  }
+  frappe.ui.form.on("Journal Entry Account", {
+    debit_in_account_currency: (frm, cdt, cdn) => apply_calc(frm, cdt, cdn, je_base(cdt, cdn)),
+    credit_in_account_currency: (frm, cdt, cdn) => apply_calc(frm, cdt, cdn, je_base(cdt, cdn)),
+    azzir_tax_type: (frm, cdt, cdn) => apply_calc(frm, cdt, cdn, je_base(cdt, cdn)),
+    azzir_tax_rate: (frm, cdt, cdn) => apply_calc(frm, cdt, cdn, je_base(cdt, cdn))
+  });
 })();
-//# sourceMappingURL=azzir_fleet.bundle.NW64XL5B.js.map
+//# sourceMappingURL=azzir_fleet.bundle.2CS2Y5V4.js.map

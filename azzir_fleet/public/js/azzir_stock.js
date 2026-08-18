@@ -68,7 +68,17 @@ azzir_fleet.show_stock_dialog = function (item_code, on_select) {
 			}
 
 			const roots = by_parent["__root__"] || [];
-			let body = roots.map((rt) => render(rt, 0)).join("");
+			// Group the root warehouses by company. With one company this shows a
+			// single header; a "Group Stock" user sees each company (HCL, HPL, …).
+			const companies = [...new Set(roots.map((x) => x.company || ""))].sort();
+			let body = "";
+			companies.forEach((co) => {
+				if (companies.length > 1 || co) {
+					body += `<div style="font-weight:700; background:#f4f6f8; padding:6px 8px;
+						margin-top:6px; border-bottom:2px solid #000;">🏢 ${frappe.utils.escape_html(co || __("Company"))}</div>`;
+				}
+				roots.filter((rt) => (rt.company || "") === co).forEach((rt) => (body += render(rt, 0)));
+			});
 			const total = roots.reduce((s, x) => s + flt(x.qty), 0);
 			if (!body) body = `<p class="text-muted">${__("No available stock in any warehouse.")}</p>`;
 
