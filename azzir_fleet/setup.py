@@ -90,7 +90,7 @@ CUSTOM_FIELDS = {
 			"description": "Shown next to the customer name on the print formats when set.",
 		},
 	],
-	# A picture placed directly on the Quotation — shown on the printout if set.
+	# A picture + remarks placed directly on the Quotation — shown on the printout.
 	"Quotation": [
 		{
 			"fieldname": "azzir_quotation_image",
@@ -98,6 +98,29 @@ CUSTOM_FIELDS = {
 			"fieldtype": "Attach Image",
 			"insert_after": "company",
 			"description": "Optional picture shown on this quotation's printout (below the items).",
+		},
+		{
+			"fieldname": "azzir_remarks",
+			"label": "Remarks",
+			"fieldtype": "Small Text",
+			"insert_after": "terms",
+			"description": "Shown on the printout under the Prepared By / Signature.",
+		},
+	],
+	# Per-row image + remark on Quotation items — both show on the printout.
+	"Quotation Item": [
+		{
+			"fieldname": "azzir_item_image",
+			"label": "Image",
+			"fieldtype": "Attach Image",
+			"insert_after": "description",
+		},
+		{
+			"fieldname": "azzir_item_remark",
+			"label": "Remark",
+			"fieldtype": "Small Text",
+			"insert_after": "azzir_item_image",
+			"in_list_view": 1,
 		},
 	],
 	# Flag set when any line is sold below buying (valuation) price — drives the
@@ -859,6 +882,8 @@ _PROFORMA_TEMPLATE = """
 				<td style="padding:5px;">
 					{{ description_for_print(row.item_code, row.description or row.item_name, hide_part_no) }}
 					{% if alt and not hide_part_no %}<br><span style="color:#555;">({{ alt }})</span>{% endif %}
+					{% if row.get("azzir_item_remark") %}<br><span style="color:#777; font-size:11px;">{{ row.azzir_item_remark }}</span>{% endif %}
+					{% if row.get("azzir_item_image") %}<br><img src="{{ row.azzir_item_image }}" style="max-height:60px; margin-top:3px;">{% endif %}
 				</td>
 				<td style="padding:5px; text-align:right;">{{ "%.2f"|format(row.qty) }}</td>
 				{% if show_prices %}
@@ -890,6 +915,7 @@ _PROFORMA_TEMPLATE = """
 					{% if doc.get("payment_terms_template") %}<tr><td><b>Payment Terms:</b></td><td style="padding-left:10px;">{{ doc.payment_terms_template }}</td></tr>{% endif %}
 					<tr><td colspan="2" style="padding-top:25px;"><b>Prepared By:</b> {{ frappe.db.get_value("User", doc.owner, "full_name") or doc.owner }}</td></tr>
 					<tr><td colspan="2" style="padding-top:15px;"><b>Signature:</b> _____________________</td></tr>
+					{% if doc.get("azzir_remarks") %}<tr><td colspan="2" style="padding-top:15px;"><b>Remarks:</b> {{ doc.azzir_remarks }}</td></tr>{% endif %}
 				</table>
 			</td>
 			<td style="vertical-align:top;">

@@ -161,7 +161,10 @@ doc_events = {
 	},
 	# Maker-checker: the creator of a Stock Entry draft cannot submit it.
 	"Stock Entry": {
-		"before_submit": "azzir_fleet.stock_entry_approval.block_self_submit"
+		"before_submit": [
+			"azzir_fleet.stock_entry_approval.block_self_submit",
+			"azzir_fleet.stock_entry_approval.block_transit_self_receive",
+		]
 	},
 	# Maximum Order Qty — buying documents
 	"Material Request": {"validate": "azzir_fleet.qty_limits.validate_buying"},

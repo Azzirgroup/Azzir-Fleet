@@ -26,3 +26,23 @@ def block_self_submit(doc, method=None):
 			),
 			title=_("Separation of Duties"),
 		)
+
+
+def block_transit_self_receive(doc, method=None):
+	"""The person who created the OUTGOING transfer (send to transit) cannot be the
+	one who receives / ends the transit. A different person must complete it."""
+	outgoing = doc.get("outgoing_stock_entry")
+	if not outgoing:
+		return
+	user = frappe.session.user
+	if user == "Administrator" or OVERRIDE_ROLE in frappe.get_roles():
+		return
+	creator = frappe.db.get_value("Stock Entry", outgoing, "owner")
+	if user == creator:
+		frappe.throw(
+			_(
+				"You created the outgoing transfer {0}, so you cannot receive / end its "
+				"transit. Someone else must complete it."
+			).format(outgoing),
+			title=_("Separation of Duties"),
+		)
