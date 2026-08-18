@@ -1,0 +1,125 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "naming_series:",
+ "creation": "2026-08-14 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "company",
+  "column_break_1",
+  "period_start",
+  "period_end",
+  "settings_section",
+  "target_amount",
+  "expense_pool",
+  "column_break_2",
+  "distribute_expense_by",
+  "tiers_section",
+  "tiers",
+  "members_section",
+  "members"
+ ],
+ "fields": [
+  {
+   "default": "CMSN-.#####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "CMSN-.#####",
+   "reqd": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {"fieldname": "column_break_1", "fieldtype": "Column Break"},
+  {
+   "fieldname": "period_start",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Period Start",
+   "reqd": 1
+  },
+  {
+   "fieldname": "period_end",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Period End",
+   "reqd": 1
+  },
+  {"fieldname": "settings_section", "fieldtype": "Section Break", "label": "Targets & Expenses"},
+  {
+   "description": "Overall sales target for the period (reference).",
+   "fieldname": "target_amount",
+   "fieldtype": "Currency",
+   "label": "Overall Target"
+  },
+  {
+   "description": "Total break-even / expenses to distribute among the sales people.",
+   "fieldname": "expense_pool",
+   "fieldtype": "Currency",
+   "label": "Expense Pool"
+  },
+  {"fieldname": "column_break_2", "fieldtype": "Column Break"},
+  {
+   "default": "By Target",
+   "description": "How the Expense Pool is split among members.",
+   "fieldname": "distribute_expense_by",
+   "fieldtype": "Select",
+   "label": "Distribute Expenses",
+   "options": "By Target\nBy Sales\nEqually"
+  },
+  {"fieldname": "tiers_section", "fieldtype": "Section Break", "label": "Commission Tiers"},
+  {
+   "description": "e.g. reach 50% -> 2%, reach 100% -> 7%. Highest reached tier applies.",
+   "fieldname": "tiers",
+   "fieldtype": "Table",
+   "label": "Tiers",
+   "options": "Commission Tier"
+  },
+  {"fieldname": "members_section", "fieldtype": "Section Break", "label": "Sales People"},
+  {"fieldname": "members", "fieldtype": "Table", "label": "Members", "options": "Commission Member"}
+ ],
+ "links": [],
+ "modified": "2026-08-14 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Azzir Fleet",
+ "name": "Commission Plan",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "company"
+}

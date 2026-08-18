@@ -1,0 +1,36 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-08-14 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["threshold_pct", "commission_pct"],
+ "fields": [
+  {
+   "fieldname": "threshold_pct",
+   "fieldtype": "Percent",
+   "in_list_view": 1,
+   "label": "Reach % of Target",
+   "reqd": 1
+  },
+  {
+   "fieldname": "commission_pct",
+   "fieldtype": "Percent",
+   "in_list_view": 1,
+   "label": "Commission %",
+   "reqd": 1
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-14 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Azzir Fleet",
+ "name": "Commission Tier",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
