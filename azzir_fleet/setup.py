@@ -136,6 +136,16 @@ CUSTOM_FIELDS = {
 			"description": "Auto-set when any item's rate is below its valuation/buying price.",
 		},
 	],
+	# Document-level remark on Expense Entry, shown in the list view.
+	"Expense Entry": [
+		{
+			"fieldname": "azzir_remark",
+			"label": "Remark",
+			"fieldtype": "Small Text",
+			"insert_after": "total_amount",
+			"in_list_view": 1,
+		},
+	],
 	# Tax Inclusive/Exclusive helper on Expense Entry rows.
 	"Expense Entry Account": [
 		{"fieldname": "azzir_tax_type", "label": "Tax Type", "fieldtype": "Select",
@@ -542,6 +552,14 @@ def setup_print_formats():
 	# Pickup Slip (Sales Invoice) — NOT set as default.
 	_upsert_print_format("Pickup Slip", "Sales Invoice", PICKUP_SLIP_HTML)
 
+	# Monthly Budget print format (set as its default).
+	if frappe.db.exists("DocType", "Monthly Budget"):
+		_upsert_print_format("Monthly Budget (Azzir)", "Monthly Budget", MONTHLY_BUDGET_HTML)
+		make_property_setter(
+			"Monthly Budget", None, "default_print_format", "Monthly Budget (Azzir)", "Data",
+			for_doctype=True, validate_fields_for_doctype=False,
+		)
+
 	# Expense Entry voucher — set as its default print format.
 	_upsert_print_format("Expense Entry (Azzir)", "Expense Entry", EXPENSE_ENTRY_HTML)
 	make_property_setter(
@@ -729,6 +747,64 @@ EXPENSE_ENTRY_HTML = """
 			<td style="width:33%;"><b>Received By:</b> ______________</td>
 		</tr>
 	</table>
+</div>
+"""
+
+
+MONTHLY_BUDGET_HTML = """
+<div class="azzir-budget" style="font-size:12px; color:#000;">
+	{% if not no_letterhead and letter_head %}<div class="letter-head">{{ letter_head }}</div>{% endif %}
+	{%- set cur = frappe.db.get_value("Company", doc.company, "default_currency") -%}
+
+	<h2 style="text-align:center; letter-spacing:1px; margin:6px 0;">MONTHLY BUDGET</h2>
+
+	<table style="width:100%; margin-bottom:10px;">
+		<tr>
+			<td style="vertical-align:top;">
+				<b>Company:</b> {{ doc.company }}<br>
+				<b>Period:</b> {{ doc.month }} {{ doc.year }}
+				{% if doc.get("from_date") %}<br><b>Dates:</b> {{ frappe.utils.formatdate(doc.from_date) }} &mdash; {{ frappe.utils.formatdate(doc.to_date) }}{% endif %}
+			</td>
+			<td style="vertical-align:top; text-align:right;">
+				<b>Ref:</b> {{ doc.name }}<br>
+				<b>If Exceeded:</b> {{ doc.action_if_exceeded }}
+			</td>
+		</tr>
+	</table>
+
+	<table style="width:100%; border-collapse:collapse;">
+		<thead>
+			<tr style="border-top:2px solid #000; border-bottom:1px solid #000;">
+				<th style="text-align:left; padding:5px;">#</th>
+				<th style="text-align:left; padding:5px;">Account</th>
+				<th style="text-align:right; padding:5px;">Budget</th>
+				<th style="text-align:right; padding:5px;">Actual</th>
+				<th style="text-align:right; padding:5px;">Balance</th>
+			</tr>
+		</thead>
+		<tbody>
+			{% for row in doc.accounts %}
+			<tr style="border-bottom:1px solid #ddd;">
+				<td style="padding:5px;">{{ loop.index }}</td>
+				<td style="padding:5px;">{{ row.account }}</td>
+				<td style="padding:5px; text-align:right;">{{ frappe.utils.fmt_money(row.amount, currency=cur) }}</td>
+				<td style="padding:5px; text-align:right;">{{ frappe.utils.fmt_money(row.actual_amount, currency=cur) }}</td>
+				<td style="padding:5px; text-align:right; {% if row.balance < 0 %}color:#c0392b;{% endif %}">{{ frappe.utils.fmt_money(row.balance, currency=cur) }}</td>
+			</tr>
+			{% endfor %}
+			<tr style="border-top:2px solid #000; font-weight:bold;">
+				<td colspan="2" style="padding:6px; text-align:right;">TOTAL :</td>
+				<td style="padding:6px; text-align:right;">{{ frappe.utils.fmt_money(doc.total_budget, currency=cur) }}</td>
+				<td style="padding:6px; text-align:right;">{{ frappe.utils.fmt_money(doc.total_actual, currency=cur) }}</td>
+				<td style="padding:6px; text-align:right;">{{ frappe.utils.fmt_money(doc.total_balance, currency=cur) }}</td>
+			</tr>
+		</tbody>
+	</table>
+
+	<div style="margin-top:25px;">
+		<b>Prepared By:</b> {{ frappe.db.get_value("User", doc.owner, "full_name") or doc.owner }}
+		&nbsp;&nbsp;&nbsp;&nbsp; <b>Signature:</b> ____________________
+	</div>
 </div>
 """
 
