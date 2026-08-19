@@ -8,7 +8,14 @@ frappe.query_reports["Commission Report"] = {
 			label: __("Commission Plan"),
 			fieldtype: "Link",
 			options: "Commission Plan",
-			reqd: 1,
+			description: __("Pick a plan, or filter by Branch below."),
+		},
+		{
+			fieldname: "branch",
+			label: __("Branch"),
+			fieldtype: "Link",
+			options: "Branch",
+			description: __("Use instead of a plan to see all plans of a branch."),
 		},
 		{
 			fieldname: "from_date",

@@ -106,6 +106,15 @@ CUSTOM_FIELDS = {
 			"insert_after": "terms",
 			"description": "Shown on the printout under the Prepared By / Signature.",
 		},
+		{
+			"fieldname": "azzir_below_cost",
+			"label": "Sold Below Buying Price",
+			"fieldtype": "Check",
+			"insert_after": "order_type",
+			"read_only": 1,
+			"no_copy": 1,
+			"description": "Auto-set when any item's rate is below its valuation/buying price.",
+		},
 	],
 	# Per-row image + remark on Quotation items — both show on the printout.
 	"Quotation Item": [
@@ -121,6 +130,27 @@ CUSTOM_FIELDS = {
 			"fieldtype": "Small Text",
 			"insert_after": "azzir_item_image",
 			"in_list_view": 1,
+		},
+		{
+			"fieldname": "azzir_previous_price",
+			"label": "Previous Price",
+			"fieldtype": "Currency",
+			"insert_after": "price_list_rate",
+			"read_only": 1,
+			"options": "currency",
+			"description": "The price list rate — so you can see the original price when the rate is lowered.",
+		},
+	],
+	# Previous (list) price on Sales Invoice items too.
+	"Sales Invoice Item": [
+		{
+			"fieldname": "azzir_previous_price",
+			"label": "Previous Price",
+			"fieldtype": "Currency",
+			"insert_after": "price_list_rate",
+			"read_only": 1,
+			"options": "currency",
+			"description": "The price list rate — so you can see the original price when the rate is lowered.",
 		},
 	],
 	# Flag set when any line is sold below buying (valuation) price — drives the
@@ -369,6 +399,8 @@ def after_migrate():
 		("group_stock_role", _setup_group_stock_role),
 		("overdue_todo_notification", _setup_overdue_todo_notification),
 		("below_cost_workflow", _setup_below_cost_workflow),
+		("editable_customer_name", _make_customer_name_editable),
+		("material_issue_workflow", _setup_material_issue_workflow),
 		("session_limit", _enforce_session_limit),
 		("multicurrency", _enable_multicurrency),
 	]
@@ -416,11 +448,8 @@ def _setup_overdue_todo_notification():
 	).insert(ignore_permissions=True)
 
 
-def _setup_below_cost_workflow():
-	"""Route below-cost Sales Invoices through manager approval; normal ones submit
-	directly. Uses the azzir_below_cost flag (set on validate) in the transition
-	conditions."""
-	name = "Sales Below Cost Approval"
+def _ensure_workflow_states_actions():
+	"""Shared Workflow State + Action Master records used by our approval workflows."""
 	for state, style in (("Draft", "Danger"), ("Pending Approval", "Warning"), ("Approved", "Success")):
 		if not frappe.db.exists("Workflow State", state):
 			frappe.get_doc(
@@ -431,32 +460,88 @@ def _setup_below_cost_workflow():
 			frappe.get_doc(
 				{"doctype": "Workflow Action Master", "workflow_action_name": action}
 			).insert(ignore_permissions=True)
+
+
+def _setup_below_cost_workflow():
+	"""Route below-cost Sales Invoices through manager approval; normal ones submit
+	directly. Uses the azzir_below_cost flag (set on validate) in the transition
+	conditions."""
+	_ensure_workflow_states_actions()
+	# Same below-cost approval on both Sales Invoice and Quotation.
+	_make_below_cost_workflow("Sales Below Cost Approval", "Sales Invoice", "Accounts User", "Accounts Manager")
+	_make_below_cost_workflow("Quotation Below Cost Approval", "Quotation", "Sales User", "Sales Manager")
+
+
+def _make_customer_name_editable():
+	"""Let users override the fetched Customer Name on sales documents. It still
+	auto-fills from the customer, but becomes editable and carries downstream
+	(Quotation -> Sales Invoice -> Delivery Note)."""
+	for dt in ("Quotation", "Sales Invoice", "Delivery Note"):
+		make_property_setter(dt, "customer_name", "read_only", 0, "Check", validate_fields_for_doctype=False)
+
+
+def _setup_material_issue_workflow():
+	"""Route Stock Entries of type 'Material Issue' through approval; every other
+	stock entry type keeps the plain 'Submit'. OFF by default (activate when ready)."""
+	_ensure_workflow_states_actions()
+	name = "Material Issue Approval"
+	if frappe.db.exists("Workflow", name):
+		return
+	submit_role, approve_role = "Stock User", "Stock Manager"
+	frappe.get_doc(
+		{
+			"doctype": "Workflow",
+			"workflow_name": name,
+			"document_type": "Stock Entry",
+			"is_active": 0,
+			"send_email_alert": 0,
+			"workflow_state_field": "workflow_state",
+			"states": [
+				{"state": "Draft", "doc_status": "0", "allow_edit": submit_role},
+				{"state": "Pending Approval", "doc_status": "0", "allow_edit": approve_role},
+				{"state": "Approved", "doc_status": "1", "allow_edit": approve_role},
+			],
+			"transitions": [
+				{"state": "Draft", "action": "Submit", "next_state": "Approved",
+				 "allowed": submit_role, "condition": 'doc.stock_entry_type != "Material Issue"'},
+				{"state": "Draft", "action": "Request Approval", "next_state": "Pending Approval",
+				 "allowed": submit_role, "condition": 'doc.stock_entry_type == "Material Issue"'},
+				{"state": "Pending Approval", "action": "Approve", "next_state": "Approved",
+				 "allowed": approve_role},
+				{"state": "Pending Approval", "action": "Reject", "next_state": "Draft",
+				 "allowed": approve_role},
+			],
+		}
+	).insert(ignore_permissions=True)
+
+
+def _make_below_cost_workflow(name, doctype, submit_role, approve_role):
+	"""Normal docs -> 'Submit' only; below-cost -> 'Request Approval' then a manager
+	'Approve'. Built OFF by default (a workflow appears on ALL docs once active)."""
 	if frappe.db.exists("Workflow", name):
 		return
 	frappe.get_doc(
 		{
 			"doctype": "Workflow",
 			"workflow_name": name,
-			"document_type": "Sales Invoice",
-			# Built ready but OFF by default — activating it changes ALL Sales Invoice
-			# submits to workflow buttons, so the user switches it on deliberately.
+			"document_type": doctype,
 			"is_active": 0,
 			"send_email_alert": 0,
 			"workflow_state_field": "workflow_state",
 			"states": [
-				{"state": "Draft", "doc_status": "0", "allow_edit": "Accounts User"},
-				{"state": "Pending Approval", "doc_status": "0", "allow_edit": "Accounts Manager"},
-				{"state": "Approved", "doc_status": "1", "allow_edit": "Accounts Manager"},
+				{"state": "Draft", "doc_status": "0", "allow_edit": submit_role},
+				{"state": "Pending Approval", "doc_status": "0", "allow_edit": approve_role},
+				{"state": "Approved", "doc_status": "1", "allow_edit": approve_role},
 			],
 			"transitions": [
 				{"state": "Draft", "action": "Submit", "next_state": "Approved",
-				 "allowed": "Accounts User", "condition": "doc.azzir_below_cost == 0"},
+				 "allowed": submit_role, "condition": "doc.azzir_below_cost == 0"},
 				{"state": "Draft", "action": "Request Approval", "next_state": "Pending Approval",
-				 "allowed": "Accounts User", "condition": "doc.azzir_below_cost == 1"},
+				 "allowed": submit_role, "condition": "doc.azzir_below_cost == 1"},
 				{"state": "Pending Approval", "action": "Approve", "next_state": "Approved",
-				 "allowed": "Accounts Manager"},
+				 "allowed": approve_role},
 				{"state": "Pending Approval", "action": "Reject", "next_state": "Draft",
-				 "allowed": "Accounts Manager"},
+				 "allowed": approve_role},
 			],
 		}
 	).insert(ignore_permissions=True)
@@ -1011,8 +1096,8 @@ _PROFORMA_TEMPLATE = """
 						<td style="text-align:right; padding:4px;">{{ frappe.utils.fmt_money(doc.total_taxes_and_charges, currency=doc.currency) }}</td>
 					</tr>
 					<tr style="border-top:1px solid #000; border-bottom:2px solid #000;">
-						<td style="text-align:right; padding:4px;"><b>GRAND TOTAL ({{ doc.currency }}) :</b></td>
-						<td style="text-align:right; padding:4px;"><b>{{ frappe.utils.fmt_money(doc.grand_total, currency=doc.currency) }}</b></td>
+						<td style="text-align:right; padding:4px;"><b>GRAND TOTAL :</b></td>
+						<td style="text-align:right; padding:4px;"><b>{{ "{:,.2f}".format(frappe.utils.flt(doc.grand_total)) }}</b></td>
 					</tr>
 				</table>
 				{% else %}
@@ -1025,6 +1110,6 @@ _PROFORMA_TEMPLATE = """
 		</tr>
 	</table>
 
-	{% if show_prices and doc.get("in_words") %}<p style="margin-top:10px;"><b>In Words:</b> {{ doc.in_words }}</p>{% endif %}
+	{% if show_prices and doc.get("in_words") %}<p style="margin-top:10px;"><b>In Words:</b> {{ doc.in_words.replace(doc.currency, "").replace("  ", " ").strip() }}</p>{% endif %}
 </div>
 """

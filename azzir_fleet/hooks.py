@@ -183,10 +183,14 @@ doc_events = {
 	# Maximum Sales Qty — selling documents.
 	# apply_vat_option runs LAST on validate (after ERPNext re-applies default taxes).
 	"Quotation": {
+		"before_validate": "azzir_fleet.customer_name.capture_override",
 		"validate": [
 			"azzir_fleet.qty_limits.validate_selling",
 			"azzir_fleet.quotation.set_quotation_validity",
 			"azzir_fleet.vat.apply_vat_option",
+			"azzir_fleet.below_cost.flag_below_cost",
+			"azzir_fleet.below_cost.set_previous_price",
+			"azzir_fleet.customer_name.restore_override",
 		],
 	},
 	"Supplier Quotation": {
@@ -202,17 +206,22 @@ doc_events = {
 		],
 	},
 	"Delivery Note": {
+		"before_validate": "azzir_fleet.customer_name.capture_override",
 		"validate": [
 			"azzir_fleet.qty_limits.validate_selling",
 			"azzir_fleet.vat.apply_vat_option",
+			"azzir_fleet.customer_name.restore_override",
 		],
 	},
 	"Sales Invoice": {
+		"before_validate": "azzir_fleet.customer_name.capture_override",
 		"validate": [
 			"azzir_fleet.qty_limits.validate_selling",
 			"azzir_fleet.qty_limits.validate_sales_stock",
 			"azzir_fleet.vat.apply_vat_option",
 			"azzir_fleet.below_cost.flag_below_cost",
+			"azzir_fleet.below_cost.set_previous_price",
+			"azzir_fleet.customer_name.restore_override",
 		],
 		"before_submit": "azzir_fleet.stock_reservation.check_stock_reservation",
 		"on_submit": "azzir_fleet.sales_invoice.mark_quotation_invoiced",

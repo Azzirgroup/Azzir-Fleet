@@ -23,6 +23,14 @@ def flag_below_cost(doc, method=None):
 	doc.azzir_below_cost = 1 if below else 0
 
 
+def set_previous_price(doc, method=None):
+	"""Record each row's price list rate as 'Previous Price' so a lowered rate can
+	be compared against the original list price."""
+	for row in doc.get("items") or []:
+		if flt(row.get("price_list_rate")):
+			row.azzir_previous_price = flt(row.get("price_list_rate"))
+
+
 def _buying_rate(item_code, warehouse=None):
 	"""Best-available buying/cost price: last purchase rate, else stock valuation."""
 	rate = flt(frappe.get_cached_value("Item", item_code, "last_purchase_rate"))

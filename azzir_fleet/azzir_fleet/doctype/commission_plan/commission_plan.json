@@ -8,9 +8,11 @@
  "field_order": [
   "naming_series",
   "company",
+  "branch",
   "column_break_1",
   "period_start",
   "period_end",
+  "carry_over",
   "settings_section",
   "target_amount",
   "expense_pool",
@@ -38,6 +40,16 @@
    "options": "Company",
    "reqd": 1
   },
+  {
+   "fieldname": "branch",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Branch",
+   "options": "Branch",
+   "reqd": 1,
+   "description": "Each branch has its own targets. Members are filtered to this branch."
+  },
   {"fieldname": "column_break_1", "fieldtype": "Column Break"},
   {
    "fieldname": "period_start",
@@ -51,7 +63,15 @@
    "fieldtype": "Date",
    "in_list_view": 1,
    "label": "Period End",
-   "reqd": 1
+   "reqd": 1,
+   "description": "May span several months. Targets are per-month."
+  },
+  {
+   "default": "1",
+   "fieldname": "carry_over",
+   "fieldtype": "Check",
+   "label": "Carry Unmet Target To Next Month",
+   "description": "If a month's target is not achieved, the shortfall is added to next month's target."
   },
   {"fieldname": "settings_section", "fieldtype": "Section Break", "label": "Targets & Expenses"},
   {
@@ -61,7 +81,7 @@
    "label": "Overall Target"
   },
   {
-   "description": "Total break-even / expenses to distribute among the sales people.",
+   "description": "Break-even / expenses PER MONTH to distribute among the sales people.",
    "fieldname": "expense_pool",
    "fieldtype": "Currency",
    "label": "Expense Pool"
@@ -121,5 +141,5 @@
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
- "title_field": "company"
+ "title_field": "branch"
 }

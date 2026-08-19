@@ -14,6 +14,10 @@ def make_sales_invoice(source_name: str, target_doc: str | None = None) -> dict:
 		target.ignore_pricing_rule = 1  # keep the quotation's rates
 		target.run_method("set_missing_values")
 		target.run_method("calculate_taxes_and_totals")
+		# Carry the (possibly edited) customer name from the quotation, AFTER
+		# set_missing_values has re-fetched it from the Customer master.
+		if source.get("customer_name"):
+			target.customer_name = source.customer_name
 
 	return get_mapped_doc(
 		"Quotation",
@@ -24,6 +28,7 @@ def make_sales_invoice(source_name: str, target_doc: str | None = None) -> dict:
 				"field_map": {
 					"name": "azzir_source_quotation",
 					"party_name": "customer",
+					"customer_name": "customer_name",
 					"company": "company",
 					"currency": "currency",
 					"selling_price_list": "selling_price_list",
