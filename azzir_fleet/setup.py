@@ -136,16 +136,8 @@ CUSTOM_FIELDS = {
 			"description": "Auto-set when any item's rate is below its valuation/buying price.",
 		},
 	],
-	# Document-level remark on Expense Entry, shown in the list view.
-	"Expense Entry": [
-		{
-			"fieldname": "azzir_remark",
-			"label": "Remark",
-			"fieldtype": "Small Text",
-			"insert_after": "total_amount",
-			"in_list_view": 1,
-		},
-	],
+	# (azzir_remark lives directly in the Expense Entry doctype JSON now — it's our
+	# own doctype, so a standard field syncs reliably with the doctype.)
 	# Tax Inclusive/Exclusive helper on Expense Entry rows.
 	"Expense Entry Account": [
 		{"fieldname": "azzir_tax_type", "label": "Tax Type", "fieldtype": "Select",

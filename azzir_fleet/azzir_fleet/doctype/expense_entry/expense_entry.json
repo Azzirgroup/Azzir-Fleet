@@ -15,6 +15,7 @@
   "section_break_9",
   "accounts",
   "total_amount",
+  "azzir_remark",
   "journal_entry",
   "amended_from"
  ],
@@ -73,6 +74,12 @@
    "in_standard_filter": 1,
    "label": "Total Amount",
    "read_only": 1
+  },
+  {
+   "fieldname": "azzir_remark",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Remark"
   },
   {
    "fieldname": "journal_entry",
