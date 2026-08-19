@@ -337,11 +337,24 @@ for _dt in ("Quotation Item", "Sales Invoice Item"):
 OVERRIDE_ROLE = "Azzir Stock Override"
 
 
+def _create_custom_fields_resilient():
+	"""Create the custom fields ONE DOCTYPE AT A TIME so a single problem field
+	(e.g. a doctype missing on a particular site) can't abort the whole batch and
+	silently drop every field after it."""
+	for _dt, _fields in CUSTOM_FIELDS.items():
+		try:
+			if not frappe.db.exists("DocType", _dt):
+				continue
+			create_custom_fields({_dt: _fields}, ignore_validate=True)
+		except Exception:
+			frappe.log_error(title=f"azzir_fleet custom fields failed for {_dt}")
+
+
 def after_migrate():
 	# Each step runs independently — a failure in one must not stop the others
 	# (that's why the Customer Statement report, being last, could go missing).
 	steps = [
-		("custom_fields", lambda: create_custom_fields(CUSTOM_FIELDS, ignore_validate=True)),
+		("custom_fields", _create_custom_fields_resilient),
 		(
 			"uom_section",
 			lambda: make_property_setter(
