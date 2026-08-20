@@ -17,6 +17,8 @@ import frappe
 from frappe import _
 from frappe.utils import flt
 
+from azzir_fleet.stock_info import _warehouse_stock
+
 
 def check_stock_reservation(doc, method=None):
 	# Hard block for everyone (Administrator included) — no override.
@@ -41,7 +43,9 @@ def check_stock_reservation(doc, method=None):
 		return "%g" % flt(x)  # tidy number: 12 not 12.0
 
 	for (code, wh), qty in needed.items():
-		actual = flt(frappe.db.get_value("Bin", {"item_code": code, "warehouse": wh}, "actual_qty"))
+		# _warehouse_stock sums child warehouses when `wh` is a group (sales reserves
+		# against a group/region, which itself holds no Bin), else the leaf's Bin qty.
+		actual = flt(_warehouse_stock(code, wh))
 		reserved = _reserved_by_others(code, wh, doc.name)
 		available = max(0.0, actual - reserved)
 		if flt(qty) > available + 1e-9:

@@ -185,6 +185,7 @@ doc_events = {
 	"Quotation": {
 		"before_validate": "azzir_fleet.customer_name.capture_override",
 		"validate": [
+			"azzir_fleet.warehouse.enforce_group_warehouse",
 			"azzir_fleet.qty_limits.validate_selling",
 			"azzir_fleet.quotation.set_quotation_validity",
 			"azzir_fleet.vat.apply_vat_option",
@@ -206,7 +207,10 @@ doc_events = {
 		],
 	},
 	"Delivery Note": {
-		"before_validate": "azzir_fleet.customer_name.capture_override",
+		"before_validate": [
+			"azzir_fleet.customer_name.capture_override",
+			"azzir_fleet.warehouse.resolve_child_warehouse",
+		],
 		"validate": [
 			"azzir_fleet.qty_limits.validate_selling",
 			"azzir_fleet.vat.apply_vat_option",
@@ -216,6 +220,7 @@ doc_events = {
 	"Sales Invoice": {
 		"before_validate": "azzir_fleet.customer_name.capture_override",
 		"validate": [
+			"azzir_fleet.warehouse.enforce_group_warehouse",
 			"azzir_fleet.qty_limits.validate_selling",
 			"azzir_fleet.qty_limits.validate_sales_stock",
 			"azzir_fleet.vat.apply_vat_option",
@@ -287,6 +292,8 @@ override_whitelisted_methods = {
 	"frappe.desk.reportview.get_list": "azzir_fleet.listview.get_list",
 	"frappe.desk.reportview.get_count": "azzir_fleet.listview.get_count",
 	"erpnext.controllers.queries.item_query": "azzir_fleet.alias.item_query",
+	# Region-only sales docs: don't auto-fill an item's default warehouse.
+	"erpnext.stock.get_item_details.get_item_details": "azzir_fleet.item_details.get_item_details",
 }
 #
 # each overriding function accepts a `data` argument;

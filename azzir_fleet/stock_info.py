@@ -126,7 +126,9 @@ def _warehouse_stock(item_code, warehouse):
 
 
 @frappe.whitelist()
-def get_stock_tree(item_code: str, exclude_invoice: str | None = None):
+def get_stock_tree(
+	item_code: str, exclude_invoice: str | None = None, groups_only: int | str | None = None
+):
 	"""Per-warehouse stock for the item, grouped by the warehouse tree.
 
 	Returns a flat list (ordered by tree position) of warehouses that hold stock
@@ -135,10 +137,16 @@ def get_stock_tree(item_code: str, exclude_invoice: str | None = None):
 
 	When `exclude_invoice` is provided (the dialog passes the current invoice), the
 	quantities are AVAILABLE stock = physical minus what other open invoices have
-	reserved, so a warehouse whose stock is all reserved shows 0.
+	reserved. Reservations recorded against a group (region) are subtracted from
+	that group's rolled-up total; leaf reservations from the leaf.
+
+	When `groups_only` is set, only GROUP warehouses are returned (the sales view —
+	sales people pick a region, never a bin).
 	"""
 	if not item_code:
 		return []
+
+	groups_only = frappe.utils.cint(groups_only)
 
 	bins = frappe.db.sql(
 		"""select warehouse, sum(actual_qty) qty from `tabBin`
@@ -150,13 +158,11 @@ def get_stock_tree(item_code: str, exclude_invoice: str | None = None):
 		return []
 	stock = {b.warehouse: flt(b.qty) for b in bins}
 
+	reserved = {}
 	if exclude_invoice is not None:
 		from azzir_fleet.stock_reservation import reserved_by_warehouse
 
-		reserved = reserved_by_warehouse(item_code, exclude_invoice)
-		for wh, r in reserved.items():
-			if wh in stock:
-				stock[wh] = max(0.0, flt(stock[wh]) - flt(r))
+		reserved = {w: flt(r) for w, r in reserved_by_warehouse(item_code, exclude_invoice).items()}
 
 	wh_info = {
 		w.name: w
@@ -186,19 +192,22 @@ def get_stock_tree(item_code: str, exclude_invoice: str | None = None):
 			needed.add(parent)
 			parent = (wh_info.get(parent) or {}).get("parent_warehouse")
 
+	def _under(node, info):
+		"""Is warehouse `node` inside group `info`'s subtree?"""
+		ni = wh_info.get(node)
+		return bool(ni) and ni.lft >= info.lft and ni.rgt <= info.rgt
+
 	rows = []
 	for wh in needed:
 		info = wh_info.get(wh)
 		if not info:
 			continue
 		if info.is_group:
-			qty = sum(
-				v
-				for lw, v in stock.items()
-				if wh_info.get(lw) and wh_info[lw].lft >= info.lft and wh_info[lw].rgt <= info.rgt
-			)
+			physical = sum(v for lw, v in stock.items() if _under(lw, info))
+			held = sum(r for rw, r in reserved.items() if _under(rw, info))
+			qty = max(0.0, physical - held)
 		else:
-			qty = stock.get(wh, 0)
+			qty = max(0.0, flt(stock.get(wh, 0)) - flt(reserved.get(wh, 0)))
 		rows.append(
 			{
 				"warehouse": wh,
@@ -210,6 +219,9 @@ def get_stock_tree(item_code: str, exclude_invoice: str | None = None):
 				"company": info.company,
 			}
 		)
+
+	if groups_only:
+		rows = [r for r in rows if r["is_group"]]
 
 	rows.sort(key=lambda r: (r.get("company") or "", r["lft"] or 0))
 	return rows
