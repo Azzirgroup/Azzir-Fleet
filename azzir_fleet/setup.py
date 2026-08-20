@@ -356,6 +356,22 @@ for _dt in ("Quotation Item", "Sales Invoice Item"):
 		CUSTOM_FIELDS.setdefault(_dt, []).append(dict(_f))
 	CUSTOM_FIELDS[_dt].append(dict(_VIEW_STOCK_BUTTON))
 
+# Hidden flag (fetched from the item) so Warehouse can be made mandatory ONLY for
+# stock items — service / non-stock lines don't need a warehouse.
+_IS_STOCK_ITEM_FIELD = {
+	"fieldname": "azzir_is_stock_item",
+	"label": "Is Stock Item",
+	"fieldtype": "Check",
+	"insert_after": "item_code",
+	"fetch_from": "item_code.is_stock_item",
+	"read_only": 1,
+	"hidden": 1,
+	"no_copy": 1,
+	"print_hide": 1,
+}
+for _dt in ("Quotation Item", "Sales Invoice Item", "Delivery Note Item"):
+	CUSTOM_FIELDS.setdefault(_dt, []).append(dict(_IS_STOCK_ITEM_FIELD))
+
 OVERRIDE_ROLE = "Azzir Stock Override"
 
 
@@ -399,6 +415,7 @@ def after_migrate():
 		("group_stock_role", _setup_group_stock_role),
 		("overdue_todo_notification", _setup_overdue_todo_notification),
 		("below_cost_workflow", _setup_below_cost_workflow),
+		("warehouse_mandatory", _make_warehouse_mandatory),
 		("editable_customer_name", _make_customer_name_editable),
 		("material_issue_workflow", _setup_material_issue_workflow),
 		("session_limit", _enforce_session_limit),
@@ -470,6 +487,17 @@ def _setup_below_cost_workflow():
 	# Same below-cost approval on both Sales Invoice and Quotation.
 	_make_below_cost_workflow("Sales Below Cost Approval", "Sales Invoice", "Accounts User", "Accounts Manager")
 	_make_below_cost_workflow("Quotation Below Cost Approval", "Quotation", "Sales User", "Sales Manager")
+
+
+def _make_warehouse_mandatory():
+	"""Warehouse is required on any line that carries a STOCK item — a region on
+	Quotation / Sales Invoice, a bin on Delivery Note. Service / non-stock lines
+	are exempt (via the azzir_is_stock_item fetch flag)."""
+	for dt in ("Quotation Item", "Sales Invoice Item", "Delivery Note Item"):
+		make_property_setter(
+			dt, "warehouse", "mandatory_depends_on", "eval:doc.azzir_is_stock_item", "Data",
+			validate_fields_for_doctype=False,
+		)
 
 
 def _make_customer_name_editable():

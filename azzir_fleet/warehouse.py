@@ -111,6 +111,25 @@ def resolve_delivery_warehouses(names: list | str) -> dict:
 	return result
 
 
+def require_warehouse_for_stock(doc, method=None):
+	"""Warehouse is mandatory on every line carrying a STOCK item (a region on
+	Quotation / Sales Invoice, a bin on Delivery Note). Service / non-stock lines
+	are exempt. Hard server-side guard behind the mandatory_depends_on asterisk."""
+	missing = []
+	for idx, row in enumerate(doc.get("items") or [], start=1):
+		code = row.get("item_code")
+		if not code or not frappe.get_cached_value("Item", code, "is_stock_item"):
+			continue
+		if not row.get("warehouse"):
+			missing.append((idx, code))
+	if missing:
+		lines = "<br>".join(
+			_("Row #{0}: Warehouse is required for stock item {1}").format(idx, frappe.bold(code))
+			for (idx, code) in missing
+		)
+		frappe.throw(lines, title=_("Warehouse Required"))
+
+
 def enforce_group_warehouse(doc, method=None):
 	"""Quotation / Sales Invoice are region-only: drop any leaf (bin) warehouse —
 	including ERPNext's auto-filled item default — so only a chosen group (region)

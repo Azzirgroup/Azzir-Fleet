@@ -186,6 +186,7 @@ doc_events = {
 		"before_validate": "azzir_fleet.customer_name.capture_override",
 		"validate": [
 			"azzir_fleet.warehouse.enforce_group_warehouse",
+			"azzir_fleet.warehouse.require_warehouse_for_stock",
 			"azzir_fleet.qty_limits.validate_selling",
 			"azzir_fleet.quotation.set_quotation_validity",
 			"azzir_fleet.vat.apply_vat_option",
@@ -215,12 +216,14 @@ doc_events = {
 			"azzir_fleet.qty_limits.validate_selling",
 			"azzir_fleet.vat.apply_vat_option",
 			"azzir_fleet.customer_name.restore_override",
+			"azzir_fleet.warehouse.require_warehouse_for_stock",
 		],
 	},
 	"Sales Invoice": {
 		"before_validate": "azzir_fleet.customer_name.capture_override",
 		"validate": [
 			"azzir_fleet.warehouse.enforce_group_warehouse",
+			"azzir_fleet.warehouse.require_warehouse_for_stock",
 			"azzir_fleet.qty_limits.validate_selling",
 			"azzir_fleet.qty_limits.validate_sales_stock",
 			"azzir_fleet.vat.apply_vat_option",
