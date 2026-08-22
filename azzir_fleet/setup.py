@@ -1080,11 +1080,7 @@ _PROFORMA_TEMPLATE = """
 					{% if row.get("azzir_item_remark") %}<br><span style="color:#777; font-size:11px;">{{ row.azzir_item_remark }}</span>{% endif %}
 					{% if row.get("azzir_item_image") %}<br><img src="{{ row.azzir_item_image }}" style="max-height:60px; margin-top:3px;">{% endif %}
 				</td>
-				{% if doc.doctype == "Delivery Note" %}<td style="padding:5px;">
-					{%- set _region = None -%}
-					{%- if row.get("si_detail") -%}{%- set _region = frappe.db.get_value("Sales Invoice Item", row.si_detail, "warehouse") -%}{%- endif -%}
-					{%- if not _region and row.warehouse -%}{%- set _region = frappe.db.get_value("Warehouse", row.warehouse, "parent_warehouse") -%}{%- endif -%}
-					{{ _region or row.warehouse or "" }}</td>{% endif %}
+				{% if doc.doctype == "Delivery Note" %}<td style="padding:5px;">{{ row.warehouse or "" }}</td>{% endif %}
 				<td style="padding:5px; text-align:right;">{{ "%.2f"|format(row.qty) }}</td>
 				{% if show_prices %}
 				<td style="padding:5px; text-align:right;">{{ frappe.utils.fmt_money(row.rate, currency=doc.currency) }}</td>

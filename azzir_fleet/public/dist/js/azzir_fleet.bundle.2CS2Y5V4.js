@@ -138,47 +138,13 @@
       }
     });
   };
-  azzir_fleet.on_sales_warehouse = function(cdt, cdn) {
-    const row = locals[cdt] && locals[cdt][cdn];
-    if (!row || !row.warehouse) {
-      azzir_fleet.fetch_row_stock(cdt, cdn);
-      return;
-    }
-    frappe.db.get_value("Warehouse", row.warehouse, "is_group").then((r) => {
-      const is_group = r && r.message ? cint(r.message.is_group) : 1;
-      if (!is_group) {
-        frappe.model.set_value(cdt, cdn, "warehouse", "");
-      } else {
-        azzir_fleet.fetch_row_stock(cdt, cdn);
-      }
-    });
-  };
-  azzir_fleet.strip_leaf_after_autofill = function(cdt, cdn) {
-    const attempt = (tries) => {
-      const row = locals[cdt] && locals[cdt][cdn];
-      if (!row)
-        return;
-      if (row.warehouse) {
-        frappe.db.get_value("Warehouse", row.warehouse, "is_group").then((r) => {
-          const is_group = r && r.message ? cint(r.message.is_group) : 1;
-          if (!is_group)
-            frappe.model.set_value(cdt, cdn, "warehouse", "");
-        });
-      } else if (tries > 0) {
-        setTimeout(() => attempt(tries - 1), 400);
-      }
-    };
-    setTimeout(() => attempt(3), 400);
-  };
-  azzir_fleet.show_stock_dialog = function(item_code, on_select, opts) {
+  azzir_fleet.show_stock_dialog = function(item_code, on_select) {
     if (!item_code)
       return;
-    opts = opts || {};
-    const groups_only = !!opts.groups_only;
     const exclude_invoice = typeof cur_frm !== "undefined" && cur_frm && cur_frm.doc && cur_frm.doc.name || "";
     frappe.call({
       method: "azzir_fleet.stock_info.get_stock_tree",
-      args: { item_code, exclude_invoice, groups_only: groups_only ? 1 : 0 },
+      args: { item_code, exclude_invoice },
       callback(r) {
         const rows = r.message || [];
         const names = new Set(rows.map((x) => x.warehouse));
@@ -187,21 +153,19 @@
           const key = x.parent && names.has(x.parent) ? x.parent : "__root__";
           (by_parent[key] = by_parent[key] || []).push(x);
         });
-        const can_pick = (node) => groups_only ? !!node.is_group : !node.is_group;
         function render(node, depth) {
           const icon = node.is_group ? "\u{1F4C1}" : "\u2022";
           const weight = node.is_group ? "600" : "400";
           const wh = frappe.utils.escape_html(node.warehouse);
-          const pickable = can_pick(node);
           let pick = "";
           if (on_select) {
-            pick = pickable ? `<input type="radio" name="azzir-wh-pick" class="azzir-wh-pick"
-							data-wh="${wh}" style="margin-right:8px; cursor:pointer;">` : '<span style="display:inline-block; width:22px;"></span>';
+            pick = node.is_group ? '<span style="display:inline-block; width:22px;"></span>' : `<input type="radio" name="azzir-wh-pick" class="azzir-wh-pick"
+							data-wh="${wh}" style="margin-right:8px; cursor:pointer;">`;
           }
-          let html = `<div class="azzir-wh-row" data-wh="${wh}" data-pick="${pickable ? 1 : 0}"
+          let html = `<div class="azzir-wh-row" data-wh="${wh}" data-group="${node.is_group ? 1 : 0}"
 					style="display:flex; align-items:center; justify-content:space-between; padding:5px 0;
 					border-bottom:1px solid #f0f0f0; padding-left:${depth * 22}px;
-					${on_select && pickable ? "cursor:pointer;" : ""}">
+					${on_select && !node.is_group ? "cursor:pointer;" : ""}">
 					<span style="font-weight:${weight};">${pick}${icon} ${wh}</span>
 					<span style="font-weight:${weight};">${format_number(node.qty)}</span></div>`;
           (by_parent[node.warehouse] || []).forEach((c) => html += render(c, depth + 1));
@@ -243,7 +207,7 @@
             pick($(this).attr("data-wh"));
           });
           d.$body.on("click", ".azzir-wh-row", function() {
-            if ($(this).attr("data-pick") === "1")
+            if ($(this).attr("data-group") === "0")
               pick($(this).attr("data-wh"));
           });
         }
@@ -267,8 +231,7 @@
       const row = child_dt && cdn && locals[child_dt] && locals[child_dt][cdn];
       if (row && row.item_code) {
         const on_select = frappe.meta.has_field(child_dt, "warehouse") ? (wh) => frappe.model.set_value(child_dt, cdn, "warehouse", wh) : void 0;
-        const groups_only = child_dt === "Quotation Item" || child_dt === "Sales Invoice Item";
-        azzir_fleet.show_stock_dialog(row.item_code, on_select, { groups_only });
+        azzir_fleet.show_stock_dialog(row.item_code, on_select);
       }
     },
     true
@@ -345,4 +308,4 @@
     azzir_tax_rate: (frm, cdt, cdn) => apply_calc(frm, cdt, cdn, je_base(cdt, cdn))
   });
 })();
-//# sourceMappingURL=azzir_fleet.bundle.D6VX6GB4.js.map
+//# sourceMappingURL=azzir_fleet.bundle.2CS2Y5V4.js.map

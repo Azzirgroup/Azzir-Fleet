@@ -23,62 +23,19 @@ azzir_fleet.fetch_row_stock = function (cdt, cdn) {
 	});
 };
 
-// Sales rows are region-only. ERPNext auto-fills an item's default BIN when the
-// item is picked; drop it so the field stays empty until a group (region) is
-// chosen. Keeps groups and fetches their stock.
-azzir_fleet.on_sales_warehouse = function (cdt, cdn) {
-	const row = locals[cdt] && locals[cdt][cdn];
-	if (!row || !row.warehouse) {
-		azzir_fleet.fetch_row_stock(cdt, cdn);
-		return;
-	}
-	frappe.db.get_value("Warehouse", row.warehouse, "is_group").then((r) => {
-		const is_group = r && r.message ? cint(r.message.is_group) : 1;
-		if (!is_group) {
-			frappe.model.set_value(cdt, cdn, "warehouse", ""); // strip auto-filled bin
-		} else {
-			azzir_fleet.fetch_row_stock(cdt, cdn);
-		}
-	});
-};
-
-// Call from a sales row's item_code trigger. ERPNext auto-fills the item's
-// default BIN a moment after selection (via get_item_details, which doesn't fire
-// the warehouse trigger), so we poll the row and clear it once it lands. Only a
-// leaf (bin) is removed — a group (region) the user picked is kept.
-azzir_fleet.strip_leaf_after_autofill = function (cdt, cdn) {
-	const attempt = (tries) => {
-		const row = locals[cdt] && locals[cdt][cdn];
-		if (!row) return;
-		if (row.warehouse) {
-			frappe.db.get_value("Warehouse", row.warehouse, "is_group").then((r) => {
-				const is_group = r && r.message ? cint(r.message.is_group) : 1;
-				if (!is_group) frappe.model.set_value(cdt, cdn, "warehouse", "");
-			});
-		} else if (tries > 0) {
-			setTimeout(() => attempt(tries - 1), 400); // auto-fill hasn't landed yet
-		}
-	};
-	setTimeout(() => attempt(3), 400);
-};
-
 // Per-warehouse tree breakdown dialog.
 // on_select (optional): fn(warehouse) called when a warehouse is picked. When
 // given, each ACTUAL (non-group) warehouse gets a radio; picking one calls
 // on_select and closes the dialog — used to set the warehouse on the row.
-azzir_fleet.show_stock_dialog = function (item_code, on_select, opts) {
+azzir_fleet.show_stock_dialog = function (item_code, on_select) {
 	if (!item_code) return;
-	opts = opts || {};
-	// groups_only: show ONLY group (region) warehouses and let the user pick one —
-	// the sales view (Quotation / Sales Invoice), where bins must stay hidden.
-	const groups_only = !!opts.groups_only;
 	// Pass the current doc so the dialog shows AVAILABLE stock (physical minus what
 	// other open invoices have reserved). "" for a brand-new unsaved doc.
 	const exclude_invoice =
 		(typeof cur_frm !== "undefined" && cur_frm && cur_frm.doc && cur_frm.doc.name) || "";
 	frappe.call({
 		method: "azzir_fleet.stock_info.get_stock_tree",
-		args: { item_code, exclude_invoice, groups_only: groups_only ? 1 : 0 },
+		args: { item_code, exclude_invoice },
 		callback(r) {
 			const rows = r.message || [];
 			const names = new Set(rows.map((x) => x.warehouse));
@@ -88,27 +45,22 @@ azzir_fleet.show_stock_dialog = function (item_code, on_select, opts) {
 				(by_parent[key] = by_parent[key] || []).push(x);
 			});
 
-			// Which rows are selectable: group rows in sales (groups_only) mode,
-			// leaf rows otherwise.
-			const can_pick = (node) => (groups_only ? !!node.is_group : !node.is_group);
-
 			function render(node, depth) {
 				const icon = node.is_group ? "📁" : "•";
 				const weight = node.is_group ? "600" : "400";
 				const wh = frappe.utils.escape_html(node.warehouse);
-				const pickable = can_pick(node);
-				// Selector column (only when picking, and only for selectable rows).
+				// Selector column (only when picking, and only for actual warehouses).
 				let pick = "";
 				if (on_select) {
-					pick = pickable
-						? `<input type="radio" name="azzir-wh-pick" class="azzir-wh-pick"
-							data-wh="${wh}" style="margin-right:8px; cursor:pointer;">`
-						: '<span style="display:inline-block; width:22px;"></span>';
+					pick = node.is_group
+						? '<span style="display:inline-block; width:22px;"></span>'
+						: `<input type="radio" name="azzir-wh-pick" class="azzir-wh-pick"
+							data-wh="${wh}" style="margin-right:8px; cursor:pointer;">`;
 				}
-				let html = `<div class="azzir-wh-row" data-wh="${wh}" data-pick="${pickable ? 1 : 0}"
+				let html = `<div class="azzir-wh-row" data-wh="${wh}" data-group="${node.is_group ? 1 : 0}"
 					style="display:flex; align-items:center; justify-content:space-between; padding:5px 0;
 					border-bottom:1px solid #f0f0f0; padding-left:${depth * 22}px;
-					${on_select && pickable ? "cursor:pointer;" : ""}">
+					${on_select && !node.is_group ? "cursor:pointer;" : ""}">
 					<span style="font-weight:${weight};">${pick}${icon} ${wh}</span>
 					<span style="font-weight:${weight};">${format_number(node.qty)}</span></div>`;
 				(by_parent[node.warehouse] || []).forEach((c) => (html += render(c, depth + 1)));
@@ -156,7 +108,7 @@ azzir_fleet.show_stock_dialog = function (item_code, on_select, opts) {
 					pick($(this).attr("data-wh"));
 				});
 				d.$body.on("click", ".azzir-wh-row", function () {
-					if ($(this).attr("data-pick") === "1") pick($(this).attr("data-wh"));
+					if ($(this).attr("data-group") === "0") pick($(this).attr("data-wh"));
 				});
 			}
 
@@ -185,10 +137,7 @@ document.addEventListener(
 			const on_select = frappe.meta.has_field(child_dt, "warehouse")
 				? (wh) => frappe.model.set_value(child_dt, cdn, "warehouse", wh)
 				: undefined;
-			// Sales lines pick a region (group); everywhere else picks a bin (leaf).
-			const groups_only =
-				child_dt === "Quotation Item" || child_dt === "Sales Invoice Item";
-			azzir_fleet.show_stock_dialog(row.item_code, on_select, { groups_only });
+			azzir_fleet.show_stock_dialog(row.item_code, on_select);
 		}
 	},
 	true
