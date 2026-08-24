@@ -353,12 +353,21 @@ def _save_report(stats):
 	return f.file_url
 
 
+def skipped_count(stats):
+	"""Everything that will NOT be updated: truly-missing + ambiguous + conflicts."""
+	renamed = stats.get("renamed", {})
+	truly_missing = len([m for m in stats["missing"] if m not in renamed])
+	return truly_missing + len(stats.get("ambiguous", [])) + len(stats["conflicts"])
+
+
 def summarize(stats, applied_rows=None):
 	"""Human-readable summary string for the DocType / CLI."""
 	renamed = stats.get("renamed", {})
 	renames = stats.get("renames", [])
 	ambiguous = stats.get("ambiguous", [])
-	truly_missing = len(stats["missing"]) - len(renamed)
+	# In replace-mode the renamed ids sit INSIDE `missing`; in reconcile-mode they
+	# don't. Counting "missing but not renamed" is correct for both.
+	truly_missing = len([m for m in stats["missing"] if m not in renamed])
 	lines = [
 		"Items in file:     %d" % stats["file_items"],
 		"Existing items:    %d  (updated)" % stats["existing"],
@@ -427,7 +436,7 @@ def preview(file_url: str, sheet: str | None = None, mode: str | None = None) ->
 	stats = _plan(groups, order, mode or "replace")
 	summary = summarize(stats)
 	report_url = _save_report(stats)
-	skipped = len(stats["missing"]) + len(stats["conflicts"])
+	skipped = skipped_count(stats)
 	summary += "\n\nFull list of the %d skipped rows is in the attached CSV (Report field / Attachments)." % skipped
 	frappe.db.set_single_value("Item Code Import", "result", summary)
 	frappe.db.set_single_value("Item Code Import", "report", report_url)
