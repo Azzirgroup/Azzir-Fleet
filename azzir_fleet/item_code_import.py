@@ -466,14 +466,20 @@ def start(file_url: str, sheet: str | None = None, mode: str | None = None) -> s
 
 def background_run(file_url, sheet=None, mode=None, user=None):
 	"""Worker job: apply the import and record the result on the Single doctype."""
+	def _progress(msg):
+		frappe.db.set_single_value("Item Code Import", "status", "Running: " + msg)
+		frappe.db.commit()
+
 	try:
+		frappe.db.set_single_value("Item Code Import", "status", "Running: reading file...")
+		frappe.db.commit()
 		groups, order = parse_workbook(_file_path(file_url), sheet)
 		if (mode or "replace") == "reconcile":
 			code_tables, renames, stats = build_reconcile_plan(groups, order)
-			applied = apply_reconcile(code_tables, renames)
+			applied = apply_reconcile(code_tables, renames, progress=_progress)
 		else:
 			import_items, desired, stats = build_plan(groups, order)
-			applied = apply_plan(import_items, desired)
+			applied = apply_plan(import_items, desired, progress=_progress)
 		frappe.db.commit()
 		summary = summarize(stats, applied)
 		report_url = _save_report(stats)
