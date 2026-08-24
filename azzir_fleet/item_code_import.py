@@ -227,29 +227,99 @@ def build_reconcile_plan(groups, order):
 	return code_tables, renames, stats
 
 
-def apply_reconcile(code_tables, renames, progress=None):
-	"""Rename items to their primary code, then rebuild every target's code table."""
-	# 1) renames (updates all links + runs the app's after_rename)
-	for n, (frm, to) in enumerate(renames, start=1):
+def _retry(fn, label, tries=6):
+	"""Run fn(), retrying on DB deadlocks (common when renaming many linked items).
+	Returns True on success, False if it ultimately failed."""
+	import time
+
+	for attempt in range(tries):
 		try:
-			frappe.rename_doc("Item", frm, to, force=True, show_alert=False, rebuild_search=False)
+			fn()
+			return True
+		except frappe.QueryDeadlockError:
+			frappe.db.rollback()
+			time.sleep(0.4 * (attempt + 1))
 		except Exception:
-			frappe.log_error(title="reconcile rename failed: %s -> %s" % (frm, to))
-		if n % 50 == 0:
+			frappe.db.rollback()
+			frappe.log_error(title="item code import: " + label)
+			return False
+	frappe.log_error(title="item code import (deadlock, gave up): " + label)
+	return False
+
+
+def cleanup_orphan_codes():
+	"""Delete Item Code Entry rows whose parent is not a real Item (left behind by a
+	previously failed reconcile run). Returns how many were removed."""
+	orphans = frappe.db.sql_list(
+		"""select ice.name from `tabItem Code Entry` ice
+		   left join `tabItem` it on it.name = ice.parent
+		   where ice.parenttype = 'Item' and it.name is null"""
+	)
+	for i in range(0, len(orphans), 1000):
+		chunk = orphans[i:i + 1000]
+		ph = ", ".join(["%s"] * len(chunk))
+		frappe.db.sql("delete from `tabItem Code Entry` where name in (%s)" % ph, tuple(chunk))
+		frappe.db.commit()
+	return len(orphans)
+
+
+@frappe.whitelist()
+def clean_orphans() -> str:
+	"""Remove orphan code rows (fixes search errors after a partial reconcile)."""
+	n = cleanup_orphan_codes()
+	frappe.db.set_single_value("Item Code Import", "status", "Removed %d orphan code rows" % n)
+	frappe.db.commit()
+	return "Removed %d orphan code rows" % n
+
+
+def apply_reconcile(code_tables, renames, progress=None):
+	"""Rename items to their primary code, then rebuild every target's code table.
+	Deadlock-resilient: commits after EACH rename (releasing locks immediately),
+	retries on deadlock, and only writes code tables for items that actually exist."""
+	# 0) clear any orphan rows from a prior failed run
+	cleanup_orphan_codes()
+
+	# 1) renames — one at a time, commit after each to avoid lock pile-up.
+	ok_targets, failed = set(), 0
+	for n, (frm, to) in enumerate(renames, start=1):
+		def _do(frm=frm, to=to):
+			frappe.rename_doc("Item", frm, to, force=True, show_alert=False, rebuild_search=False)
 			frappe.db.commit()
-			if progress:
-				progress("renamed %d/%d items" % (n, len(renames)))
+
+		if _retry(_do, "rename %s -> %s" % (frm, to)):
+			ok_targets.add(to)
+		else:
+			failed += 1
+			frappe.db.rollback()
+		if progress and n % 25 == 0:
+			progress("renamed %d/%d (%d failed)" % (n, len(renames), failed))
 	frappe.db.commit()
 
-	# 2) replace the code tables (keyed by the final/primary name)
-	targets = list(code_tables.keys())
+	# 2) only touch code tables for items that exist NOW (rename ok, or no rename needed)
+	rename_targets = {to for _, to in renames}
+	wanted = [t for t in code_tables if t not in rename_targets or t in ok_targets]
+	existing = set()
+	for i in range(0, len(wanted), 500):
+		chunk = wanted[i:i + 500]
+		existing.update(
+			frappe.db.sql_list(
+				"select name from `tabItem` where name in (%s)" % ", ".join(["%s"] * len(chunk)),
+				tuple(chunk),
+			)
+		)
+	targets = [t for t in wanted if t in existing]
+
+	# 3) replace their code tables (delete + bulk insert), with deadlock retry
 	for i in range(0, len(targets), DELETE_BATCH):
 		chunk = targets[i:i + DELETE_BATCH]
-		ph = ", ".join(["%s"] * len(chunk))
-		frappe.db.sql(
-			"delete from `tabItem Code Entry` where parenttype = 'Item' and parent in (%s)" % ph,
-			tuple(chunk),
-		)
+
+		def _del(chunk=chunk):
+			ph = ", ".join(["%s"] * len(chunk))
+			frappe.db.sql(
+				"delete from `tabItem Code Entry` where parenttype = 'Item' and parent in (%s)" % ph,
+				tuple(chunk),
+			)
+		_retry(_del, "delete code rows batch")
 		frappe.db.commit()
 
 	now = now_datetime()
@@ -258,18 +328,27 @@ def apply_reconcile(code_tables, renames, progress=None):
 		"idx", "parent", "parentfield", "parenttype", "code", "is_primary", "source", "changed_on",
 	]
 	values = []
-	for target, out in code_tables.items():
-		for code, is_primary, source, idx in out:
+	for target in targets:
+		for code, is_primary, source, idx in code_tables[target]:
 			values.append((
 				frappe.generate_hash(length=10), now, now, "Administrator", "Administrator", 0,
 				idx, target, PARENT_FIELD, "Item", code, is_primary, source, now,
 			))
+	applied = 0
 	for i in range(0, len(values), INSERT_CHUNK):
-		frappe.db.bulk_insert(CHILD_DT, fields, values[i:i + INSERT_CHUNK])
+		batch = values[i:i + INSERT_CHUNK]
+
+		def _ins(batch=batch):
+			frappe.db.bulk_insert(CHILD_DT, fields, batch)
+		if _retry(_ins, "insert code rows batch"):
+			applied += len(batch)
 		frappe.db.commit()
 		if progress:
 			progress("inserted %d/%d rows" % (min(i + INSERT_CHUNK, len(values)), len(values)))
-	return len(values)
+
+	if failed and progress:
+		progress("done — %d renames failed (see Error Log); %d rows written" % (failed, applied))
+	return applied
 
 
 def apply_plan(import_items, desired, progress=None):
@@ -455,7 +534,7 @@ def start(file_url: str, sheet: str | None = None, mode: str | None = None) -> s
 	frappe.enqueue(
 		"azzir_fleet.item_code_import.background_run",
 		queue="long",
-		timeout=3600,
+		timeout=36000,  # renames are heavy; re-running is safe (already-done items are skipped)
 		file_url=file_url,
 		sheet=sheet,
 		mode=mode or "replace",

@@ -11,6 +11,22 @@ frappe.ui.form.on("Item Code Import", {
 				() => run(frm, "start")
 			);
 		}).addClass("btn-primary");
+
+		frm.add_custom_button(__("Clean Orphan Codes"), () => {
+			frappe.confirm(
+				__("Remove code rows that point to non-existent items? (Fixes search errors after a partial run.)"),
+				() => {
+					frappe.call({
+						method: "azzir_fleet.item_code_import.clean_orphans",
+						freeze: true,
+						callback: (r) => {
+							frm.reload_doc();
+							frappe.msgprint(r.message || __("Done."));
+						},
+					});
+				}
+			);
+		});
 	},
 });
 
