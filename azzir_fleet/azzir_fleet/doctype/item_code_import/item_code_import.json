@@ -1,0 +1,82 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-08-24 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "intro",
+  "spreadsheet",
+  "sheet_name",
+  "column_break_1",
+  "status",
+  "result_section",
+  "result"
+ ],
+ "fields": [
+  {
+   "fieldname": "intro",
+   "fieldtype": "HTML",
+   "options": "<p style='color:#666'>Upload a spreadsheet with columns <b>ID</b>, <b>azzir_alias_codes.code</b>, <b>azzir_alias_codes.is_primary</b>, <b>azzir_alias_codes.source</b>. Use <b>Dry Run</b> first to preview, then <b>Run Import</b> to apply (runs in the background). For each item its code table is replaced; the item's own code stays Primary so nothing is renamed.</p>"
+  },
+  {
+   "fieldname": "spreadsheet",
+   "fieldtype": "Attach",
+   "label": "Spreadsheet (.xlsx)",
+   "reqd": 1
+  },
+  {
+   "default": "Item Codes",
+   "fieldname": "sheet_name",
+   "fieldtype": "Data",
+   "label": "Sheet / Tab Name",
+   "description": "Worksheet name in the file (defaults to the first sheet if not found)."
+  },
+  {"fieldname": "column_break_1", "fieldtype": "Column Break"},
+  {
+   "fieldname": "status",
+   "fieldtype": "Data",
+   "label": "Status",
+   "read_only": 1
+  },
+  {"fieldname": "result_section", "fieldtype": "Section Break", "label": "Result / Log"},
+  {
+   "fieldname": "result",
+   "fieldtype": "Code",
+   "label": "Result",
+   "read_only": 1
+  }
+ ],
+ "issingle": 1,
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-24 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Azzir Fleet",
+ "name": "Item Code Import",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Item Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}
