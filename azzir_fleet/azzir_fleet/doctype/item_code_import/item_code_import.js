@@ -13,7 +13,11 @@ frappe.ui.form.on("Item Code Import", {
 			frappe.dom.freeze(__("Analysing spreadsheet..."));
 			frappe.call({
 				method: "azzir_fleet.item_code_import.preview",
-				args: { file_url: frm.doc.spreadsheet, sheet: frm.doc.sheet_name },
+				args: {
+					file_url: frm.doc.spreadsheet,
+					sheet: frm.doc.sheet_name,
+					mode: (frm.doc.mode || "Replace").toLowerCase(),
+				},
 				always: () => frappe.dom.unfreeze(),
 				callback: (r) => {
 					frm.reload_doc();
@@ -36,7 +40,11 @@ frappe.ui.form.on("Item Code Import", {
 				() => {
 					frappe.call({
 						method: "azzir_fleet.item_code_import.start",
-						args: { file_url: frm.doc.spreadsheet, sheet: frm.doc.sheet_name },
+						args: {
+							file_url: frm.doc.spreadsheet,
+							sheet: frm.doc.sheet_name,
+							mode: (frm.doc.mode || "Replace").toLowerCase(),
+						},
 						callback: () => {
 							frm.reload_doc();
 							frappe.show_alert({

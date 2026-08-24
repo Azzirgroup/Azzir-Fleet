@@ -8,8 +8,10 @@
   "intro",
   "spreadsheet",
   "sheet_name",
+  "mode",
   "column_break_1",
   "status",
+  "report",
   "result_section",
   "result"
  ],
@@ -32,12 +34,27 @@
    "label": "Sheet / Tab Name",
    "description": "Worksheet name in the file (defaults to the first sheet if not found)."
   },
+  {
+   "default": "Replace",
+   "fieldname": "mode",
+   "fieldtype": "Select",
+   "label": "Mode",
+   "options": "Replace\nReconcile",
+   "description": "Replace: match items by ID (exact code). Reconcile: match by ANY code and rename the item to its Primary code (fixes items that were manually renamed)."
+  },
   {"fieldname": "column_break_1", "fieldtype": "Column Break"},
   {
    "fieldname": "status",
    "fieldtype": "Data",
    "label": "Status",
    "read_only": 1
+  },
+  {
+   "fieldname": "report",
+   "fieldtype": "Attach",
+   "label": "Not-Updated Report (CSV)",
+   "read_only": 1,
+   "description": "Download to see every item/code that was skipped (missing or conflict)."
   },
   {"fieldname": "result_section", "fieldtype": "Section Break", "label": "Result / Log"},
   {
