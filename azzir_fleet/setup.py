@@ -1143,3 +1143,409 @@ _PROFORMA_TEMPLATE = """
 	{% if show_prices and doc.get("in_words") %}<p style="margin-top:10px;"><b>In Words:</b> {{ doc.in_words.replace(doc.currency, "").replace("  ", " ").strip() }}</p>{% endif %}
 </div>
 """
+
+
+# --------------------------------------------------------------------------- #
+# Role workspaces (Sales / Procurement / HR / Accounting / Director)
+# Each: number-card tiles + shortcut tiles + grouped sidebar links, following
+# the real flow. Robust — any link/report/doctype not present on a site is
+# skipped, and empty cards are dropped. Created only if missing (delete a
+# workspace to regenerate it).
+# --------------------------------------------------------------------------- #
+def _target_exists(link_type, link_to):
+	if link_type == "DocType":
+		return bool(frappe.db.exists("DocType", link_to))
+	if link_type == "Report":
+		return bool(frappe.db.exists("Report", link_to))
+	if link_type == "Page":
+		return bool(frappe.db.exists("Page", link_to))
+	return True
+
+
+def _ensure_number_card(nc):
+	existing = frappe.db.get_value("Number Card", {"label": nc["label"]}, "name")
+	if existing:
+		return existing
+	doc = frappe.get_doc(
+		{
+			"doctype": "Number Card",
+			"label": nc["label"],
+			"document_type": nc["document_type"],
+			"function": nc.get("function", "Count"),
+			"is_public": 1,
+			"show_percentage_stats": 0,
+			"filters_json": nc.get("filters_json", "[]"),
+			"color": nc.get("color", "#5E64FF"),
+		}
+	).insert(ignore_permissions=True)
+	return doc.name
+
+
+def _make_workspace(spec):
+	label = spec["label"]
+	if frappe.db.exists("Workspace", label):
+		return
+
+	def bid():
+		return frappe.generate_hash(length=10)
+
+	ws = frappe.new_doc("Workspace")
+	ws.title = label
+	ws.label = label
+	ws.name = label
+	ws.icon = spec.get("icon", "dashboard")
+	ws.module = "Azzir Fleet"
+	ws.public = 1
+	ws.sequence_id = spec.get("sequence", 50)
+
+	for role in spec.get("roles", []):
+		if frappe.db.exists("Role", role):
+			ws.append("roles", {"role": role})
+
+	content = [{"id": bid(), "type": "header",
+	            "data": {"text": '<span class="h4"><b>%s</b></span>' % spec["title"], "col": 12}}]
+
+	# number-card tiles
+	for nc in spec.get("number_cards", []):
+		if not frappe.db.exists("DocType", nc["document_type"]):
+			continue
+		name = _ensure_number_card(nc)
+		ws.append("number_cards", {"number_card_name": name, "label": nc["label"]})
+		content.append({"id": bid(), "type": "number_card",
+		                "data": {"number_card_name": name, "col": 4}})
+
+	# shortcut tiles
+	scs = [s for s in spec.get("shortcuts", []) if _target_exists(s.get("type", "DocType"), s["link_to"])]
+	if scs:
+		content.append({"id": bid(), "type": "header",
+		                "data": {"text": '<span class="h5"><b>Shortcuts</b></span>', "col": 12}})
+		for s in scs:
+			ws.append("shortcuts", {"type": s.get("type", "DocType"), "link_to": s["link_to"],
+			                        "label": s["label"], "color": s.get("color", "Grey"),
+			                        "doc_view": s.get("doc_view", "")})
+			content.append({"id": bid(), "type": "shortcut",
+			                "data": {"shortcut_name": s["label"], "col": 3}})
+
+	# grouped sidebar link cards
+	valid = []
+	for card in spec.get("cards", []):
+		links = [l for l in card["links"] if _target_exists(l.get("link_type", "DocType"), l["link_to"])]
+		if links:
+			valid.append((card["title"], links))
+	if valid:
+		content.append({"id": bid(), "type": "header",
+		                "data": {"text": '<span class="h5"><b>Explore</b></span>', "col": 12}})
+		for title, links in valid:
+			ws.append("links", {"type": "Card Break", "label": title, "link_count": len(links),
+			                    "hidden": 0, "onboard": 0})
+			for l in links:
+				ws.append("links", {"type": "Link", "label": l["label"],
+				                    "link_type": l.get("link_type", "DocType"), "link_to": l["link_to"],
+				                    "hidden": 0, "onboard": 0,
+				                    "is_query_report": 1 if l.get("link_type") == "Report" else 0})
+			content.append({"id": bid(), "type": "card", "data": {"card_name": title, "col": 4}})
+
+	ws.content = frappe.as_json(content)
+	ws.insert(ignore_permissions=True)
+
+
+def _setup_workspaces():
+	specs = [
+		{
+			"label": "Sales", "title": "Sales", "icon": "sell", "sequence": 51,
+			"roles": ["Sales User", "Sales Manager"],
+			"number_cards": [
+				{"label": "Open Quotations", "document_type": "Quotation",
+				 "filters_json": '[["Quotation","status","=","Open"]]', "color": "#5E64FF"},
+				{"label": "Unpaid Sales Invoices", "document_type": "Sales Invoice",
+				 "filters_json": '[["Sales Invoice","status","=","Unpaid"]]', "color": "#FF5858"},
+				{"label": "Draft Sales Invoices", "document_type": "Sales Invoice",
+				 "filters_json": '[["Sales Invoice","docstatus","=",0]]', "color": "#FFB868"},
+			],
+			"shortcuts": [
+				{"label": "Quotation", "link_to": "Quotation", "color": "Blue"},
+				{"label": "Sales Invoice", "link_to": "Sales Invoice", "color": "Green"},
+				{"label": "Delivery Note", "link_to": "Delivery Note", "color": "Orange"},
+				{"label": "Customer", "link_to": "Customer", "color": "Grey"},
+			],
+			"cards": [
+				{"title": "Sales Flow", "links": [
+					{"label": "Quotation", "link_to": "Quotation"},
+					{"label": "Sales Order", "link_to": "Sales Order"},
+					{"label": "Sales Invoice", "link_to": "Sales Invoice"},
+					{"label": "Delivery Note", "link_to": "Delivery Note"},
+				]},
+				{"title": "Masters", "links": [
+					{"label": "Customer", "link_to": "Customer"},
+					{"label": "Item", "link_to": "Item"},
+					{"label": "Price List", "link_to": "Price List"},
+				]},
+				{"title": "Reports", "links": [
+					{"label": "Commission Report", "link_type": "Report", "link_to": "Commission Report"},
+					{"label": "Sales Register", "link_type": "Report", "link_to": "Sales Register"},
+					{"label": "Customer Statement", "link_type": "Page", "link_to": "customer-statement"},
+				]},
+			],
+		},
+		{
+			"label": "Procurement", "title": "Procurement", "icon": "buying", "sequence": 52,
+			"roles": ["Purchase User", "Purchase Manager"],
+			"number_cards": [
+				{"label": "Open Material Requests", "document_type": "Material Request",
+				 "filters_json": '[["Material Request","status","=","Pending"]]', "color": "#5E64FF"},
+				{"label": "Draft Purchase Orders", "document_type": "Purchase Order",
+				 "filters_json": '[["Purchase Order","docstatus","=",0]]', "color": "#FFB868"},
+				{"label": "Unpaid Purchase Invoices", "document_type": "Purchase Invoice",
+				 "filters_json": '[["Purchase Invoice","status","=","Unpaid"]]', "color": "#FF5858"},
+			],
+			"shortcuts": [
+				{"label": "Material Request", "link_to": "Material Request", "color": "Blue"},
+				{"label": "Purchase Order", "link_to": "Purchase Order", "color": "Green"},
+				{"label": "Purchase Receipt", "link_to": "Purchase Receipt", "color": "Orange"},
+				{"label": "Supplier", "link_to": "Supplier", "color": "Grey"},
+			],
+			"cards": [
+				{"title": "Buying Flow", "links": [
+					{"label": "Material Request", "link_to": "Material Request"},
+					{"label": "Supplier Quotation", "link_to": "Supplier Quotation"},
+					{"label": "Purchase Order", "link_to": "Purchase Order"},
+					{"label": "Purchase Receipt", "link_to": "Purchase Receipt"},
+					{"label": "Purchase Invoice", "link_to": "Purchase Invoice"},
+				]},
+				{"title": "Masters", "links": [
+					{"label": "Supplier", "link_to": "Supplier"},
+					{"label": "Item", "link_to": "Item"},
+				]},
+				{"title": "Reports", "links": [
+					{"label": "Purchase Register", "link_type": "Report", "link_to": "Purchase Register"},
+					{"label": "Purchase Order Analysis", "link_type": "Report", "link_to": "Purchase Order Analysis"},
+				]},
+			],
+		},
+		{
+			"label": "HR", "title": "Human Resources", "icon": "hr", "sequence": 53,
+			"roles": ["HR User", "HR Manager"],
+			"number_cards": [
+				{"label": "Active Employees", "document_type": "Employee",
+				 "filters_json": '[["Employee","status","=","Active"]]', "color": "#29CD42"},
+				{"label": "Open Leave Applications", "document_type": "Leave Application",
+				 "filters_json": '[["Leave Application","status","=","Open"]]', "color": "#FFB868"},
+				{"label": "Draft Salary Slips", "document_type": "Salary Slip",
+				 "filters_json": '[["Salary Slip","docstatus","=",0]]', "color": "#5E64FF"},
+			],
+			"shortcuts": [
+				{"label": "Employee", "link_to": "Employee", "color": "Blue"},
+				{"label": "Attendance", "link_to": "Attendance", "color": "Green"},
+				{"label": "Leave Application", "link_to": "Leave Application", "color": "Orange"},
+				{"label": "Salary Slip", "link_to": "Salary Slip", "color": "Purple"},
+			],
+			"cards": [
+				{"title": "People", "links": [
+					{"label": "Employee", "link_to": "Employee"},
+					{"label": "Department", "link_to": "Department"},
+					{"label": "Designation", "link_to": "Designation"},
+				]},
+				{"title": "Leave & Attendance", "links": [
+					{"label": "Attendance", "link_to": "Attendance"},
+					{"label": "Leave Application", "link_to": "Leave Application"},
+					{"label": "Holiday List", "link_to": "Holiday List"},
+				]},
+				{"title": "Payroll", "links": [
+					{"label": "Salary Slip", "link_to": "Salary Slip"},
+					{"label": "Payroll Entry", "link_to": "Payroll Entry"},
+					{"label": "Payroll Component Summary", "link_type": "Report", "link_to": "Payroll Component Summary"},
+				]},
+			],
+		},
+		{
+			"label": "Accounting", "title": "Accounting", "icon": "accounting", "sequence": 54,
+			"roles": ["Accounts User", "Accounts Manager"],
+			"number_cards": [
+				{"label": "Unpaid Sales Invoices", "document_type": "Sales Invoice",
+				 "filters_json": '[["Sales Invoice","status","=","Unpaid"]]', "color": "#FF5858"},
+				{"label": "Unpaid Purchase Invoices", "document_type": "Purchase Invoice",
+				 "filters_json": '[["Purchase Invoice","status","=","Unpaid"]]', "color": "#FFB868"},
+				{"label": "Draft Journal Entries", "document_type": "Journal Entry",
+				 "filters_json": '[["Journal Entry","docstatus","=",0]]', "color": "#5E64FF"},
+			],
+			"shortcuts": [
+				{"label": "Payment Entry", "link_to": "Payment Entry", "color": "Green"},
+				{"label": "Journal Entry", "link_to": "Journal Entry", "color": "Blue"},
+				{"label": "Expense Entry", "link_to": "Expense Entry", "color": "Orange"},
+				{"label": "Monthly Budget", "link_to": "Monthly Budget", "color": "Purple"},
+			],
+			"cards": [
+				{"title": "Transactions", "links": [
+					{"label": "Payment Entry", "link_to": "Payment Entry"},
+					{"label": "Journal Entry", "link_to": "Journal Entry"},
+					{"label": "Expense Entry", "link_to": "Expense Entry"},
+					{"label": "Sales Invoice", "link_to": "Sales Invoice"},
+					{"label": "Purchase Invoice", "link_to": "Purchase Invoice"},
+				]},
+				{"title": "Budget", "links": [
+					{"label": "Monthly Budget", "link_to": "Monthly Budget"},
+					{"label": "Monthly Budget Report", "link_type": "Report", "link_to": "Monthly Budget Report"},
+					{"label": "Monthly Budget Comparison Report", "link_type": "Report", "link_to": "Monthly Budget Comparison Report"},
+				]},
+				{"title": "Financial Reports", "links": [
+					{"label": "General Ledger", "link_type": "Report", "link_to": "General Ledger"},
+					{"label": "Accounts Receivable", "link_type": "Report", "link_to": "Accounts Receivable"},
+					{"label": "Accounts Payable", "link_type": "Report", "link_to": "Accounts Payable"},
+					{"label": "Profit and Loss Statement", "link_type": "Report", "link_to": "Profit and Loss Statement"},
+					{"label": "Balance Sheet", "link_type": "Report", "link_to": "Balance Sheet"},
+				]},
+			],
+		},
+		{
+			"label": "Director", "title": "Director's Overview", "icon": "dashboard", "sequence": 50,
+			"roles": [],
+			"number_cards": [
+				{"label": "Unpaid Sales Invoices", "document_type": "Sales Invoice",
+				 "filters_json": '[["Sales Invoice","status","=","Unpaid"]]', "color": "#FF5858"},
+				{"label": "Draft Purchase Orders", "document_type": "Purchase Order",
+				 "filters_json": '[["Purchase Order","docstatus","=",0]]', "color": "#FFB868"},
+				{"label": "Active Employees", "document_type": "Employee",
+				 "filters_json": '[["Employee","status","=","Active"]]', "color": "#29CD42"},
+			],
+			"shortcuts": [
+				{"label": "Profit and Loss Statement", "type": "Report", "link_to": "Profit and Loss Statement", "color": "Green"},
+				{"label": "Monthly Budget Comparison Report", "type": "Report", "link_to": "Monthly Budget Comparison Report", "color": "Blue"},
+				{"label": "Commission Report", "type": "Report", "link_to": "Commission Report", "color": "Purple"},
+				{"label": "Accounts Receivable", "type": "Report", "link_to": "Accounts Receivable", "color": "Orange"},
+			],
+			"cards": [
+				{"title": "Performance", "links": [
+					{"label": "Commission Report", "link_type": "Report", "link_to": "Commission Report"},
+					{"label": "Monthly Budget Comparison Report", "link_type": "Report", "link_to": "Monthly Budget Comparison Report"},
+					{"label": "Sales Register", "link_type": "Report", "link_to": "Sales Register"},
+				]},
+				{"title": "Financials", "links": [
+					{"label": "Profit and Loss Statement", "link_type": "Report", "link_to": "Profit and Loss Statement"},
+					{"label": "Balance Sheet", "link_type": "Report", "link_to": "Balance Sheet"},
+					{"label": "Accounts Receivable", "link_type": "Report", "link_to": "Accounts Receivable"},
+					{"label": "Accounts Payable", "link_type": "Report", "link_to": "Accounts Payable"},
+				]},
+				{"title": "Operations", "links": [
+					{"label": "Sales Invoice", "link_to": "Sales Invoice"},
+					{"label": "Purchase Invoice", "link_to": "Purchase Invoice"},
+					{"label": "Delivery Note", "link_to": "Delivery Note"},
+					{"label": "Stock Balance", "link_type": "Report", "link_to": "Stock Balance"},
+				]},
+			],
+		},
+	]
+	for spec in specs:
+		try:
+			_make_workspace(spec)
+		except Exception:
+			frappe.log_error(title="azzir_fleet workspace failed: %s" % spec.get("label"))
+
+
+# --------------------------------------------------------------------------- #
+# Standalone sidebars (each = its own desktop icon + its own independent menu),
+# the same primitive petrol_station's "Fuel Station" uses (Workspace Sidebar).
+# Five separate icons: Sales, Procurement, HR, Accounting, Director.
+# --------------------------------------------------------------------------- #
+def _make_sidebar(title, icon, items):
+	if not frappe.db.exists("DocType", "Workspace Sidebar"):
+		return
+	if frappe.db.exists("Workspace Sidebar", title):
+		return
+	doc = frappe.new_doc("Workspace Sidebar")
+	doc.title = title
+	doc.header_icon = icon
+	doc.app = "azzir_fleet"
+	doc.module = "Azzir Fleet"
+	doc.standard = 0
+	has_link = False
+	for it in items:
+		if it.get("type") == "Section Break":
+			doc.append("items", {"type": "Section Break", "label": it["label"]})
+			continue
+		lt = it.get("link_type", "DocType")
+		if not _target_exists(lt, it["link_to"]):
+			continue
+		doc.append("items", {
+			"type": "Link", "label": it["label"], "link_type": lt,
+			"link_to": it["link_to"], "icon": it.get("icon", ""),
+		})
+		has_link = True
+	if not has_link:
+		return
+	doc.insert(ignore_permissions=True)
+
+
+def _setup_sidebars():
+	specs = [
+		{"title": "Sales", "icon": "sell", "items": [
+			{"type": "Section Break", "label": "Sales"},
+			{"label": "Quotation", "link_to": "Quotation", "icon": "file-text"},
+			{"label": "Sales Order", "link_to": "Sales Order", "icon": "clipboard-list"},
+			{"label": "Sales Invoice", "link_to": "Sales Invoice", "icon": "receipt-text"},
+			{"label": "Delivery Note", "link_to": "Delivery Note", "icon": "truck"},
+			{"label": "Customer", "link_to": "Customer", "icon": "users"},
+			{"label": "Item", "link_to": "Item", "icon": "package"},
+			{"type": "Section Break", "label": "Reports"},
+			{"label": "Commission Report", "link_type": "Report", "link_to": "Commission Report", "icon": "notebook-text"},
+			{"label": "Sales Register", "link_type": "Report", "link_to": "Sales Register", "icon": "notebook-text"},
+			{"label": "Customer Statement", "link_type": "Page", "link_to": "customer-statement", "icon": "sheet"},
+		]},
+		{"title": "Procurement", "icon": "buying", "items": [
+			{"type": "Section Break", "label": "Buying"},
+			{"label": "Material Request", "link_to": "Material Request", "icon": "clipboard-list"},
+			{"label": "Supplier Quotation", "link_to": "Supplier Quotation", "icon": "file-text"},
+			{"label": "Purchase Order", "link_to": "Purchase Order", "icon": "shopping-cart"},
+			{"label": "Purchase Receipt", "link_to": "Purchase Receipt", "icon": "truck"},
+			{"label": "Purchase Invoice", "link_to": "Purchase Invoice", "icon": "receipt-text"},
+			{"label": "Supplier", "link_to": "Supplier", "icon": "users"},
+			{"type": "Section Break", "label": "Reports"},
+			{"label": "Purchase Register", "link_type": "Report", "link_to": "Purchase Register", "icon": "notebook-text"},
+			{"label": "Purchase Order Analysis", "link_type": "Report", "link_to": "Purchase Order Analysis", "icon": "notebook-text"},
+		]},
+		{"title": "HR", "icon": "hr", "items": [
+			{"type": "Section Break", "label": "People"},
+			{"label": "Employee", "link_to": "Employee", "icon": "user-round"},
+			{"label": "Attendance", "link_to": "Attendance", "icon": "calendar-check"},
+			{"label": "Leave Application", "link_to": "Leave Application", "icon": "plane"},
+			{"type": "Section Break", "label": "Payroll"},
+			{"label": "Salary Slip", "link_to": "Salary Slip", "icon": "receipt-text"},
+			{"label": "Payroll Entry", "link_to": "Payroll Entry", "icon": "accounting"},
+			{"label": "Payroll Component Summary", "link_type": "Report", "link_to": "Payroll Component Summary", "icon": "notebook-text"},
+		]},
+		{"title": "Accounting", "icon": "accounting", "items": [
+			{"type": "Section Break", "label": "Transactions"},
+			{"label": "Payment Entry", "link_to": "Payment Entry", "icon": "circle-dollar-sign"},
+			{"label": "Journal Entry", "link_to": "Journal Entry", "icon": "book"},
+			{"label": "Expense Entry", "link_to": "Expense Entry", "icon": "expenses"},
+			{"label": "Sales Invoice", "link_to": "Sales Invoice", "icon": "receipt-text"},
+			{"label": "Purchase Invoice", "link_to": "Purchase Invoice", "icon": "receipt-text"},
+			{"label": "Monthly Budget", "link_to": "Monthly Budget", "icon": "accounting"},
+			{"type": "Section Break", "label": "Financial Reports"},
+			{"label": "General Ledger", "link_type": "Report", "link_to": "General Ledger", "icon": "sheet"},
+			{"label": "Accounts Receivable", "link_type": "Report", "link_to": "Accounts Receivable", "icon": "sheet"},
+			{"label": "Accounts Payable", "link_type": "Report", "link_to": "Accounts Payable", "icon": "sheet"},
+			{"label": "Profit and Loss Statement", "link_type": "Report", "link_to": "Profit and Loss Statement", "icon": "sheet"},
+			{"label": "Balance Sheet", "link_type": "Report", "link_to": "Balance Sheet", "icon": "sheet"},
+			{"label": "Monthly Budget Report", "link_type": "Report", "link_to": "Monthly Budget Report", "icon": "notebook-text"},
+			{"label": "Monthly Budget Comparison Report", "link_type": "Report", "link_to": "Monthly Budget Comparison Report", "icon": "notebook-text"},
+		]},
+		{"title": "Director", "icon": "star", "items": [
+			{"type": "Section Break", "label": "Performance"},
+			{"label": "Commission Report", "link_type": "Report", "link_to": "Commission Report", "icon": "notebook-text"},
+			{"label": "Monthly Budget Comparison Report", "link_type": "Report", "link_to": "Monthly Budget Comparison Report", "icon": "notebook-text"},
+			{"label": "Sales Register", "link_type": "Report", "link_to": "Sales Register", "icon": "notebook-text"},
+			{"type": "Section Break", "label": "Financials"},
+			{"label": "Profit and Loss Statement", "link_type": "Report", "link_to": "Profit and Loss Statement", "icon": "sheet"},
+			{"label": "Balance Sheet", "link_type": "Report", "link_to": "Balance Sheet", "icon": "sheet"},
+			{"label": "Accounts Receivable", "link_type": "Report", "link_to": "Accounts Receivable", "icon": "sheet"},
+			{"type": "Section Break", "label": "Operations"},
+			{"label": "Sales Invoice", "link_to": "Sales Invoice", "icon": "receipt-text"},
+			{"label": "Purchase Invoice", "link_to": "Purchase Invoice", "icon": "receipt-text"},
+			{"label": "Stock Balance", "link_type": "Report", "link_to": "Stock Balance", "icon": "stock"},
+		]},
+	]
+	for s in specs:
+		try:
+			_make_sidebar(s["title"], s["icon"], s["items"])
+		except Exception:
+			frappe.log_error(title="azzir_fleet sidebar failed: %s" % s["title"])

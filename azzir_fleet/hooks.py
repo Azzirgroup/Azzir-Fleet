@@ -10,16 +10,10 @@ app_license = "mit"
 
 # required_apps = []
 
-# Each item in the list will be shown as an app in the apps page
-# add_to_apps_screen = [
-# 	{
-# 		"name": "azzir_fleet",
-# 		"logo": "/assets/azzir_fleet/logo.png",
-# 		"title": "Azzir Fleet",
-# 		"route": "/azzir_fleet",
-# 		"has_permission": "azzir_fleet.api.permission.has_app_permission"
-# 	}
-# ]
+# Each item in the list will be shown as an app in the apps page / app switcher.
+# This is what makes the Azzir Fleet workspaces (Sales, Procurement, HR,
+# Accounting, Director) appear in the desk sidebar.
+# (Removed the Azzir Fleet app tiles / workspaces — reverted per request.)
 
 # Includes in <head>
 # ------------------
@@ -108,6 +102,19 @@ on_session_creation = "azzir_fleet.session.enforce_session_limit"
 # before_install = "azzir_fleet.install.before_install"
 after_install = "azzir_fleet.setup.after_install"
 after_migrate = "azzir_fleet.setup.after_migrate"
+
+# Declarative desk sidebars (one desktop icon + own menu each): Sales,
+# Procurement, HR, Accounting, Director. Shipped as JSON fixtures so they deploy
+# reliably (imported on every migrate) instead of being created by runtime code.
+fixtures = [
+	{
+		# "Azzir Fleet" is a hidden suppressor (only a section break, so it doesn't
+		# render) — it stops Frappe from auto-generating a cluttered module sidebar,
+		# leaving ONLY the 5 icons.
+		"dt": "Workspace Sidebar",
+		"filters": [["name", "in", ["Sales", "Procurement", "HR", "Accounting", "Director", "Azzir Fleet"]]],
+	},
+]
 
 # Uninstallation
 # ------------
