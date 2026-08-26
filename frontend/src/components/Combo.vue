@@ -1,7 +1,7 @@
 <template>
   <div ref="root" class="relative">
     <input
-      :value="open ? query : label"
+      :value="open ? query : (label || modelValue)"
       :placeholder="placeholder"
       class="w-full rounded-md border px-3 py-2 text-sm"
       @focus="onFocus"
@@ -82,13 +82,20 @@ function onDocClick(e) {
   if (root.value && !root.value.contains(e.target)) open.value = false
 }
 
-// keep the displayed label in sync if the value is set externally
-watch(
-  () => props.modelValue,
-  (v) => { if (!v) label.value = '' },
-  { immediate: true },
-)
+// Resolve the friendly label for a value set from outside (prefill / edit),
+// so the field shows the customer/item instead of the placeholder.
+async function resolveLabel(v) {
+  if (!v) { label.value = ''; return }
+  if (props.display === 'name') { label.value = v; return }
+  const d = await getList(props.doctype, { fields: ['name', props.display], filters: { name: v }, limit: 1 }).catch(() => [])
+  label.value = (d && d[0] && d[0][props.display]) || v
+}
 
-onMounted(() => document.addEventListener('click', onDocClick))
+watch(() => props.modelValue, (v) => resolveLabel(v))
+
+onMounted(() => {
+  document.addEventListener('click', onDocClick)
+  resolveLabel(props.modelValue)
+})
 onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
 </script>
