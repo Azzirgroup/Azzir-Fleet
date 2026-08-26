@@ -1,0 +1,23 @@
+{
+ "app": "azzir_fleet",
+ "bg_color": "gray",
+ "creation": "2026-08-25 00:00:00.000000",
+ "docstatus": 0,
+ "doctype": "Desktop Icon",
+ "hidden": 0,
+ "icon": "sell",
+ "icon_image": "/assets/azzir_fleet/frontend/logo.svg",
+ "icon_type": "Link",
+ "idx": 0,
+ "label": "Azzir Sales",
+ "link": "/sales",
+ "link_type": "External",
+ "logo_url": "/assets/azzir_fleet/frontend/logo.svg",
+ "modified": "2026-08-25 00:00:00.000000",
+ "modified_by": "Administrator",
+ "name": "Azzir Sales",
+ "owner": "Administrator",
+ "restrict_removal": 0,
+ "roles": [],
+ "standard": 1
+}

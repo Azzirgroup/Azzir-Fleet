@@ -13,7 +13,22 @@ app_license = "mit"
 # Each item in the list will be shown as an app in the apps page / app switcher.
 # This is what makes the Azzir Fleet workspaces (Sales, Procurement, HR,
 # Accounting, Director) appear in the desk sidebar.
-# (Removed the Azzir Fleet app tiles / workspaces — reverted per request.)
+# The Azzir Sales frappe-ui frontend (/sales), shown as its own app with a logo
+# on the apps screen / desktop.
+add_to_apps_screen = [
+	{
+		"name": "azzir_fleet",
+		"logo": "/assets/azzir_fleet/frontend/logo.svg",
+		"title": "Azzir Sales",
+		"route": "/sales",
+		"has_permission": "azzir_fleet.sales_api.has_app_permission",
+	}
+]
+
+# Every path under /sales renders the SPA shell; the Vue router takes over.
+website_route_rules = [
+	{"from_route": "/sales/<path:app_path>", "to_route": "sales"},
+]
 
 # Includes in <head>
 # ------------------

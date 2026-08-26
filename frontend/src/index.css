@@ -1,0 +1,5 @@
+@import 'frappe-ui/style.css';
+
+:root { --azzir: #2b3a67; }
+html, body, #app { height: 100%; margin: 0; }
+.azzir-brand { background: var(--azzir); }

@@ -415,6 +415,7 @@ def after_migrate():
 		("group_stock_role", _setup_group_stock_role),
 		("overdue_todo_notification", _setup_overdue_todo_notification),
 		("below_cost_workflow", _setup_below_cost_workflow),
+		("item_link_code_only", _show_item_code_only_in_links),
 		("warehouse_mandatory", _make_warehouse_mandatory),
 		("editable_customer_name", _make_customer_name_editable),
 		("material_issue_workflow", _setup_material_issue_workflow),
@@ -487,6 +488,15 @@ def _setup_below_cost_workflow():
 	# Same below-cost approval on both Sales Invoice and Quotation.
 	_make_below_cost_workflow("Sales Below Cost Approval", "Sales Invoice", "Accounts User", "Accounts Manager")
 	_make_below_cost_workflow("Quotation Below Cost Approval", "Quotation", "Sales User", "Sales Manager")
+
+
+def _show_item_code_only_in_links():
+	"""Item link fields (Sales Invoice items, etc.) show just the item CODE, not
+	'code: item_name'. Turns off 'Show Title in Link Fields' on the Item doctype."""
+	make_property_setter(
+		"Item", None, "show_title_field_in_link", 0, "Check",
+		for_doctype=True, validate_fields_for_doctype=False,
+	)
 
 
 def _make_warehouse_mandatory():

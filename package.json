@@ -1,0 +1,9 @@
+{
+  "name": "azzir_fleet",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Azzir Fleet app root — builds the frappe-ui Sales frontend during `bench build`.",
+  "scripts": {
+    "build": "cd frontend && npm ci && npm run build"
+  }
+}

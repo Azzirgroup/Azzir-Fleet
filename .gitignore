@@ -1,0 +1,6 @@
+
+# build & caches
+node_modules/
+__pycache__/
+*.pyc
+frontend/dist/
