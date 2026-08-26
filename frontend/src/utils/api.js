@@ -26,6 +26,11 @@ export const stockTree = (item_code, groups_only = 0) =>
 
 export const salesDefaults = () => call('azzir_fleet.sales_api.get_defaults')
 export const dashboardStats = () => call('azzir_fleet.sales_api.dashboard_stats')
+export const itemDetails = (item_code, customer, company, price_list, qty = 1) =>
+  call('azzir_fleet.sales_api.item_details', { item_code, customer, company, price_list, qty })
+export const makeNext = (source_doctype, source_name, target) =>
+  call('azzir_fleet.sales_api.make_next', { source_doctype, source_name, target })
+export const saveDoc = (doc) => call('frappe.client.save', { doc })
 
 export const fmt = (n, currency) => {
   const v = Number(n || 0)

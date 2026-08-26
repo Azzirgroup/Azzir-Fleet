@@ -2,7 +2,7 @@
   <div class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4" @click.self="close">
     <div class="my-6 w-full max-w-3xl rounded-xl bg-white shadow-xl">
       <div class="flex items-center gap-2 border-b px-4 py-3">
-        <h3 class="font-semibold">New {{ doctype }}</h3>
+        <h3 class="font-semibold">{{ edit ? `Edit ${doctype} ${edit.name}` : `New ${doctype}` }}</h3>
         <div class="ml-auto flex gap-2">
           <button :disabled="busy" class="rounded-md border px-3 py-1.5 text-sm" @click="save(false)">Save Draft</button>
           <button :disabled="busy" class="azzir-brand rounded-md px-3 py-1.5 text-sm text-white" @click="save(true)">Save &amp; Submit</button>
@@ -35,7 +35,7 @@
             </thead>
             <tbody>
               <tr v-for="(row, i) in rows" :key="i" class="border-t align-top">
-                <td class="px-2 py-2 w-64"><Combo v-model="row.item_code" doctype="Item" display="item_name" placeholder="Select item" :filters="{ disabled: 0 }" /></td>
+                <td class="px-2 py-2 w-64"><Combo v-model="row.item_code" doctype="Item" display="item_name" placeholder="Select item" :filters="{ disabled: 0 }" @update:model-value="(v) => onItem(i, v)" /></td>
                 <td class="px-2 py-2"><input v-model.number="row.qty" type="number" class="w-14 rounded border px-2 py-1" /></td>
                 <td class="px-2 py-2"><input v-model.number="row.rate" type="number" class="w-20 rounded border px-2 py-1" /></td>
                 <td class="px-2 py-2">
@@ -68,15 +68,20 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { insertDoc, submitDoc, salesDefaults, fmt } from '@/utils/api.js'
+import { insertDoc, submitDoc, saveDoc, itemDetails, salesDefaults, fmt } from '@/utils/api.js'
 import Combo from '@/components/Combo.vue'
 import StockTree from '@/components/StockTree.vue'
 
-const props = defineProps({ doctype: String })
+const props = defineProps({
+  doctype: String,
+  edit: { type: Object, default: null },
+  initial: { type: Object, default: null },
+})
 const emit = defineEmits(['close', 'saved'])
 
 const defaults = ref({})
 const customer = ref('')
+const base = ref(null) // full existing doc when editing
 const rows = ref([])
 const busy = ref(false)
 const msg = ref('')
@@ -85,23 +90,51 @@ const stockRow = ref(null)
 
 const total = computed(() => rows.value.reduce((s, r) => s + (Number(r.qty) || 0) * (Number(r.rate) || 0), 0))
 
-onMounted(async () => { defaults.value = await salesDefaults().catch(() => ({})); addRow() })
+onMounted(async () => {
+  defaults.value = await salesDefaults().catch(() => ({}))
+  if (props.edit) {
+    base.value = props.edit
+    customer.value = props.edit.party_name || props.edit.customer || ''
+    rows.value = (props.edit.items || []).map((r) => ({ item_code: r.item_code, qty: r.qty, rate: r.rate, warehouse: r.warehouse || '' }))
+    if (!rows.value.length) addRow()
+  } else if (props.initial) {
+    customer.value = props.initial.customer || ''
+    rows.value = (props.initial.items || []).map((r) => ({ item_code: r.item_code, qty: r.qty || 1, rate: r.rate || 0, warehouse: r.warehouse || '' }))
+    if (!rows.value.length) addRow()
+  } else {
+    addRow()
+  }
+})
 function addRow() { rows.value.push({ item_code: '', qty: 1, rate: 0, warehouse: '' }) }
 function setWarehouse(wh) { if (stockRow.value !== null) rows.value[stockRow.value].warehouse = wh; stockRow.value = null }
 function close() { emit('close') }
+
+// Auto-fetch the price when an item is chosen (like ERPNext).
+async function onItem(i, item_code) {
+  if (!item_code) return
+  const d = await itemDetails(item_code, customer.value, defaults.value.company, defaults.value.selling_price_list, rows.value[i].qty || 1).catch(() => ({}))
+  if (d && d.rate && !rows.value[i].rate) rows.value[i].rate = d.rate
+}
 
 async function save(submit) {
   msg.value = ''
   if (!customer.value) { err.value = true; msg.value = 'Pick a customer.'; return }
   const items = rows.value.filter((r) => r.item_code).map((r) => ({ item_code: r.item_code, qty: r.qty || 1, rate: r.rate || 0, warehouse: r.warehouse || undefined }))
   if (!items.length) { err.value = true; msg.value = 'Add at least one item.'; return }
-  const d = { doctype: props.doctype, company: defaults.value.company, items }
-  if (props.doctype === 'Quotation') { d.quotation_to = 'Customer'; d.party_name = customer.value }
-  else d.customer = customer.value
   busy.value = true
   try {
-    let saved = await insertDoc(d)
-    if (submit) saved = await submitDoc(saved)
+    let saved
+    if (base.value) {
+      const d = { ...base.value, items }
+      saved = await saveDoc(d)
+      if (submit) saved = await submitDoc(saved)
+    } else {
+      const d = { doctype: props.doctype, company: defaults.value.company, items }
+      if (props.doctype === 'Quotation') { d.quotation_to = 'Customer'; d.party_name = customer.value }
+      else d.customer = customer.value
+      saved = await insertDoc(d)
+      if (submit) saved = await submitDoc(saved)
+    }
     emit('saved', saved)
   } catch (e) {
     err.value = true; msg.value = e?.messages?.join(', ') || e?.message || 'Could not save.'
