@@ -215,6 +215,15 @@ CUSTOM_FIELDS = {
 			"fieldtype": "Data",
 			"insert_after": "azzir_tax_id",
 		},
+		# Employees can belong to more than one cost center.
+		{
+			"fieldname": "azzir_cost_centers",
+			"label": "Cost Centers",
+			"fieldtype": "Table",
+			"options": "Employee Cost Center",
+			"insert_after": "department",
+			"description": "Cost centers this employee belongs to. Add a row per cost center.",
+		},
 	],
 	"Supplier": [
 		{
