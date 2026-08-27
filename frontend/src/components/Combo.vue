@@ -25,6 +25,7 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { call } from 'frappe-ui'
 import { getList } from '@/utils/api.js'
 
 const props = defineProps({
@@ -33,6 +34,8 @@ const props = defineProps({
   display: { type: String, default: 'name' },
   filters: { type: Object, default: () => ({}) },
   placeholder: { type: String, default: 'Select…' },
+  queryMethod: { type: String, default: '' },
+  queryArgs: { type: Object, default: () => ({}) },
 })
 const emit = defineEmits(['update:modelValue'])
 
@@ -47,14 +50,18 @@ let timer = null
 async function fetch(q) {
   loading.value = true
   try {
-    const filters = { ...props.filters }
-    if (q) filters[props.display] = ['like', `%${q}%`]
-    options.value = await getList(props.doctype, {
-      fields: props.display === 'name' ? ['name'] : ['name', props.display],
-      filters,
-      order_by: `${props.display} asc`,
-      limit: 25,
-    })
+    if (props.queryMethod) {
+      options.value = await call(props.queryMethod, { txt: q, ...props.queryArgs })
+    } else {
+      const filters = { ...props.filters }
+      if (q) filters[props.display] = ['like', `%${q}%`]
+      options.value = await getList(props.doctype, {
+        fields: props.display === 'name' ? ['name'] : ['name', props.display],
+        filters,
+        order_by: `${props.display} asc`,
+        limit: 25,
+      })
+    }
   } catch (e) {
     options.value = []
   } finally {

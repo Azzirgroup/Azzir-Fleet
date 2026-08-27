@@ -5,6 +5,7 @@
       <h2 class="text-lg font-semibold">{{ doctype }} {{ name }}</h2>
       <span class="rounded-full px-2 py-0.5 text-xs" :class="statusClass">{{ statusText }}</span>
       <div class="ml-auto flex flex-wrap gap-2">
+        <button class="rounded-md border px-3 py-1.5 text-sm" @click="printDoc">🖨 Print</button>
         <!-- Draft actions -->
         <template v-if="doc.docstatus === 0">
           <button class="rounded-md border px-3 py-1.5 text-sm" @click="editing = true">Edit</button>
@@ -114,6 +115,12 @@ async function createNext(target) {
   } catch (e) {
     err.value = true; msg.value = e?.messages?.join(', ') || e?.message || `Could not create ${target}.`
   } finally { busy.value = false }
+}
+
+function printDoc() {
+  // Opens the desk print view, which renders the doctype's default print format.
+  const url = `/printview?doctype=${encodeURIComponent(props.doctype)}&name=${encodeURIComponent(props.name)}&trigger_print=1`
+  window.open(url, '_blank')
 }
 
 function onNextSaved(saved) {

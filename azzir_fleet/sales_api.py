@@ -38,6 +38,34 @@ def dashboard_stats() -> dict:
 
 
 @frappe.whitelist()
+def list_customers(company: str | None = None, txt: str | None = None) -> list:
+	"""Customers, optionally filtered to a company. Uses a Customer 'company' field
+	if one exists; otherwise falls back to customers transacted with that company
+	(quotations / invoices)."""
+	like = "%%%s%%" % (txt or "")
+	conds = "(c.name like %(t)s or c.customer_name like %(t)s) and c.disabled = 0"
+	vals = {"t": like}
+	if company:
+		if frappe.get_meta("Customer").has_field("company"):
+			conds += " and c.company = %(co)s"
+			vals["co"] = company
+		else:
+			conds += """ and c.name in (
+				select customer from `tabSales Invoice` where company = %(co)s
+				union select party_name from `tabQuotation` where company = %(co)s and quotation_to = 'Customer'
+				union select customer from `tabDelivery Note` where company = %(co)s
+			)"""
+			vals["co"] = company
+	return frappe.db.sql(
+		"select c.name, c.customer_name from `tabCustomer` c where "
+		+ conds
+		+ " order by c.customer_name limit 25",
+		vals,
+		as_dict=True,
+	)
+
+
+@frappe.whitelist()
 def item_details(item_code: str, customer: str | None = None, company: str | None = None,
                  price_list: str | None = None, qty: float = 1) -> dict:
 	"""Rate + description for an item, the same way ERPNext auto-fills a sales row

@@ -15,12 +15,12 @@
 
         <div class="mb-4 grid grid-cols-1 gap-3 md:grid-cols-2">
           <div>
-            <label class="mb-1 block text-xs text-gray-500">Customer</label>
-            <Combo v-model="customer" doctype="Customer" display="customer_name" placeholder="Select customer" />
+            <label class="mb-1 block text-xs text-gray-500">Company</label>
+            <Combo v-model="company" doctype="Company" display="name" placeholder="Select company" />
           </div>
           <div>
-            <label class="mb-1 block text-xs text-gray-500">Company</label>
-            <div class="rounded-md border bg-gray-50 px-3 py-2 text-sm">{{ defaults.company }}</div>
+            <label class="mb-1 block text-xs text-gray-500">Customer</label>
+            <Combo v-model="customer" doctype="Customer" display="customer_name" placeholder="Select customer" query-method="azzir_fleet.sales_api.list_customers" :query-args="{ company }" />
           </div>
         </div>
 
@@ -67,7 +67,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { insertDoc, submitDoc, saveDoc, itemDetails, salesDefaults, fmt } from '@/utils/api.js'
 import Combo from '@/components/Combo.vue'
 import StockTree from '@/components/StockTree.vue'
@@ -80,6 +80,7 @@ const props = defineProps({
 const emit = defineEmits(['close', 'saved'])
 
 const defaults = ref({})
+const company = ref('')
 const customer = ref('')
 const base = ref(null) // full existing doc when editing
 const rows = ref([])
@@ -90,8 +91,12 @@ const stockRow = ref(null)
 
 const total = computed(() => rows.value.reduce((s, r) => s + (Number(r.qty) || 0) * (Number(r.rate) || 0), 0))
 
+// Changing the company clears the picked customer (it may not belong to the new one).
+watch(company, (n, o) => { if (o) customer.value = '' })
+
 onMounted(async () => {
   defaults.value = await salesDefaults().catch(() => ({}))
+  company.value = props.edit?.company || props.initial?.company || defaults.value.company || ''
   if (props.edit) {
     base.value = props.edit
     customer.value = props.edit.party_name || props.edit.customer || ''
@@ -125,11 +130,11 @@ async function save(submit) {
   try {
     let saved
     if (base.value) {
-      const d = { ...base.value, items }
+      const d = { ...base.value, company: company.value, items }
       saved = await saveDoc(d)
       if (submit) saved = await submitDoc(saved)
     } else {
-      const d = { doctype: props.doctype, company: defaults.value.company, items }
+      const d = { doctype: props.doctype, company: company.value, items }
       if (props.doctype === 'Quotation') { d.quotation_to = 'Customer'; d.party_name = customer.value }
       else d.customer = customer.value
       saved = await insertDoc(d)
