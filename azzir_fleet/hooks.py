@@ -163,13 +163,31 @@ fixtures = [
 # -----------
 # Permissions evaluated in scripted ways
 
-# permission_query_conditions = {
-# 	"Event": "frappe.desk.doctype.event.event.get_permission_query_conditions",
-# }
-#
-# has_permission = {
-# 	"Event": "frappe.desk.doctype.event.event.has_permission",
-# }
+# Procurement users see only the documents they created; the 'Azzir Procurement
+# Overseer' role (or Purchase Manager / System Manager) sees all.
+permission_query_conditions = {
+	dt: "azzir_fleet.procurement.get_permission_query_conditions"
+	for dt in (
+		"Material Request",
+		"Request for Quotation",
+		"Supplier Quotation",
+		"Purchase Order",
+		"Purchase Receipt",
+		"Purchase Invoice",
+	)
+}
+
+has_permission = {
+	dt: "azzir_fleet.procurement.has_permission"
+	for dt in (
+		"Material Request",
+		"Request for Quotation",
+		"Supplier Quotation",
+		"Purchase Order",
+		"Purchase Receipt",
+		"Purchase Invoice",
+	)
+}
 
 # Document Events
 # ---------------

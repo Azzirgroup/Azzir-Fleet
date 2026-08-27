@@ -422,6 +422,7 @@ def after_migrate():
 		("session_limit", _enforce_session_limit),
 		("multicurrency", _enable_multicurrency),
 		("sales_overseer_role", _setup_sales_overseer_role),
+		("procurement_overseer_role", _setup_procurement_overseer_role),
 	]
 	for label, fn in steps:
 		try:
@@ -446,6 +447,15 @@ def _setup_sales_overseer_role():
 	if not frappe.db.exists("Role", "Azzir Sales Overseer"):
 		frappe.get_doc(
 			{"doctype": "Role", "role_name": "Azzir Sales Overseer", "desk_access": 1}
+		).insert(ignore_permissions=True)
+
+
+def _setup_procurement_overseer_role():
+	"""A procurement user only sees the documents they created; give a user this
+	role and they see everyone's (see azzir_fleet.procurement)."""
+	if not frappe.db.exists("Role", "Azzir Procurement Overseer"):
+		frappe.get_doc(
+			{"doctype": "Role", "role_name": "Azzir Procurement Overseer", "desk_access": 1}
 		).insert(ignore_permissions=True)
 
 
