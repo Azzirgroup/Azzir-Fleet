@@ -199,6 +199,12 @@ doc_events = {
 		"on_update": "azzir_fleet.item_codes.on_update",
 		"after_rename": "azzir_fleet.item_codes.after_rename",
 	},
+	# Mirror the Employee 'Cost Centers' table into User Permissions so the
+	# linked user only sees data for their cost center(s); none = sees all.
+	"Employee": {
+		"on_update": "azzir_fleet.employee_permissions.sync_cost_center_permissions",
+		"on_trash": "azzir_fleet.employee_permissions.clear_cost_center_permissions",
+	},
 	# Maker-checker: the creator of a Stock Entry draft cannot submit it.
 	"Stock Entry": {
 		"before_submit": [
