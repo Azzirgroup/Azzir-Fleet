@@ -421,6 +421,7 @@ def after_migrate():
 		("material_issue_workflow", _setup_material_issue_workflow),
 		("session_limit", _enforce_session_limit),
 		("multicurrency", _enable_multicurrency),
+		("sales_overseer_role", _setup_sales_overseer_role),
 	]
 	for label, fn in steps:
 		try:
@@ -435,6 +436,16 @@ def _setup_group_stock_role():
 	if not frappe.db.exists("Role", "Azzir Group Stock"):
 		frappe.get_doc(
 			{"doctype": "Role", "role_name": "Azzir Group Stock", "desk_access": 1}
+		).insert(ignore_permissions=True)
+
+
+def _setup_sales_overseer_role():
+	"""On the Azzir Sales frontend a salesperson only sees the quotations /
+	invoices / delivery notes they created. Give a user this role and they see
+	ALL sales instead (see azzir_fleet.sales_api.sales_list)."""
+	if not frappe.db.exists("Role", "Azzir Sales Overseer"):
+		frappe.get_doc(
+			{"doctype": "Role", "role_name": "Azzir Sales Overseer", "desk_access": 1}
 		).insert(ignore_permissions=True)
 
 

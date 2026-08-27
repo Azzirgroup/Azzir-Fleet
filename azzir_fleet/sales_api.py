@@ -6,6 +6,15 @@ import frappe
 from frappe.utils import flt, getdate, get_first_day, get_last_day, nowdate
 
 
+SALES_DOCTYPES = {"Quotation", "Sales Invoice", "Delivery Note"}
+SEE_ALL_ROLES = {"Azzir Sales Overseer", "Sales Manager", "System Manager"}
+
+
+def _can_see_all() -> bool:
+	"""Holders of an overseer role see everyone's sales; others see only their own."""
+	return bool(set(frappe.get_roles()) & SEE_ALL_ROLES)
+
+
 @frappe.whitelist()
 def get_defaults() -> dict:
 	"""Company / currency / price list the Sales forms post against."""
@@ -16,7 +25,26 @@ def get_defaults() -> dict:
 		"currency": currency,
 		"selling_price_list": frappe.db.get_single_value("Selling Settings", "selling_price_list"),
 		"user": frappe.session.user,
+		"can_see_all": _can_see_all(),
 	}
+
+
+@frappe.whitelist()
+def sales_list(doctype: str, fields: list | str | None = None, filters: dict | str | None = None,
+               order_by: str = "modified desc", limit_page_length: int = 100, limit_start: int = 0) -> list:
+	"""List sales documents. A normal salesperson only sees the ones THEY created;
+	holders of an overseer role (Azzir Sales Overseer / Sales Manager / System
+	Manager) see all. Enforced on the server, not just hidden in the UI."""
+	if doctype not in SALES_DOCTYPES:
+		frappe.throw(frappe._("Not allowed."))
+	filters = frappe.parse_json(filters) if isinstance(filters, str) else (filters or {})
+	fields = frappe.parse_json(fields) if isinstance(fields, str) else (fields or ["name"])
+	if not _can_see_all():
+		filters["owner"] = frappe.session.user
+	return frappe.get_list(
+		doctype, fields=fields, filters=filters, order_by=order_by,
+		limit_page_length=limit_page_length, limit_start=limit_start,
+	)
 
 
 @frappe.whitelist()
@@ -24,16 +52,23 @@ def dashboard_stats() -> dict:
 	"""KPI counts for the Sales dashboard."""
 	company = frappe.defaults.get_user_default("Company") or frappe.db.get_value("Company", {}, "name")
 	start, end = get_first_day(nowdate()), get_last_day(nowdate())
-	month_sales = frappe.db.sql(
+	mine = not _can_see_all()
+	owner = frappe.session.user
+
+	def cnt(dt, f):
+		return frappe.db.count(dt, {**f, "owner": owner} if mine else f)
+
+	ms = frappe.db.sql(
 		"""select coalesce(sum(base_grand_total), 0) from `tabSales Invoice`
-		   where docstatus = 1 and company = %(c)s and posting_date between %(s)s and %(e)s""",
-		{"c": company, "s": start, "e": end},
+		   where docstatus = 1 and company = %(c)s and posting_date between %(s)s and %(e)s
+		   {owner}""".format(owner="and owner = %(o)s" if mine else ""),
+		{"c": company, "s": start, "e": end, "o": owner},
 	)[0][0]
 	return {
-		"open_quotations": frappe.db.count("Quotation", {"status": "Open"}),
-		"unpaid_invoices": frappe.db.count("Sales Invoice", {"status": "Unpaid"}),
-		"draft_invoices": frappe.db.count("Sales Invoice", {"docstatus": 0}),
-		"month_sales": flt(month_sales),
+		"open_quotations": cnt("Quotation", {"status": "Open"}),
+		"unpaid_invoices": cnt("Sales Invoice", {"status": "Unpaid"}),
+		"draft_invoices": cnt("Sales Invoice", {"docstatus": 0}),
+		"month_sales": flt(ms),
 	}
 
 

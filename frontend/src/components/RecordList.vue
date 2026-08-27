@@ -56,7 +56,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { getList, fmt } from '@/utils/api.js'
+import { getList, salesList, fmt } from '@/utils/api.js'
 import DocDialog from '@/components/DocDialog.vue'
 
 const props = defineProps({
@@ -90,7 +90,8 @@ async function load() {
   try {
     const filters = { ...props.filters }
     if (q.value) filters[props.searchField] = ['like', `%${q.value}%`]
-    rows.value = await getList(props.doctype, {
+    const fetchList = canCreate.value ? salesList : getList
+    rows.value = await fetchList(props.doctype, {
       fields: props.columns.map((c) => c.field),
       filters,
       limit: 100,

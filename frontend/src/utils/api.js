@@ -13,6 +13,18 @@ export const getList = (doctype, opts = {}) =>
 export const getCount = (doctype, filters = {}) =>
   call('frappe.client.get_count', { doctype, filters })
 
+// Sales lists are scoped server-side: a salesperson only sees the documents they
+// created; holders of an overseer role see all. Same shape as getList.
+export const salesList = (doctype, opts = {}) =>
+  call('azzir_fleet.sales_api.sales_list', {
+    doctype,
+    fields: opts.fields || ['name'],
+    filters: opts.filters || {},
+    order_by: opts.order_by || 'modified desc',
+    limit_page_length: opts.limit || 100,
+    limit_start: opts.start || 0,
+  })
+
 export const getDoc = (doctype, name) =>
   call('frappe.client.get', { doctype, name })
 
