@@ -161,5 +161,5 @@ def make_next(source_doctype: str, source_name: str, target: str) -> dict:
 def has_app_permission() -> bool:
 	"""Who may open the /sales app: sales roles, accounts, or a manager."""
 	roles = set(frappe.get_roles())
-	allowed = {"Sales User", "Sales Manager", "Accounts User", "Accounts Manager", "System Manager"}
+	allowed = {"Sales User", "Sales Manager", "Accounts User", "Accounts Manager", "System Manager", "Sales Portal"}
 	return bool(roles & allowed)

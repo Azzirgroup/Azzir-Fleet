@@ -109,7 +109,11 @@ jinja = {
 # ----------
 # Cap concurrent logins per user (phone + desktop). Must NOT use System Settings
 # .deny_multiple_sessions — that force-clears ALL other sessions.
-on_session_creation = "azzir_fleet.session.enforce_session_limit"
+on_session_creation = [
+	"azzir_fleet.session.enforce_session_limit",
+	# Route 'Sales Portal' users to /sales on login; others go to the desk.
+	"azzir_fleet.session.route_portal_users_on_login",
+]
 
 # Installation
 # ------------

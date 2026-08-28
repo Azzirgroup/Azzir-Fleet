@@ -16,6 +16,8 @@ from frappe.sessions import clear_sessions
 
 MAX_SESSIONS = 2
 
+SALES_PORTAL_ROLE = "Sales Portal"
+
 
 def enforce_session_limit(login_manager=None):
 	user = frappe.session.user
@@ -23,3 +25,16 @@ def enforce_session_limit(login_manager=None):
 		return
 	# force=False -> keeps the `simultaneous_sessions` most recent sessions.
 	clear_sessions(user, keep_current=True, force=False)
+
+
+def route_portal_users_on_login(login_manager=None):
+	"""Send users with the 'Sales Portal' role straight to the /sales app after
+	login; everyone else lands on their normal desk dashboard.
+
+	Runs during on_session_creation, before Frappe computes the post-login
+	home page, so setting `flags.home_page` here wins over the default
+	workspace / desk redirect."""
+	if frappe.session.user in ("Guest", "Administrator"):
+		return
+	if SALES_PORTAL_ROLE in frappe.get_roles():
+		frappe.local.flags.home_page = "sales"

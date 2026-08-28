@@ -432,6 +432,7 @@ def after_migrate():
 		("multicurrency", _enable_multicurrency),
 		("sales_overseer_role", _setup_sales_overseer_role),
 		("procurement_overseer_role", _setup_procurement_overseer_role),
+		("sales_portal_role", _setup_sales_portal_role),
 	]
 	for label, fn in steps:
 		try:
@@ -465,6 +466,16 @@ def _setup_procurement_overseer_role():
 	if not frappe.db.exists("Role", "Azzir Procurement Overseer"):
 		frappe.get_doc(
 			{"doctype": "Role", "role_name": "Azzir Procurement Overseer", "desk_access": 1}
+		).insert(ignore_permissions=True)
+
+
+def _setup_sales_portal_role():
+	"""Users with this role are taken straight to the /sales portal on login
+	(see azzir_fleet.session.route_portal_users_on_login); everyone else lands
+	on the desk dashboard."""
+	if not frappe.db.exists("Role", "Sales Portal"):
+		frappe.get_doc(
+			{"doctype": "Role", "role_name": "Sales Portal", "desk_access": 1}
 		).insert(ignore_permissions=True)
 
 
