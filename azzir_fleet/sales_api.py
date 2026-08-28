@@ -74,23 +74,16 @@ def dashboard_stats() -> dict:
 
 @frappe.whitelist()
 def list_customers(company: str | None = None, txt: str | None = None) -> list:
-	"""Customers, optionally filtered to a company. Uses a Customer 'company' field
-	if one exists; otherwise falls back to customers transacted with that company
-	(quotations / invoices)."""
+	"""Customers for the sales forms. If the Customer doctype has a 'company'
+	field, narrow to that company; otherwise show ALL customers (customers are
+	not company-scoped in stock ERPNext, so filtering by company would wrongly
+	hide everyone). Always returns data as long as customers exist."""
 	like = "%%%s%%" % (txt or "")
 	conds = "(c.name like %(t)s or c.customer_name like %(t)s) and c.disabled = 0"
 	vals = {"t": like}
-	if company:
-		if frappe.get_meta("Customer").has_field("company"):
-			conds += " and c.company = %(co)s"
-			vals["co"] = company
-		else:
-			conds += """ and c.name in (
-				select customer from `tabSales Invoice` where company = %(co)s
-				union select party_name from `tabQuotation` where company = %(co)s and quotation_to = 'Customer'
-				union select customer from `tabDelivery Note` where company = %(co)s
-			)"""
-			vals["co"] = company
+	if company and frappe.get_meta("Customer").has_field("company"):
+		conds += " and c.company = %(co)s"
+		vals["co"] = company
 	return frappe.db.sql(
 		"select c.name, c.customer_name from `tabCustomer` c where "
 		+ conds
