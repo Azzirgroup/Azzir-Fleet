@@ -38,3 +38,5 @@ def route_portal_users_on_login(login_manager=None):
 		return
 	if SALES_PORTAL_ROLE in frappe.get_roles():
 		frappe.local.flags.home_page = "sales"
+
+

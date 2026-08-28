@@ -470,13 +470,22 @@ def _setup_procurement_overseer_role():
 
 
 def _setup_sales_portal_role():
-	"""Users with this role are taken straight to the /sales portal on login
-	(see azzir_fleet.session.route_portal_users_on_login); everyone else lands
-	on the desk dashboard."""
+	"""Users with this role are taken straight to the /sales portal on login;
+	everyone else lands on the desk dashboard.
+
+	Two mechanisms, so it works regardless of the login path:
+	  * Role.home_page = "sales" — read directly by frappe.get_home_page (works
+	    even on a resumed session).
+	  * on_session_creation flag (route_portal_users_on_login) — wins over a
+	    user's default workspace for a fresh login."""
 	if not frappe.db.exists("Role", "Sales Portal"):
 		frappe.get_doc(
-			{"doctype": "Role", "role_name": "Sales Portal", "desk_access": 1}
+			{"doctype": "Role", "role_name": "Sales Portal", "desk_access": 1, "home_page": "sales"}
 		).insert(ignore_permissions=True)
+	elif frappe.db.get_value("Role", "Sales Portal", "home_page") != "sales":
+		frappe.db.set_value("Role", "Sales Portal", "home_page", "sales")
+	# The home page is cached per user; drop it so the new landing takes effect.
+	frappe.cache.delete_key("home_page")
 
 
 def _setup_overdue_todo_notification():
