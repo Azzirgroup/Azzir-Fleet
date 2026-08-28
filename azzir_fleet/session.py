@@ -34,7 +34,7 @@ def route_portal_users_on_login(login_manager=None):
 	Runs during on_session_creation, before Frappe computes the post-login
 	home page, so setting `flags.home_page` here wins over the default
 	workspace / desk redirect."""
-	if frappe.session.user in ("Guest", "Administrator"):
+	if frappe.session.user == "Guest":
 		return
 	if SALES_PORTAL_ROLE in frappe.get_roles():
 		frappe.local.flags.home_page = "sales"
