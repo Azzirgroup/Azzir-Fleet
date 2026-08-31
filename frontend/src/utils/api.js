@@ -37,6 +37,7 @@ export const stockTree = (item_code, groups_only = 0) =>
   call('azzir_fleet.stock_info.get_stock_tree', { item_code, exclude_invoice: '', groups_only })
 
 export const salesDefaults = () => call('azzir_fleet.sales_api.get_defaults')
+export const userCanBuySister = () => call('azzir_fleet.intercompany_sale.user_can_buy_from_sister')
 export const dashboardStats = () => call('azzir_fleet.sales_api.dashboard_stats')
 export const itemDetails = (item_code, customer, company, price_list, qty = 1) =>
   call('azzir_fleet.sales_api.item_details', { item_code, customer, company, price_list, qty })

@@ -24,6 +24,25 @@
           </div>
         </div>
 
+        <!-- Buy stock from a sister company (only for Sales Invoice, and only if the
+             user is assigned a Corporate cost center) -->
+        <div v-if="doctype === 'Sales Invoice' && canBuySister" class="mb-4 rounded-lg border bg-amber-50 p-3">
+          <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+            <input type="checkbox" v-model="buyFromSister" />
+            Buy Stock From Sister Company
+          </label>
+          <div v-if="buyFromSister" class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div>
+              <label class="mb-1 block text-xs text-gray-500">Supply Company</label>
+              <Combo v-model="supplyCompany" doctype="Company" display="name" placeholder="Sister company" />
+            </div>
+            <div>
+              <label class="mb-1 block text-xs text-gray-500">Supply Company Warehouse</label>
+              <Combo v-model="supplyWarehouse" doctype="Warehouse" display="name" placeholder="Sister warehouse" :filters="{ company: supplyCompany, is_group: 0 }" />
+            </div>
+          </div>
+        </div>
+
         <div class="rounded-lg border">
           <div class="flex items-center border-b px-3 py-2">
             <div class="text-sm font-medium text-gray-600">Items</div>
@@ -68,7 +87,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { insertDoc, submitDoc, saveDoc, itemDetails, salesDefaults, fmt } from '@/utils/api.js'
+import { insertDoc, submitDoc, saveDoc, itemDetails, salesDefaults, userCanBuySister, fmt } from '@/utils/api.js'
 import Combo from '@/components/Combo.vue'
 import StockTree from '@/components/StockTree.vue'
 
@@ -89,6 +108,13 @@ const msg = ref('')
 const err = ref(false)
 const stockRow = ref(null)
 
+// Buy stock from a sister company (Sales Invoice only, corporate-cost-center users).
+const canBuySister = ref(false)
+const buyFromSister = ref(false)
+const supplyCompany = ref('')
+const supplyWarehouse = ref('')
+watch(supplyCompany, (n, o) => { if (o) supplyWarehouse.value = '' })
+
 const total = computed(() => rows.value.reduce((s, r) => s + (Number(r.qty) || 0) * (Number(r.rate) || 0), 0))
 
 // Changing the company clears the picked customer (it may not belong to the new one).
@@ -97,6 +123,14 @@ watch(company, (n, o) => { if (o) customer.value = '' })
 onMounted(async () => {
   defaults.value = await salesDefaults().catch(() => ({}))
   company.value = props.edit?.company || props.initial?.company || defaults.value.company || ''
+  if (props.doctype === 'Sales Invoice') {
+    canBuySister.value = await userCanBuySister().catch(() => false)
+    if (props.edit?.azzir_buy_from_sister) {
+      buyFromSister.value = true
+      supplyCompany.value = props.edit.azzir_supply_company || ''
+      supplyWarehouse.value = props.edit.azzir_supply_warehouse || ''
+    }
+  }
   if (props.edit) {
     base.value = props.edit
     customer.value = props.edit.party_name || props.edit.customer || ''
@@ -126,17 +160,29 @@ async function save(submit) {
   if (!customer.value) { err.value = true; msg.value = 'Pick a customer.'; return }
   const items = rows.value.filter((r) => r.item_code).map((r) => ({ item_code: r.item_code, qty: r.qty || 1, rate: r.rate || 0, warehouse: r.warehouse || undefined }))
   if (!items.length) { err.value = true; msg.value = 'Add at least one item.'; return }
+  const sister = props.doctype === 'Sales Invoice' && canBuySister.value && buyFromSister.value
+  if (sister && (!supplyCompany.value || !supplyWarehouse.value)) {
+    err.value = true; msg.value = 'Pick the Supply Company and Supply Company Warehouse.'; return
+  }
+  const applySister = (d) => {
+    if (props.doctype !== 'Sales Invoice' || !canBuySister.value) return
+    d.azzir_buy_from_sister = sister ? 1 : 0
+    d.azzir_supply_company = sister ? supplyCompany.value : undefined
+    d.azzir_supply_warehouse = sister ? supplyWarehouse.value : undefined
+  }
   busy.value = true
   try {
     let saved
     if (base.value) {
       const d = { ...base.value, company: company.value, items }
+      applySister(d)
       saved = await saveDoc(d)
       if (submit) saved = await submitDoc(saved)
     } else {
       const d = { doctype: props.doctype, company: company.value, items }
       if (props.doctype === 'Quotation') { d.quotation_to = 'Customer'; d.party_name = customer.value }
       else d.customer = customer.value
+      applySister(d)
       saved = await insertDoc(d)
       if (submit) saved = await submitDoc(saved)
     }
