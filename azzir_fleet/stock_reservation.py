@@ -23,6 +23,11 @@ from azzir_fleet.stock_info import _warehouse_stock
 def check_stock_reservation(doc, method=None):
 	# Hard block for everyone (Administrator included) — no override.
 
+	# Buy-from-sister invoices bring their stock in via the intercompany transfer
+	# at submit, so the landing warehouse is filled as part of submitting.
+	if doc.get("azzir_buy_from_sister"):
+		return
+
 	# Sum this invoice's need per (item, warehouse) — plain stock lines PLUS the
 	# exploded bundle components (a bundle item is non-stock; its components are).
 	needed = {}

@@ -392,6 +392,97 @@ _IS_STOCK_ITEM_FIELD = {
 for _dt in ("Quotation Item", "Sales Invoice Item", "Delivery Note Item"):
 	CUSTOM_FIELDS.setdefault(_dt, []).append(dict(_IS_STOCK_ITEM_FIELD))
 
+# --- Sell sister-company stock (corporate company buys from a sister at a discount)
+# Flag a Cost Center as "Corporate": its assigned users can buy sister stock.
+CUSTOM_FIELDS.setdefault("Cost Center", []).append(
+	{
+		"fieldname": "azzir_is_corporate",
+		"label": "Corporate",
+		"fieldtype": "Check",
+		"insert_after": "cost_center_name",
+		"description": "Users assigned this cost center may sell stock sourced from a "
+		"sister company (buy-from-sister on the Sales Invoice).",
+	}
+)
+# On a corporate warehouse, mark it as the landing point for one sister company's stock.
+CUSTOM_FIELDS.setdefault("Warehouse", []).extend(
+	[
+		{
+			"fieldname": "azzir_is_sister_landing",
+			"label": "Receives Sister Company Stock",
+			"fieldtype": "Check",
+			"insert_after": "azzir_cost_center",
+			"description": "Tick if this warehouse receives stock transferred from a sister company.",
+		},
+		{
+			"fieldname": "azzir_sister_company",
+			"label": "Sister Company",
+			"fieldtype": "Link",
+			"options": "Company",
+			"insert_after": "azzir_is_sister_landing",
+			"depends_on": "eval:doc.azzir_is_sister_landing",
+			"mandatory_depends_on": "eval:doc.azzir_is_sister_landing",
+			"description": "Stock bought from THIS sister company lands in this warehouse.",
+		},
+	]
+)
+# Sales Invoice: buy-from-sister toggle + the supply source, and links to the docs
+# the flow auto-creates (also used to stay idempotent).
+CUSTOM_FIELDS.setdefault("Sales Invoice", []).extend(
+	[
+		{
+			"fieldname": "azzir_buy_from_sister",
+			"label": "Buy Stock From Sister Company",
+			"fieldtype": "Check",
+			"insert_after": "company",
+			"description": "Source these items from a sister company at the intercompany "
+			"discount. The transfer documents are created automatically on submit.",
+		},
+		{
+			"fieldname": "azzir_supply_company",
+			"label": "Supply Company",
+			"fieldtype": "Link",
+			"options": "Company",
+			"insert_after": "azzir_buy_from_sister",
+			"depends_on": "eval:doc.azzir_buy_from_sister",
+			"mandatory_depends_on": "eval:doc.azzir_buy_from_sister",
+		},
+		{
+			"fieldname": "azzir_supply_warehouse",
+			"label": "Supply Company Warehouse",
+			"fieldtype": "Link",
+			"options": "Warehouse",
+			"insert_after": "azzir_supply_company",
+			"depends_on": "eval:doc.azzir_buy_from_sister",
+			"mandatory_depends_on": "eval:doc.azzir_buy_from_sister",
+		},
+		{
+			"fieldname": "azzir_intercompany_delivery_note",
+			"label": "Intercompany Delivery Note",
+			"fieldtype": "Link",
+			"options": "Delivery Note",
+			"insert_after": "azzir_supply_warehouse",
+			"read_only": 1,
+		},
+		{
+			"fieldname": "azzir_intercompany_sister_invoice",
+			"label": "Intercompany Sister Invoice",
+			"fieldtype": "Link",
+			"options": "Sales Invoice",
+			"insert_after": "azzir_intercompany_delivery_note",
+			"read_only": 1,
+		},
+		{
+			"fieldname": "azzir_intercompany_purchase_invoice",
+			"label": "Intercompany Purchase Invoice",
+			"fieldtype": "Link",
+			"options": "Purchase Invoice",
+			"insert_after": "azzir_intercompany_sister_invoice",
+			"read_only": 1,
+		},
+	]
+)
+
 OVERRIDE_ROLE = "Azzir Stock Override"
 
 

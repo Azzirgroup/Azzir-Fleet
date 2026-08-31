@@ -14,6 +14,10 @@ from frappe.utils import flt
 
 
 def apply_intercompany_discount(doc, method=None):
+	# The sell-sister-stock flow already prices the receipt at the transfer rate —
+	# don't discount it a second time.
+	if doc.flags.get("azzir_intercompany_priced"):
+		return
 	# Only intercompany receipts (goods coming from a sister/internal supplier).
 	if not doc.get("is_internal_supplier"):
 		return

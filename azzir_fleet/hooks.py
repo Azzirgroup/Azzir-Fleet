@@ -268,6 +268,7 @@ doc_events = {
 	"Sales Invoice": {
 		"before_validate": "azzir_fleet.customer_name.capture_override",
 		"validate": [
+			"azzir_fleet.intercompany_sale.set_landing_warehouse",
 			"azzir_fleet.warehouse.require_warehouse_for_stock",
 			"azzir_fleet.qty_limits.validate_selling",
 			"azzir_fleet.qty_limits.validate_sales_stock",
@@ -276,7 +277,10 @@ doc_events = {
 			"azzir_fleet.below_cost.set_previous_price",
 			"azzir_fleet.customer_name.restore_override",
 		],
-		"before_submit": "azzir_fleet.stock_reservation.check_stock_reservation",
+		"before_submit": [
+			"azzir_fleet.intercompany_sale.process_sister_purchase",
+			"azzir_fleet.stock_reservation.check_stock_reservation",
+		],
 		"on_submit": "azzir_fleet.sales_invoice.mark_quotation_invoiced",
 		"on_cancel": "azzir_fleet.sales_invoice.unmark_quotation_invoiced",
 	},

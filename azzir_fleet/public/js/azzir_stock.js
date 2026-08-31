@@ -36,6 +36,34 @@ azzir_fleet.set_warehouse_cc_query = function (frm, table) {
 	});
 };
 
+// Sell sister-company stock: only users with a Corporate cost center see the
+// "Buy Stock From Sister Company" toggle. Cached per session.
+azzir_fleet._can_buy_sister = null;
+azzir_fleet.toggle_buy_from_sister = function (frm) {
+	if (!frm.fields_dict.azzir_buy_from_sister) return;
+	const apply = (can) => {
+		frm.toggle_display("azzir_buy_from_sister", !!can);
+		if (!can && frm.doc.azzir_buy_from_sister) frm.set_value("azzir_buy_from_sister", 0);
+	};
+	if (azzir_fleet._can_buy_sister !== null) {
+		apply(azzir_fleet._can_buy_sister);
+		return;
+	}
+	frappe.call({
+		method: "azzir_fleet.intercompany_sale.user_can_buy_from_sister",
+		callback(r) {
+			azzir_fleet._can_buy_sister = !!r.message;
+			apply(azzir_fleet._can_buy_sister);
+		},
+	});
+};
+// The supply warehouse must belong to the chosen supply (sister) company.
+azzir_fleet.set_supply_wh_query = function (frm) {
+	frm.set_query("azzir_supply_warehouse", () => ({
+		filters: { company: frm.doc.azzir_supply_company || "", is_group: 0 },
+	}));
+};
+
 // Per-warehouse tree breakdown dialog.
 // on_select (optional): fn(warehouse) called when a warehouse is picked. When
 // given, each ACTUAL (non-group) warehouse gets a radio; picking one calls

@@ -30,6 +30,10 @@ def validate_sales_stock(doc, method=None):
 	"""Block billing more of an item than is in stock (Bin actual_qty) for the
 	row's warehouse. Skipped when the invoice updates stock (ERPNext handles it).
 	"""
+	# Buy-from-sister invoices receive their stock at submit — the draft check
+	# would wrongly see the landing warehouse as empty.
+	if doc.get("azzir_buy_from_sister"):
+		return
 	if doc.get("update_stock") or _can_override():
 		return
 
