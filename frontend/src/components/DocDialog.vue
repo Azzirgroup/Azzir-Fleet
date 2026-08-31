@@ -35,7 +35,7 @@
             </thead>
             <tbody>
               <tr v-for="(row, i) in rows" :key="i" class="border-t align-top">
-                <td class="px-2 py-2 w-64"><Combo v-model="row.item_code" doctype="Item" display="item_name" placeholder="Select item" :filters="{ disabled: 0 }" @update:model-value="(v) => onItem(i, v)" /></td>
+                <td class="px-2 py-2 w-64"><Combo v-model="row.item_code" doctype="Item" display="item_name" placeholder="Select item / part no." query-method="azzir_fleet.alias.item_search_for_spa" @update:model-value="(v) => onItem(i, v)" /></td>
                 <td class="px-2 py-2"><input v-model.number="row.qty" type="number" class="w-14 rounded border px-2 py-1" /></td>
                 <td class="px-2 py-2"><input v-model.number="row.rate" type="number" class="w-20 rounded border px-2 py-1" /></td>
                 <td class="px-2 py-2">

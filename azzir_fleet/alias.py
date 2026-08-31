@@ -230,6 +230,33 @@ def description_for_print(item_code, description, hide_alt=0):
 
 
 @frappe.whitelist()
+def item_search_for_spa(txt: str | None = None) -> list:
+	"""Items matching by code, name, OR alternative part number — for the sales
+	frontend (/sales) item picker, which otherwise only searches code/name.
+	Returns [{name, item_name, alt}] where `alt` is the matched old code, if any."""
+	txt = (txt or "").strip()
+	seen: dict = {}
+	if txt:
+		like = "%%%s%%" % txt
+		for r in frappe.db.sql(
+			"select name, item_name from `tabItem` where disabled = 0 "
+			"and (name like %(t)s or item_name like %(t)s) order by name limit 15",
+			{"t": like},
+			as_dict=True,
+		):
+			seen[r.name] = {"name": r.name, "item_name": r.item_name, "alt": None}
+	# alternative part numbers (old codes)
+	for m in fuzzy_item_matches(txt, limit=15):
+		if m["item"] not in seen:
+			seen[m["item"]] = {
+				"name": m["item"],
+				"item_name": frappe.db.get_value("Item", m["item"], "item_name") or m["item"],
+				"alt": m.get("old_code"),
+			}
+	return list(seen.values())[:25]
+
+
+@frappe.whitelist()
 def resolve_code(code: str):
 	"""Return the current item for any code (current or old). None if unknown."""
 	if not code:
