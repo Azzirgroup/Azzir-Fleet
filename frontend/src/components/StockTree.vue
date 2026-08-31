@@ -10,10 +10,17 @@
           :key="r.warehouse"
           class="flex items-center justify-between border-b border-gray-100 py-1.5"
           :style="{ paddingLeft: (r.depth || 0) * 20 + 4 + 'px' }"
-          :class="{ 'cursor-pointer hover:bg-blue-50': selectable && !r.is_group }"
+          :class="{
+            'cursor-pointer hover:bg-blue-50': canPick(r),
+            'opacity-50 cursor-not-allowed': selectable && !r.is_group && r.selectable === false,
+          }"
+          :title="selectable && !r.is_group && r.selectable === false ? 'Not in your cost center — view only' : ''"
           @click="pick(r)"
         >
-          <span :class="{ 'font-semibold': r.is_group }">{{ r.is_group ? '📁' : '•' }} {{ r.warehouse }}</span>
+          <span :class="{ 'font-semibold': r.is_group }">
+            {{ r.is_group ? '📁' : '•' }} {{ r.warehouse }}
+            <span v-if="selectable && !r.is_group && r.selectable === false" class="ml-1 text-xs text-gray-400">🔒</span>
+          </span>
           <span :class="{ 'font-semibold': r.is_group }">{{ num(r.qty) }}</span>
         </div>
       </template>
@@ -51,7 +58,8 @@ async function load() {
   try { rows.value = (await stockTree(props.itemCode)) || [] }
   finally { loading.value = false }
 }
-function pick(r) { if (props.selectable && !r.is_group) emit('select', r.warehouse) }
+function canPick(r) { return props.selectable && !r.is_group && r.selectable !== false }
+function pick(r) { if (canPick(r)) emit('select', r.warehouse) }
 watch(() => props.itemCode, load)
 onMounted(load)
 </script>

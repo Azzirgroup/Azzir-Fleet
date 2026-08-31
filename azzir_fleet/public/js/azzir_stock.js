@@ -23,6 +23,19 @@ azzir_fleet.fetch_row_stock = function (cdt, cdn) {
 	});
 };
 
+// Restrict the item-row Warehouse link to warehouses the user may SELECT
+// (attached to a cost center they are assigned). They still see all in the dialog.
+azzir_fleet.set_warehouse_cc_query = function (frm, table) {
+	table = table || "items";
+	if (!frm.fields_dict[table]) return;
+	frm.set_query("warehouse", table, function (doc) {
+		return {
+			query: "azzir_fleet.warehouse_cc.warehouse_query",
+			filters: { company: doc.company },
+		};
+	});
+};
+
 // Per-warehouse tree breakdown dialog.
 // on_select (optional): fn(warehouse) called when a warehouse is picked. When
 // given, each ACTUAL (non-group) warehouse gets a radio; picking one calls
@@ -49,18 +62,28 @@ azzir_fleet.show_stock_dialog = function (item_code, on_select) {
 				const icon = node.is_group ? "📁" : "•";
 				const weight = node.is_group ? "600" : "400";
 				const wh = frappe.utils.escape_html(node.warehouse);
-				// Selector column (only when picking, and only for actual warehouses).
+				// A leaf the user may not select (cost center not assigned): show it,
+				// but no radio, not clickable, greyed with a lock.
+				const locked = on_select && !node.is_group && node.selectable === false;
+				// Selector column (only when picking an actual warehouse the user may select).
 				let pick = "";
 				if (on_select) {
-					pick = node.is_group
-						? '<span style="display:inline-block; width:22px;"></span>'
-						: `<input type="radio" name="azzir-wh-pick" class="azzir-wh-pick"
+					if (node.is_group) {
+						pick = '<span style="display:inline-block; width:22px;"></span>';
+					} else if (locked) {
+						pick = '<span style="display:inline-block; width:22px;">🔒</span>';
+					} else {
+						pick = `<input type="radio" name="azzir-wh-pick" class="azzir-wh-pick"
 							data-wh="${wh}" style="margin-right:8px; cursor:pointer;">`;
+					}
 				}
-				let html = `<div class="azzir-wh-row" data-wh="${wh}" data-group="${node.is_group ? 1 : 0}"
+				const clickable = on_select && !node.is_group && !locked;
+				let html = `<div class="azzir-wh-row" data-wh="${wh}"
+					data-group="${node.is_group ? 1 : 0}" data-locked="${locked ? 1 : 0}"
+					title="${locked ? __("Not in your cost center — view only") : ""}"
 					style="display:flex; align-items:center; justify-content:space-between; padding:5px 0;
 					border-bottom:1px solid #f0f0f0; padding-left:${depth * 22}px;
-					${on_select && !node.is_group ? "cursor:pointer;" : ""}">
+					${locked ? "opacity:0.5;" : ""}${clickable ? "cursor:pointer;" : ""}">
 					<span style="font-weight:${weight};">${pick}${icon} ${wh}</span>
 					<span style="font-weight:${weight};">${format_number(node.qty)}</span></div>`;
 				(by_parent[node.warehouse] || []).forEach((c) => (html += render(c, depth + 1)));
@@ -108,7 +131,8 @@ azzir_fleet.show_stock_dialog = function (item_code, on_select) {
 					pick($(this).attr("data-wh"));
 				});
 				d.$body.on("click", ".azzir-wh-row", function () {
-					if ($(this).attr("data-group") === "0") pick($(this).attr("data-wh"));
+					if ($(this).attr("data-group") === "0" && $(this).attr("data-locked") !== "1")
+						pick($(this).attr("data-wh"));
 				});
 			}
 

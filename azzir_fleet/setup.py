@@ -225,6 +225,17 @@ CUSTOM_FIELDS = {
 			"description": "Cost centers this employee belongs to. Add a row per cost center.",
 		},
 	],
+	"Warehouse": [
+		{
+			"fieldname": "azzir_cost_center",
+			"label": "Cost Center",
+			"fieldtype": "Link",
+			"options": "Cost Center",
+			"insert_after": "company",
+			"description": "Users are allowed to SELECT this warehouse only if they are "
+			"assigned this cost center (via User Permission). They can still see it.",
+		},
+	],
 	"Supplier": [
 		{
 			"fieldname": "azzir_quotation_validity_days",

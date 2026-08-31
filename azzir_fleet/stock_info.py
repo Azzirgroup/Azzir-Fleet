@@ -167,9 +167,16 @@ def get_stock_tree(
 	wh_info = {
 		w.name: w
 		for w in frappe.get_all(
-			"Warehouse", fields=["name", "parent_warehouse", "is_group", "lft", "rgt", "company"]
+			"Warehouse",
+			fields=["name", "parent_warehouse", "is_group", "lft", "rgt", "company", "azzir_cost_center"],
 		)
 	}
+
+	# Cost-center scoping: the user may SEE every warehouse, but may only SELECT
+	# ones attached to a cost center they are assigned to (None = no restriction).
+	from azzir_fleet.warehouse_cc import allowed_cost_centers, is_selectable
+
+	allowed = allowed_cost_centers()
 
 	# Company scope: only holders of "Azzir Group Stock" (or Administrator) see ALL
 	# companies' stock; everyone else sees only their own default company.
@@ -217,6 +224,10 @@ def get_stock_tree(
 				"lft": info.lft,
 				"depth": _depth(wh, wh_info),
 				"company": info.company,
+				"cost_center": info.get("azzir_cost_center"),
+				# Groups are never picked; leaves are selectable only if their cost
+				# center is one the user is assigned.
+				"selectable": True if info.is_group else is_selectable(info.get("azzir_cost_center"), allowed),
 			}
 		)
 

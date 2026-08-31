@@ -4,6 +4,7 @@
 
 frappe.ui.form.on("Delivery Note", {
 	refresh(frm) {
+		azzir_fleet.set_warehouse_cc_query(frm);
 		if (frm.doc.docstatus !== 0) return; // get-items only makes sense on a draft
 
 		const drop_sales_order = () =>

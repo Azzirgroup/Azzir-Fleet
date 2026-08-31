@@ -4,6 +4,7 @@
 
 frappe.ui.form.on("Quotation", {
 	refresh(frm) {
+		azzir_fleet.set_warehouse_cc_query(frm);
 		const drop_sales_order = () => frm.remove_custom_button(__("Sales Order"), __("Create"));
 		// Remove now and again shortly after, in case ERPNext adds it late.
 		drop_sales_order();
