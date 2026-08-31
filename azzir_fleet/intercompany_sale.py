@@ -160,6 +160,19 @@ def process_sister_purchase(doc, method=None):
 			)
 		)
 
+	# ERPNext inter-company transactions require a price list enabled for BOTH
+	# buying and selling (so the same list serves the sister SI and the corporate PI).
+	ic_price_list = frappe.db.get_value(
+		"Price List", {"enabled": 1, "selling": 1, "buying": 1}, "name"
+	)
+	if not ic_price_list:
+		frappe.throw(
+			_(
+				"Intercompany transfers need a Price List with BOTH 'Buying' and 'Selling' "
+				"enabled. Tick both on a Price List (e.g. Standard Selling) and retry."
+			)
+		)
+
 	disc = flt(frappe.db.get_value("Company", corporate, "azzir_intercompany_discount"))
 	factor = 1 - disc / 100.0
 
@@ -171,15 +184,19 @@ def process_sister_purchase(doc, method=None):
 	dn = frappe.new_doc("Delivery Note")
 	dn.company = sister
 	dn.customer = internal_customer
+	dn.selling_price_list = ic_price_list
+	dn.ignore_pricing_rule = 1
 	dn.set_warehouse = supply_wh
 	for r in lines:
+		transfer_rate = flt(r.rate) * factor
 		dn.append(
 			"items",
 			{
 				"item_code": r.item_code,
 				"qty": r.qty,
 				"uom": r.get("uom"),
-				"rate": flt(r.rate) * factor,
+				"rate": transfer_rate,
+				"price_list_rate": transfer_rate,
 				"warehouse": supply_wh,
 			},
 		)
