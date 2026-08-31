@@ -9,6 +9,11 @@ readme = "README.md"
 dynamic = ["version"]
 dependencies = [
     # "frappe~=16.0.0" # Installed and managed by bench.
+    # Pin sql_metadata to the version frappe expects. Newer 3.x imports
+    # `sqlglot.parsers`, which modern sqlglot removed, so a build that pulls
+    # sql_metadata 3.x crashes on import ("No module named 'sqlglot.parsers'")
+    # during deploy. 2.19.x works with the installed sqlglot.
+    "sql_metadata~=2.19.0",
 ]
 
 [build-system]
