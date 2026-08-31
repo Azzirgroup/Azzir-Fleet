@@ -15,6 +15,25 @@ def _can_see_all() -> bool:
 	return bool(set(frappe.get_roles()) & SEE_ALL_ROLES)
 
 
+def get_permission_query_conditions(user: str | None = None) -> str:
+	"""Desk list views / reports: a salesperson sees only the documents they
+	created; overseers (Azzir Sales Overseer / Sales Manager / System Manager) see
+	all. Same rule as the /sales app, now on the desk too."""
+	if _can_see_all():
+		return ""
+	user = user or frappe.session.user
+	return "`owner` = {user}".format(user=frappe.db.escape(user))
+
+
+def has_permission(doc, ptype: str | None = None, user: str | None = None) -> bool:
+	"""Block opening someone else's sales document by URL unless the user is an
+	overseer or the creator."""
+	if _can_see_all():
+		return True
+	user = user or frappe.session.user
+	return (doc.owner == user) if getattr(doc, "owner", None) else True
+
+
 @frappe.whitelist()
 def get_defaults() -> dict:
 	"""Company / currency / price list the Sales forms post against."""

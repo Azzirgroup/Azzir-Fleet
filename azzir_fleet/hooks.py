@@ -180,6 +180,14 @@ permission_query_conditions = {
 		"Purchase Invoice",
 	)
 }
+# Sales people see only the quotations / invoices / delivery notes they created;
+# the 'Azzir Sales Overseer' role (or Sales Manager / System Manager) sees all.
+permission_query_conditions.update(
+	{
+		dt: "azzir_fleet.sales_api.get_permission_query_conditions"
+		for dt in ("Quotation", "Sales Invoice", "Delivery Note")
+	}
+)
 
 has_permission = {
 	dt: "azzir_fleet.procurement.has_permission"
@@ -192,6 +200,12 @@ has_permission = {
 		"Purchase Invoice",
 	)
 }
+has_permission.update(
+	{
+		dt: "azzir_fleet.sales_api.has_permission"
+		for dt in ("Quotation", "Sales Invoice", "Delivery Note")
+	}
+)
 
 # Document Events
 # ---------------
