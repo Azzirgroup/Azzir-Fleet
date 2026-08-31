@@ -544,6 +544,8 @@ def after_migrate():
 		("sales_overseer_role", _setup_sales_overseer_role),
 		("procurement_overseer_role", _setup_procurement_overseer_role),
 		("sales_portal_role", _setup_sales_portal_role),
+		("role_workspaces", _setup_workspaces),
+		("sidebar_homes", _ensure_sidebar_homes),
 	]
 	for label, fn in steps:
 		try:
@@ -1362,6 +1364,38 @@ def _ensure_number_card(nc):
 		}
 	).insert(ignore_permissions=True)
 	return doc.name
+
+
+def _ensure_sidebar_homes():
+	"""Give each role Workspace Sidebar a 'Home' item that opens its Workspace, so
+	clicking the desktop icon lands on a dashboard. Points at the workspace created
+	by _setup_workspaces, or an existing ERPNext/HRMS one of the same name.
+	Idempotent; runs after the workspaces exist (order matters for the dynamic link)."""
+	pairs = [
+		("Sales", "Sales"), ("Procurement", "Procurement"), ("HR", "HR"),
+		("Accounting", "Accounting"), ("Director", "Director"),
+	]
+	for sidebar_name, ws in pairs:
+		if not frappe.db.exists("Workspace Sidebar", sidebar_name):
+			continue
+		if not frappe.db.exists("Workspace", ws):
+			continue
+		doc = frappe.get_doc("Workspace Sidebar", sidebar_name)
+		if any(it.get("link_type") == "Workspace" and it.get("link_to") == ws for it in doc.items):
+			continue
+		items = [it.as_dict() for it in doc.items]
+		items.insert(
+			0,
+			{"type": "Link", "label": "Home", "link_type": "Workspace", "link_to": ws, "icon": "home"},
+		)
+		doc.set("items", items)
+		# Don't re-export the standard fixture to disk while saving.
+		prev = frappe.flags.in_import
+		frappe.flags.in_import = True
+		try:
+			doc.save(ignore_permissions=True)
+		finally:
+			frappe.flags.in_import = prev
 
 
 def _make_workspace(spec):
