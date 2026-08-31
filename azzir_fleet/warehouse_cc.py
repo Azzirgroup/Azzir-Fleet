@@ -13,12 +13,24 @@ import frappe
 COST_CENTER = "Cost Center"
 
 
+def _field_ready() -> bool:
+	"""The azzir_cost_center field exists on Warehouse (migrate has run). Until then
+	the feature is simply inactive so nothing errors."""
+	try:
+		return frappe.get_meta("Warehouse").has_field("azzir_cost_center")
+	except Exception:
+		return False
+
+
 def allowed_cost_centers(user: str | None = None) -> set | None:
 	"""Cost centers the user is allowed to transact in, from their User Permissions.
 
-	Returns None = NO restriction (Administrator, System Manager, or a user with no
-	Cost Center user permission) -> may select any warehouse. A set = only those.
+	Returns None = NO restriction (Administrator, System Manager, a user with no
+	Cost Center user permission, or before the field is migrated) -> may select any
+	warehouse. A set = only those.
 	"""
+	if not _field_ready():
+		return None
 	user = user or frappe.session.user
 	if user == "Administrator" or "System Manager" in frappe.get_roles(user):
 		return None

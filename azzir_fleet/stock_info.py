@@ -164,17 +164,16 @@ def get_stock_tree(
 
 		reserved = {w: flt(r) for w, r in reserved_by_warehouse(item_code, exclude_invoice).items()}
 
-	wh_info = {
-		w.name: w
-		for w in frappe.get_all(
-			"Warehouse",
-			fields=["name", "parent_warehouse", "is_group", "lft", "rgt", "company", "azzir_cost_center"],
-		)
-	}
-
 	# Cost-center scoping: the user may SEE every warehouse, but may only SELECT
 	# ones attached to a cost center they are assigned to (None = no restriction).
+	# Guarded so it degrades gracefully if the field hasn't been migrated yet.
 	from azzir_fleet.warehouse_cc import allowed_cost_centers, is_selectable
+
+	has_cc = frappe.get_meta("Warehouse").has_field("azzir_cost_center")
+	wh_fields = ["name", "parent_warehouse", "is_group", "lft", "rgt", "company"]
+	if has_cc:
+		wh_fields.append("azzir_cost_center")
+	wh_info = {w.name: w for w in frappe.get_all("Warehouse", fields=wh_fields)}
 
 	allowed = allowed_cost_centers()
 
