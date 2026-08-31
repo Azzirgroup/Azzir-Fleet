@@ -35,6 +35,7 @@ frappe.ui.form.on("Quotation", {
 frappe.ui.form.on("Quotation Item", {
 	item_code(frm, cdt, cdn) {
 		azzir_fleet.fetch_row_stock(cdt, cdn);
+		azzir_fleet.autoset_cc_warehouse(frm, cdt, cdn);
 	},
 	warehouse(frm, cdt, cdn) {
 		azzir_fleet.fetch_row_stock(cdt, cdn);

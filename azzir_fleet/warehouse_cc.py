@@ -9,6 +9,7 @@ are assigned to. Nothing is hardcoded — it is driven entirely by the data.
 """
 
 import frappe
+from frappe.utils import flt
 
 COST_CENTER = "Cost Center"
 
@@ -47,6 +48,32 @@ def is_selectable(warehouse_cost_center: str | None, allowed: set | None) -> boo
 	if allowed is None:
 		return True
 	return bool(warehouse_cost_center) and warehouse_cost_center in allowed
+
+
+@frappe.whitelist()
+def user_warehouse_for_item(item_code: str | None = None, company: str | None = None) -> str | None:
+	"""A warehouse the user is allowed to select (attached to one of their assigned
+	cost centers), used to auto-fill the row warehouse instead of the item's default.
+	Prefers a warehouse that actually holds this item; else any of the user's. Returns
+	None if the user is unrestricted (keep ERPNext's own default) or has none."""
+	allowed = allowed_cost_centers()
+	if not allowed:  # None (unrestricted) or empty -> don't override
+		return None
+	conds = ["w.disabled = 0", "w.is_group = 0", "w.azzir_cost_center in %(cc)s"]
+	vals = {"cc": tuple(allowed)}
+	if company:
+		conds.append("w.company = %(co)s")
+		vals["co"] = company
+	warehouses = frappe.db.sql_list(
+		"select w.name from `tabWarehouse` w where " + " and ".join(conds) + " order by w.name", vals
+	)
+	if not warehouses:
+		return None
+	if item_code:
+		for w in warehouses:
+			if flt(frappe.db.get_value("Bin", {"item_code": item_code, "warehouse": w}, "actual_qty")) > 0:
+				return w
+	return warehouses[0]
 
 
 @frappe.whitelist()

@@ -33,3 +33,10 @@ frappe.ui.form.on("Delivery Note", {
 		);
 	},
 });
+
+frappe.ui.form.on("Delivery Note Item", {
+	item_code(frm, cdt, cdn) {
+		azzir_fleet.fetch_row_stock(cdt, cdn);
+		azzir_fleet.autoset_cc_warehouse(frm, cdt, cdn);
+	},
+});

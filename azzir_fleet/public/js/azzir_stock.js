@@ -64,6 +64,27 @@ azzir_fleet.set_supply_wh_query = function (frm) {
 	}));
 };
 
+// When an item is picked, override ERPNext's default-warehouse fetch with a
+// warehouse in the user's own cost center. We wait a moment so this runs AFTER
+// ERPNext has set the item default (otherwise it would clobber ours).
+azzir_fleet.autoset_cc_warehouse = function (frm, cdt, cdn) {
+	const row = locals[cdt] && locals[cdt][cdn];
+	if (!row || !row.item_code) return;
+	setTimeout(() => {
+		const r2 = locals[cdt] && locals[cdt][cdn];
+		if (!r2 || !r2.item_code) return;
+		frappe.call({
+			method: "azzir_fleet.warehouse_cc.user_warehouse_for_item",
+			args: { item_code: r2.item_code, company: frm.doc.company },
+			callback(r) {
+				if (r.message && locals[cdt] && locals[cdt][cdn]) {
+					frappe.model.set_value(cdt, cdn, "warehouse", r.message);
+				}
+			},
+		});
+	}, 800);
+};
+
 // Per-warehouse tree breakdown dialog.
 // on_select (optional): fn(warehouse) called when a warehouse is picked. When
 // given, each ACTUAL (non-group) warehouse gets a radio; picking one calls
