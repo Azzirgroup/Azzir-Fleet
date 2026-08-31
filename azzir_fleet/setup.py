@@ -200,6 +200,15 @@ CUSTOM_FIELDS = {
 			"description": "When THIS company receives stock from a sister company "
 			"(intercompany transfer), the transfer rate is reduced by this %. 0 = none.",
 		},
+		{
+			"fieldname": "azzir_letter_head",
+			"label": "Print Letter Head",
+			"fieldtype": "Link",
+			"options": "Letter Head",
+			"insert_after": "azzir_intercompany_discount",
+			"description": "Letter head to show on this company's Quotation / Sales Invoice "
+			"printouts. Lets the printout header change with the company.",
+		},
 	],
 	# Statutory IDs on Employee.
 	"Employee": [
@@ -1171,8 +1180,11 @@ _PROFORMA_TEMPLATE = """
 	{%- set show_prices = __PRICES_FLAG__ -%}
 	{%- set hide_part_no = doc.get("azzir_hide_part_no") -%}
 
-	<!-- Letter head (custom formats must include it explicitly) -->
-	{% if not no_letterhead and letter_head %}<div class="letter-head">{{ letter_head }}</div>{% endif %}
+	<!-- Letter head — per company: use the company's configured letter head so the
+	     printout header changes with the company; fall back to the doc's letter head. -->
+	{%- set _co_lh = frappe.db.get_value("Company", doc.company, "azzir_letter_head") -%}
+	{%- set _lh_html = (frappe.db.get_value("Letter Head", _co_lh, "content") if _co_lh else None) or letter_head -%}
+	{% if not no_letterhead and _lh_html %}<div class="letter-head">{{ _lh_html }}</div>{% endif %}
 
 	<!-- Title -->
 	<div style="text-align:right; margin-bottom:8px;">
@@ -1185,6 +1197,12 @@ _PROFORMA_TEMPLATE = """
 			<td style="vertical-align:top; width:55%;">
 				{%- set _cust = doc.get("customer") or (doc.get("party_name") if doc.get("quotation_to") == "Customer" else None) -%}
 				{%- set cust_logo = frappe.db.get_value("Customer", _cust, "azzir_customer_logo") if _cust else None -%}
+				{#- Branch = the document's cost center, shown by name (not the raw cost-center id). -#}
+				{%- set _cc = doc.get("cost_center") -%}
+				{%- if not _cc and doc.get("items") and doc.get("items")[0].get("cost_center") -%}{%- set _cc = doc.get("items")[0].get("cost_center") -%}{%- endif -%}
+				{%- if not _cc and doc.get("items") and doc.get("items")[0].get("warehouse") -%}{%- set _cc = frappe.db.get_value("Warehouse", doc.get("items")[0].get("warehouse"), "azzir_cost_center") -%}{%- endif -%}
+				{%- set _branch = frappe.db.get_value("Cost Center", _cc, "cost_center_name") if _cc else None -%}
+				{% if _branch %}<div style="font-size:18px; font-weight:bold; margin-bottom:5px;">Branch: {{ _branch }}</div>{% endif %}
 				<b>__PARTY_LABEL__:</b> __PARTY_VALUE__
 				{% if cust_logo %}<img src="{{ cust_logo }}" style="height:34px; vertical-align:middle; margin-left:8px;">{% endif %}
 				<div style="border:1px solid #999; padding:6px; margin-top:4px; min-height:70px;">
