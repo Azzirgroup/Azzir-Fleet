@@ -236,15 +236,23 @@ def item_search_for_spa(txt: str | None = None) -> list:
 	Returns [{name, item_name, alt}] where `alt` is the matched old code, if any."""
 	txt = (txt or "").strip()
 	seen: dict = {}
-	if txt:
-		like = "%%%s%%" % txt
+	if not txt:
+		# No text yet (field just clicked): list items immediately, like a normal picker.
 		for r in frappe.db.sql(
-			"select name, item_name from `tabItem` where disabled = 0 "
-			"and (name like %(t)s or item_name like %(t)s) order by name limit 15",
-			{"t": like},
+			"select name, item_name from `tabItem` where disabled = 0 order by modified desc limit 25",
 			as_dict=True,
 		):
 			seen[r.name] = {"name": r.name, "item_name": r.item_name, "alt": None}
+		return list(seen.values())
+
+	like = "%%%s%%" % txt
+	for r in frappe.db.sql(
+		"select name, item_name from `tabItem` where disabled = 0 "
+		"and (name like %(t)s or item_name like %(t)s) order by name limit 15",
+		{"t": like},
+		as_dict=True,
+	):
+		seen[r.name] = {"name": r.name, "item_name": r.item_name, "alt": None}
 	# alternative part numbers (old codes)
 	for m in fuzzy_item_matches(txt, limit=15):
 		if m["item"] not in seen:
