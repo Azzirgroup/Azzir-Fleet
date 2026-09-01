@@ -90,6 +90,24 @@ def get_rows(filters):
 			)
 		}
 
+	# 5) Economy stock = quantity already on submitted Purchase Orders that has NOT
+	#    yet been received (no Purchase Receipt / stock-updating Purchase Invoice)
+	#    — i.e. on order / incoming. Per item.
+	economy = {}
+	for e in frappe.db.sql(
+		"""
+		select poi.item_code, sum(greatest(0, poi.qty - poi.received_qty)) as on_order
+		from `tabPurchase Order Item` poi
+		join `tabPurchase Order` po on po.name = poi.parent
+		where po.docstatus = 1 and po.status not in ('Closed', 'Completed', 'Delivered')
+		  and poi.item_code in %(items)s
+		group by poi.item_code
+		""",
+		{"items": items},
+		as_dict=True,
+	):
+		economy[e.item_code] = flt(e.on_order)
+
 	rows = []
 	for r in reorder:
 		im = meta.get(r.item_code)
@@ -111,6 +129,7 @@ def get_rows(filters):
 				"reorder_level": flt(r.reorder_level),
 				"reorder_qty": flt(r.reorder_qty),
 				"actual_qty": actual,
+				"economy_stock": economy.get(r.item_code, 0.0),
 				"shortage": flt(r.reorder_level) - actual,
 			}
 		)
@@ -128,5 +147,6 @@ def get_columns():
 		{"label": _("Reorder Level"), "fieldname": "reorder_level", "fieldtype": "Float", "width": 110},
 		{"label": _("Reorder Qty"), "fieldname": "reorder_qty", "fieldtype": "Float", "width": 110},
 		{"label": _("Actual Qty"), "fieldname": "actual_qty", "fieldtype": "Float", "width": 110},
+		{"label": _("Economy Stock"), "fieldname": "economy_stock", "fieldtype": "Float", "width": 120},
 		{"label": _("Shortage"), "fieldname": "shortage", "fieldtype": "Float", "width": 110},
 	]
