@@ -7,7 +7,10 @@ from frappe.utils import flt, getdate, get_first_day, get_last_day, nowdate
 
 
 SALES_DOCTYPES = {"Quotation", "Sales Invoice", "Delivery Note"}
-SEE_ALL_ROLES = {"Azzir Sales Overseer", "Sales Manager", "System Manager"}
+# Only these see EVERYONE's sales. Sales Manager is deliberately NOT here — a
+# salesperson often needs that role to submit, but must still see only their own.
+# Give a user "Azzir Sales Overseer" to let them see all.
+SEE_ALL_ROLES = {"Azzir Sales Overseer", "System Manager"}
 
 
 def _can_see_all() -> bool:
