@@ -204,6 +204,17 @@ def process_sister_purchase(doc, method=None):
 	if sister == corporate:
 		frappe.throw(_("The supply company must be a different (sister) company."))
 
+	# ERPNext requires an Unrealized Profit / Loss Account on every company in an
+	# intercompany transfer — check both up front with a clear message.
+	for co in (corporate, sister):
+		if not frappe.db.get_value("Company", co, "unrealized_profit_loss_account"):
+			frappe.throw(
+				_(
+					"Set the Unrealized Profit / Loss Account on company {0} "
+					"(Company → Accounts) — it is required for intercompany transfers."
+				).format(frappe.bold(co))
+			)
+
 	landing = _landing_warehouse(corporate, sister)
 	if not landing:
 		frappe.throw(
