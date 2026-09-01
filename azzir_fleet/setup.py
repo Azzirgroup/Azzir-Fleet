@@ -579,6 +579,7 @@ def after_migrate():
 		("sales_overseer_role", _setup_sales_overseer_role),
 		("procurement_overseer_role", _setup_procurement_overseer_role),
 		("sales_portal_role", _setup_sales_portal_role),
+		("unrealized_pl_accounts", _ensure_unrealized_pl_accounts),
 	]
 	for label, fn in steps:
 		try:
@@ -613,6 +614,35 @@ def _setup_procurement_overseer_role():
 		frappe.get_doc(
 			{"doctype": "Role", "role_name": "Azzir Procurement Overseer", "desk_access": 1}
 		).insert(ignore_permissions=True)
+
+
+def _ensure_unrealized_pl_accounts():
+	"""Every company in an intercompany transfer needs an Unrealized Profit / Loss
+	Account (ERPNext requirement). Create one per company that lacks it and set it
+	on the Company. Idempotent; covers all current and future companies."""
+	for company in frappe.get_all("Company", pluck="name"):
+		if frappe.db.get_value("Company", company, "unrealized_profit_loss_account"):
+			continue
+		abbr = frappe.get_cached_value("Company", company, "abbr")
+		acc = "Unrealized Profit and Loss - %s" % abbr
+		if not frappe.db.exists("Account", acc):
+			parent = frappe.db.get_value(
+				"Account", {"company": company, "is_group": 1, "root_type": "Liability"}, "name"
+			) or frappe.db.get_value("Account", {"company": company, "is_group": 1}, "name")
+			if not parent:
+				continue
+			root_type = frappe.db.get_value("Account", parent, "root_type") or "Liability"
+			frappe.get_doc(
+				{
+					"doctype": "Account",
+					"account_name": "Unrealized Profit and Loss",
+					"company": company,
+					"parent_account": parent,
+					"root_type": root_type,
+					"is_group": 0,
+				}
+			).insert(ignore_permissions=True)
+		frappe.db.set_value("Company", company, "unrealized_profit_loss_account", acc)
 
 
 def _setup_sales_portal_role():
