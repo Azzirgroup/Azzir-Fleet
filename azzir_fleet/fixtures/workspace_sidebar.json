@@ -8,6 +8,22 @@
   "items": [
    {
     "child": 0,
+    "collapsible": 0,
+    "filters": null,
+    "icon": "home",
+    "indent": 0,
+    "keep_closed": 0,
+    "label": "Home",
+    "link_to": "Sales",
+    "link_type": "Workspace",
+    "navigate_to_tab": null,
+    "route_options": null,
+    "show_arrow": 0,
+    "type": "Link",
+    "url": null
+   },
+   {
+    "child": 0,
     "collapsible": 1,
     "filters": null,
     "icon": null,
@@ -183,7 +199,7 @@
     "url": null
    }
   ],
-  "modified": "2026-08-25 12:59:48.288016",
+  "modified": "2026-08-31 21:25:43.244865",
   "module": "Azzir Fleet",
   "module_onboarding": null,
   "name": "Sales",
@@ -197,6 +213,22 @@
   "for_user": null,
   "header_icon": "buying",
   "items": [
+   {
+    "child": 0,
+    "collapsible": 0,
+    "filters": null,
+    "icon": "home",
+    "indent": 0,
+    "keep_closed": 0,
+    "label": "Home",
+    "link_to": "Procurement",
+    "link_type": "Workspace",
+    "navigate_to_tab": null,
+    "route_options": null,
+    "show_arrow": 0,
+    "type": "Link",
+    "url": null
+   },
    {
     "child": 0,
     "collapsible": 1,
@@ -358,7 +390,7 @@
     "url": null
    }
   ],
-  "modified": "2026-08-25 12:59:48.406208",
+  "modified": "2026-08-31 21:25:43.293691",
   "module": "Azzir Fleet",
   "module_onboarding": null,
   "name": "Procurement",
@@ -372,6 +404,22 @@
   "for_user": null,
   "header_icon": "hr",
   "items": [
+   {
+    "child": 0,
+    "collapsible": 0,
+    "filters": null,
+    "icon": "home",
+    "indent": 0,
+    "keep_closed": 0,
+    "label": "Home",
+    "link_to": "HR",
+    "link_type": "Workspace",
+    "navigate_to_tab": null,
+    "route_options": null,
+    "show_arrow": 0,
+    "type": "Link",
+    "url": null
+   },
    {
     "child": 0,
     "collapsible": 1,
@@ -501,7 +549,7 @@
     "url": null
    }
   ],
-  "modified": "2026-08-25 12:59:48.414616",
+  "modified": "2026-08-31 21:25:43.306988",
   "module": "Azzir Fleet",
   "module_onboarding": null,
   "name": "HR",
@@ -515,6 +563,22 @@
   "for_user": null,
   "header_icon": "accounting",
   "items": [
+   {
+    "child": 0,
+    "collapsible": 0,
+    "filters": null,
+    "icon": "home",
+    "indent": 0,
+    "keep_closed": 0,
+    "label": "Home",
+    "link_to": "Accounting",
+    "link_type": "Workspace",
+    "navigate_to_tab": null,
+    "route_options": null,
+    "show_arrow": 0,
+    "type": "Link",
+    "url": null
+   },
    {
     "child": 0,
     "collapsible": 1,
@@ -756,7 +820,7 @@
     "url": null
    }
   ],
-  "modified": "2026-08-25 12:59:48.422210",
+  "modified": "2026-08-31 21:25:43.317192",
   "module": "Azzir Fleet",
   "module_onboarding": null,
   "name": "Accounting",
@@ -770,6 +834,22 @@
   "for_user": null,
   "header_icon": "star",
   "items": [
+   {
+    "child": 0,
+    "collapsible": 0,
+    "filters": null,
+    "icon": "home",
+    "indent": 0,
+    "keep_closed": 0,
+    "label": "Home",
+    "link_to": "Director",
+    "link_type": "Workspace",
+    "navigate_to_tab": null,
+    "route_options": null,
+    "show_arrow": 0,
+    "type": "Link",
+    "url": null
+   },
    {
     "child": 0,
     "collapsible": 1,
@@ -963,7 +1043,7 @@
     "url": null
    }
   ],
-  "modified": "2026-08-25 12:59:48.433384",
+  "modified": "2026-08-31 21:25:43.332044",
   "module": "Azzir Fleet",
   "module_onboarding": null,
   "name": "Director",

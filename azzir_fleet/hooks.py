@@ -127,9 +127,17 @@ after_migrate = "azzir_fleet.setup.after_migrate"
 # reliably (imported on every migrate) instead of being created by runtime code.
 fixtures = [
 	{
+		# Role home dashboards, shipped as data (JSON) — synced BEFORE the sidebars
+		# so the sidebar 'Home' links resolve. Only names that don't clash with
+		# ERPNext/HRMS defaults (Accounting/HR reuse those existing workspaces).
+		"dt": "Workspace",
+		"filters": [["name", "in", ["Sales", "Procurement", "Director"]]],
+	},
+	{
 		# "Azzir Fleet" is a hidden suppressor (only a section break, so it doesn't
 		# render) — it stops Frappe from auto-generating a cluttered module sidebar,
-		# leaving ONLY the 5 icons.
+		# leaving ONLY the 5 icons. Each role sidebar carries a 'Home' link to its
+		# workspace.
 		"dt": "Workspace Sidebar",
 		"filters": [["name", "in", ["Sales", "Procurement", "HR", "Accounting", "Director", "Azzir Fleet"]]],
 	},

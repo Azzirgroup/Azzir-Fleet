@@ -544,8 +544,6 @@ def after_migrate():
 		("sales_overseer_role", _setup_sales_overseer_role),
 		("procurement_overseer_role", _setup_procurement_overseer_role),
 		("sales_portal_role", _setup_sales_portal_role),
-		("role_workspaces", _setup_workspaces),
-		("sidebar_homes", _ensure_sidebar_homes),
 	]
 	for label, fn in steps:
 		try:
