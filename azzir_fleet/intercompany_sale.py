@@ -119,6 +119,30 @@ def set_landing_warehouse(doc, method=None):
 			r.warehouse = landing
 
 
+def _company_cost_center(company: str) -> str | None:
+	"""A non-group cost center that belongs to `company` (its default, else any
+	leaf). Used so auto-created intercompany docs never inherit a cost center from
+	another company (e.g. the user's Corporate cost center)."""
+	cc = frappe.get_cached_value("Company", company, "cost_center")
+	if cc and not frappe.get_cached_value("Cost Center", cc, "is_group"):
+		return cc
+	return frappe.db.get_value(
+		"Cost Center", {"company": company, "is_group": 0, "disabled": 0}, "name"
+	)
+
+
+def _force_cost_center(target, cost_center: str | None) -> None:
+	"""Set the cost center on every item (and tax) row so nothing inherits a
+	cost center from a different company."""
+	if not cost_center:
+		return
+	for r in target.get("items") or []:
+		r.cost_center = cost_center
+	for t in target.get("taxes") or []:
+		if hasattr(t, "cost_center"):
+			t.cost_center = cost_center
+
+
 def process_sister_purchase(doc, method=None):
 	"""Sales Invoice before_submit: orchestrate the intercompany transfer so the
 	corporate company holds the sister's stock (at a discount) before it sells."""
@@ -180,6 +204,30 @@ def process_sister_purchase(doc, method=None):
 	if not lines:
 		frappe.throw(_("Add at least one item before buying from a sister company."))
 
+	sister_cc = _company_cost_center(sister)
+	corporate_cc = _company_cost_center(corporate)
+
+	# Build the intercompany documents as Administrator. The submitting user is
+	# restricted (User Permission) to their own Corporate cost center, and ERPNext
+	# would otherwise force THAT cost center onto the sister/corporate docs — which
+	# belong to other companies — and reject them. Administrator has no such
+	# restriction, so each doc keeps its own company's cost center.
+	_prev_user = frappe.session.user
+	frappe.set_user("Administrator")
+	try:
+		_build_intercompany_docs(doc, sister, supply_wh, landing, internal_customer,
+		                         ic_price_list, factor, sister_cc, corporate_cc, lines)
+	finally:
+		frappe.set_user(_prev_user)
+
+	# Point the corporate invoice's own rows at the landing warehouse, so it sells
+	# (to the real customer, at full market rate) from the stock we just received.
+	for r in lines:
+		r.warehouse = landing
+
+
+def _build_intercompany_docs(doc, sister, supply_wh, landing, internal_customer,
+                             ic_price_list, factor, sister_cc, corporate_cc, lines):
 	# 1) Sister Delivery Note — stock leaves the chosen sister warehouse.
 	dn = frappe.new_doc("Delivery Note")
 	dn.company = sister
@@ -198,8 +246,10 @@ def process_sister_purchase(doc, method=None):
 				"rate": transfer_rate,
 				"price_list_rate": transfer_rate,
 				"warehouse": supply_wh,
+				"cost_center": sister_cc,
 			},
 		)
+	_force_cost_center(dn, sister_cc)
 	dn.flags.ignore_permissions = True
 	dn.insert()
 	dn.submit()
@@ -208,6 +258,7 @@ def process_sister_purchase(doc, method=None):
 	from erpnext.stock.doctype.delivery_note.delivery_note import make_sales_invoice as _dn_to_si
 
 	sister_si = _dn_to_si(dn.name)
+	_force_cost_center(sister_si, sister_cc)
 	sister_si.flags.ignore_permissions = True
 	sister_si.insert()
 	sister_si.submit()
@@ -223,19 +274,14 @@ def process_sister_purchase(doc, method=None):
 	pi.set_warehouse = landing
 	for r in pi.get("items") or []:
 		r.warehouse = landing
+	_force_cost_center(pi, corporate_cc)
 	# Already priced at the transfer rate — don't let the receipt hook discount again.
 	pi.flags.azzir_intercompany_priced = True
 	pi.flags.ignore_permissions = True
 	pi.insert()
 	pi.submit()
 
-	# 4) Point the corporate invoice's own rows at the landing warehouse, so it
-	#    sells (to the real customer, at full market rate) from the stock we just
-	#    received.
-	for r in lines:
-		r.warehouse = landing
-
-	# 5) Record the links (idempotency + audit trail).
+	# Record the links on the corporate invoice (idempotency + audit trail).
 	doc.azzir_intercompany_delivery_note = dn.name
 	doc.azzir_intercompany_sister_invoice = sister_si.name
 	doc.azzir_intercompany_purchase_invoice = pi.name
