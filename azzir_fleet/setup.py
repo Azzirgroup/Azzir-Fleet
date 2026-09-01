@@ -492,6 +492,41 @@ CUSTOM_FIELDS.setdefault("Sales Invoice", []).extend(
 	]
 )
 
+# Quotation: the buy-from-sister choice starts here and carries to the Sales
+# Invoice. NO intercompany documents are created at quotation stage — the logic
+# only runs when the Sales Invoice is submitted.
+CUSTOM_FIELDS.setdefault("Quotation", []).extend(
+	[
+		{
+			"fieldname": "azzir_buy_from_sister",
+			"label": "Buy Stock From Sister Company",
+			"fieldtype": "Check",
+			"insert_after": "company",
+			"description": "Source these items from a sister company. Choose the supply "
+			"company and warehouse; the transfer happens when this is turned into a "
+			"submitted Sales Invoice.",
+		},
+		{
+			"fieldname": "azzir_supply_company",
+			"label": "Supply Company",
+			"fieldtype": "Link",
+			"options": "Company",
+			"insert_after": "azzir_buy_from_sister",
+			"depends_on": "eval:doc.azzir_buy_from_sister",
+			"mandatory_depends_on": "eval:doc.azzir_buy_from_sister",
+		},
+		{
+			"fieldname": "azzir_supply_warehouse",
+			"label": "Supply Company Warehouse",
+			"fieldtype": "Link",
+			"options": "Warehouse",
+			"insert_after": "azzir_supply_company",
+			"depends_on": "eval:doc.azzir_buy_from_sister",
+			"mandatory_depends_on": "eval:doc.azzir_buy_from_sister",
+		},
+	]
+)
+
 OVERRIDE_ROLE = "Azzir Stock Override"
 
 

@@ -24,9 +24,9 @@
           </div>
         </div>
 
-        <!-- Buy stock from a sister company (only for Sales Invoice, and only if the
-             user is assigned a Corporate cost center) -->
-        <div v-if="doctype === 'Sales Invoice' && canBuySister" class="mb-4 rounded-lg border bg-amber-50 p-3">
+        <!-- Buy stock from a sister company — starts on the Quotation, carries to
+             the Sales Invoice. Only for Corporate-cost-center users. -->
+        <div v-if="sisterEligible" class="mb-4 rounded-lg border bg-amber-50 p-3">
           <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
             <input type="checkbox" v-model="buyFromSister" />
             Buy Stock From Sister Company
@@ -37,8 +37,10 @@
               <Combo v-model="supplyCompany" doctype="Company" display="name" placeholder="Sister company" />
             </div>
             <div>
-              <label class="mb-1 block text-xs text-gray-500">Supply Company Warehouse</label>
-              <Combo v-model="supplyWarehouse" doctype="Warehouse" display="name" placeholder="Sister warehouse" :filters="{ company: supplyCompany, is_group: 0 }" />
+              <label class="mb-1 block text-xs text-gray-500">Supply Company Warehouse (in stock)</label>
+              <Combo v-model="supplyWarehouse" doctype="Warehouse" display="label" placeholder="Warehouse with stock"
+                query-method="azzir_fleet.intercompany_sale.supply_warehouses"
+                :query-args="{ company: supplyCompany, item_codes: rows.filter((r) => r.item_code).map((r) => r.item_code) }" />
             </div>
           </div>
         </div>
@@ -114,6 +116,8 @@ const buyFromSister = ref(false)
 const supplyCompany = ref('')
 const supplyWarehouse = ref('')
 watch(supplyCompany, (n, o) => { if (o) supplyWarehouse.value = '' })
+const sisterDoctype = (dt) => dt === 'Sales Invoice' || dt === 'Quotation'
+const sisterEligible = computed(() => canBuySister.value && sisterDoctype(props.doctype))
 
 const total = computed(() => rows.value.reduce((s, r) => s + (Number(r.qty) || 0) * (Number(r.rate) || 0), 0))
 
@@ -123,12 +127,13 @@ watch(company, (n, o) => { if (o) customer.value = '' })
 onMounted(async () => {
   defaults.value = await salesDefaults().catch(() => ({}))
   company.value = props.edit?.company || props.initial?.company || defaults.value.company || ''
-  if (props.doctype === 'Sales Invoice') {
+  if (sisterDoctype(props.doctype)) {
     canBuySister.value = await userCanBuySister().catch(() => false)
-    if (props.edit?.azzir_buy_from_sister) {
+    const src = props.edit || props.initial
+    if (src?.azzir_buy_from_sister) {
       buyFromSister.value = true
-      supplyCompany.value = props.edit.azzir_supply_company || ''
-      supplyWarehouse.value = props.edit.azzir_supply_warehouse || ''
+      supplyCompany.value = src.azzir_supply_company || ''
+      supplyWarehouse.value = src.azzir_supply_warehouse || ''
     }
   }
   if (props.edit) {
@@ -160,12 +165,12 @@ async function save(submit) {
   if (!customer.value) { err.value = true; msg.value = 'Pick a customer.'; return }
   const items = rows.value.filter((r) => r.item_code).map((r) => ({ item_code: r.item_code, qty: r.qty || 1, rate: r.rate || 0, warehouse: r.warehouse || undefined }))
   if (!items.length) { err.value = true; msg.value = 'Add at least one item.'; return }
-  const sister = props.doctype === 'Sales Invoice' && canBuySister.value && buyFromSister.value
+  const sister = sisterDoctype(props.doctype) && canBuySister.value && buyFromSister.value
   if (sister && (!supplyCompany.value || !supplyWarehouse.value)) {
     err.value = true; msg.value = 'Pick the Supply Company and Supply Company Warehouse.'; return
   }
   const applySister = (d) => {
-    if (props.doctype !== 'Sales Invoice' || !canBuySister.value) return
+    if (!sisterDoctype(props.doctype) || !canBuySister.value) return
     d.azzir_buy_from_sister = sister ? 1 : 0
     d.azzir_supply_company = sister ? supplyCompany.value : undefined
     d.azzir_supply_warehouse = sister ? supplyWarehouse.value : undefined

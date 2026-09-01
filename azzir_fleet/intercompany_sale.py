@@ -50,6 +50,50 @@ def corporate_cost_centers(user: str | None = None) -> set:
 
 
 @frappe.whitelist()
+def supply_warehouses(company: str | None = None, item_codes: list | str | None = None,
+                      txt: str | None = None) -> list:
+	"""Warehouses in the supply (sister) company that actually HOLD stock of the
+	given item(s), with the total on-hand qty across those items. Used to fill the
+	Supply Company Warehouse picker (sales frontend) with only stocked warehouses.
+	Returns [{name, qty}] ordered by qty desc."""
+	item_codes = frappe.parse_json(item_codes) if isinstance(item_codes, str) else (item_codes or [])
+	item_codes = [c for c in item_codes if c]
+	if not company:
+		return []
+	conds = ["b.actual_qty > 0", "w.company = %(co)s", "w.is_group = 0", "w.disabled = 0"]
+	vals = {"co": company}
+	if item_codes:
+		conds.append("b.item_code in %(items)s")
+		vals["items"] = tuple(item_codes)
+	if txt:
+		conds.append("b.warehouse like %(t)s")
+		vals["t"] = "%%%s%%" % txt
+	rows = frappe.db.sql(
+		"select b.warehouse, sum(b.actual_qty) qty from `tabBin` b "
+		"join `tabWarehouse` w on w.name = b.warehouse where "
+		+ " and ".join(conds)
+		+ " group by b.warehouse having qty > 0 order by qty desc limit 25",
+		vals,
+		as_dict=True,
+	)
+	return [
+		{"name": r.warehouse, "qty": flt(r.qty), "label": "%s — %g in stock" % (r.warehouse, flt(r.qty))}
+		for r in rows
+	]
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def supply_warehouse_link_query(doctype: str, txt: str, searchfield: str, start: int,
+                                page_len: int, filters: dict | str | None) -> list:
+	"""Desk link-field query for Supply Company Warehouse: only warehouses in the
+	supply company that hold stock of the doc's items, showing the qty."""
+	filters = frappe.parse_json(filters) if isinstance(filters, str) else (filters or {})
+	rows = supply_warehouses(filters.get("company"), filters.get("item_codes"), txt)
+	return [[r["name"], _("{0} in stock").format(r["qty"])] for r in rows]
+
+
+@frappe.whitelist()
 def user_can_buy_from_sister() -> bool:
 	"""Whether the current user may use the sister-company purchase feature
 	(they hold at least one Corporate cost center). Administrator / System Manager

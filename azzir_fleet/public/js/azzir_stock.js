@@ -57,10 +57,15 @@ azzir_fleet.toggle_buy_from_sister = function (frm) {
 		},
 	});
 };
-// The supply warehouse must belong to the chosen supply (sister) company.
+// The supply warehouse: only warehouses in the chosen sister company that HOLD
+// stock of the doc's items, showing the qty.
 azzir_fleet.set_supply_wh_query = function (frm) {
 	frm.set_query("azzir_supply_warehouse", () => ({
-		filters: { company: frm.doc.azzir_supply_company || "", is_group: 0 },
+		query: "azzir_fleet.intercompany_sale.supply_warehouse_link_query",
+		filters: {
+			company: frm.doc.azzir_supply_company || "",
+			item_codes: (frm.doc.items || []).map((i) => i.item_code).filter(Boolean),
+		},
 	}));
 };
 

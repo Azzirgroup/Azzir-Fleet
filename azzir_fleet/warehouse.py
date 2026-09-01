@@ -13,6 +13,10 @@ def require_warehouse_for_stock(doc, method=None):
 	"""Warehouse is mandatory on every line carrying a STOCK item. Service /
 	non-stock lines are exempt. Hard server-side guard behind the field's
 	mandatory_depends_on asterisk."""
+	# Buy-from-sister documents source stock from the sister warehouse; their own
+	# rows get the landing warehouse only at Sales Invoice submit.
+	if doc.get("azzir_buy_from_sister"):
+		return
 	missing = []
 	for idx, row in enumerate(doc.get("items") or [], start=1):
 		code = row.get("item_code")

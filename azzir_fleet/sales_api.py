@@ -172,6 +172,10 @@ def make_next(source_doctype: str, source_name: str, target: str) -> dict:
 		"doctype": target,
 		"data": {
 			"customer": doc.get("customer") or doc.get("party_name"),
+			# Carry the buy-from-sister choice so it's prefilled on the Sales Invoice.
+			"azzir_buy_from_sister": doc.get("azzir_buy_from_sister"),
+			"azzir_supply_company": doc.get("azzir_supply_company"),
+			"azzir_supply_warehouse": doc.get("azzir_supply_warehouse"),
 			"items": [
 				{"item_code": r.item_code, "qty": r.qty, "rate": r.rate, "warehouse": r.get("warehouse")}
 				for r in (doc.get("items") or [])
