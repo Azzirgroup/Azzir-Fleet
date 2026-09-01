@@ -149,14 +149,17 @@ def get_stock_tree(
 	groups_only = frappe.utils.cint(groups_only)
 
 	bins = frappe.db.sql(
-		"""select warehouse, sum(actual_qty) qty from `tabBin`
-		   where item_code = %s and actual_qty != 0 group by warehouse""",
+		"""select warehouse, sum(actual_qty) qty, sum(ordered_qty) ordered from `tabBin`
+		   where item_code = %s and (actual_qty != 0 or ordered_qty != 0) group by warehouse""",
 		item_code,
 		as_dict=True,
 	)
 	if not bins:
 		return []
 	stock = {b.warehouse: flt(b.qty) for b in bins}
+	# Incoming (economy) stock per warehouse = quantity on order (Purchase Orders
+	# not yet received into that warehouse).
+	ordered = {b.warehouse: flt(b.ordered) for b in bins}
 
 	reserved = {}
 	if exclude_invoice is not None:
@@ -212,14 +215,17 @@ def get_stock_tree(
 			physical = sum(v for lw, v in stock.items() if _under(lw, info))
 			held = sum(r for rw, r in reserved.items() if _under(rw, info))
 			qty = max(0.0, physical - held)
+			incoming = sum(o for lw, o in ordered.items() if _under(lw, info))
 		else:
 			qty = max(0.0, flt(stock.get(wh, 0)) - flt(reserved.get(wh, 0)))
+			incoming = flt(ordered.get(wh, 0))
 		rows.append(
 			{
 				"warehouse": wh,
 				"parent": info.parent_warehouse,
 				"is_group": info.is_group,
 				"qty": flt(qty),
+				"incoming": flt(incoming),
 				"lft": info.lft,
 				"depth": _depth(wh, wh_info),
 				"company": info.company,

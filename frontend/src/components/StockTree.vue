@@ -21,11 +21,15 @@
             {{ r.is_group ? '📁' : '•' }} {{ r.warehouse }}
             <span v-if="selectable && !r.is_group && r.selectable === false" class="ml-1 text-xs text-gray-400">🔒</span>
           </span>
-          <span :class="{ 'font-semibold': r.is_group }">{{ num(r.qty) }}</span>
+          <span :class="{ 'font-semibold': r.is_group }">
+            {{ num(r.qty) }}
+            <span v-if="r.incoming" class="ml-1 font-normal text-gray-400">(+{{ num(r.incoming) }} incoming)</span>
+          </span>
         </div>
       </template>
       <div class="flex items-center justify-between border-t-2 border-black py-2 font-bold">
-        <span>Total</span><span>{{ num(total) }}</span>
+        <span>Total</span>
+        <span>{{ num(total) }}<span v-if="totalIncoming" class="ml-1 font-normal text-gray-400">(+{{ num(totalIncoming) }} incoming)</span></span>
       </div>
     </div>
   </div>
@@ -51,6 +55,7 @@ const grouped = computed(() => {
   return g
 })
 const total = computed(() => rows.value.filter((r) => !r.parent).reduce((s, r) => s + Number(r.qty || 0), 0))
+const totalIncoming = computed(() => rows.value.filter((r) => !r.parent).reduce((s, r) => s + Number(r.incoming || 0), 0))
 
 async function load() {
   if (!props.itemCode) { rows.value = []; return }

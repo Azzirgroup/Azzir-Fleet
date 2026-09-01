@@ -127,6 +127,10 @@ azzir_fleet.show_stock_dialog = function (item_code, on_select) {
 					}
 				}
 				const clickable = on_select && !node.is_group && !locked;
+				const incoming = flt(node.incoming);
+				const incoming_html = incoming
+					? ` <span style="color:#888; font-weight:400;">(+${format_number(incoming)} ${__("incoming")})</span>`
+					: "";
 				let html = `<div class="azzir-wh-row" data-wh="${wh}"
 					data-group="${node.is_group ? 1 : 0}" data-locked="${locked ? 1 : 0}"
 					title="${locked ? __("Not in your cost center — view only") : ""}"
@@ -134,7 +138,7 @@ azzir_fleet.show_stock_dialog = function (item_code, on_select) {
 					border-bottom:1px solid #f0f0f0; padding-left:${depth * 22}px;
 					${locked ? "opacity:0.5;" : ""}${clickable ? "cursor:pointer;" : ""}">
 					<span style="font-weight:${weight};">${pick}${icon} ${wh}</span>
-					<span style="font-weight:${weight};">${format_number(node.qty)}</span></div>`;
+					<span style="font-weight:${weight};">${format_number(node.qty)}${incoming_html}</span></div>`;
 				(by_parent[node.warehouse] || []).forEach((c) => (html += render(c, depth + 1)));
 				return html;
 			}
@@ -152,6 +156,7 @@ azzir_fleet.show_stock_dialog = function (item_code, on_select) {
 				roots.filter((rt) => (rt.company || "") === co).forEach((rt) => (body += render(rt, 0)));
 			});
 			const total = roots.reduce((s, x) => s + flt(x.qty), 0);
+			const total_incoming = roots.reduce((s, x) => s + flt(x.incoming), 0);
 			if (!body) body = `<p class="text-muted">${__("No available stock in any warehouse.")}</p>`;
 
 			const d = new frappe.ui.Dialog({
@@ -165,7 +170,9 @@ azzir_fleet.show_stock_dialog = function (item_code, on_select) {
 				${hint}${body}
 				<div style="display:flex; justify-content:space-between; padding:8px 0;
 					border-top:2px solid #000; font-weight:700; margin-top:6px;">
-					<span>${__("Total")}</span><span>${format_number(total)}</span></div>
+					<span>${__("Total")}</span><span>${format_number(total)}${
+						total_incoming ? ` <span style="color:#888; font-weight:400;">(+${format_number(total_incoming)} ${__("incoming")})</span>` : ""
+					}</span></div>
 			</div>`);
 
 			if (on_select) {
