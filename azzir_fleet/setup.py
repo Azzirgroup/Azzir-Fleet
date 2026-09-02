@@ -1336,6 +1336,7 @@ PICKUP_SLIP_HTML = """
 	{% if not no_letterhead and letter_head %}<div class="letter-head">{{ letter_head }}</div>{% endif %}
 
 	<h2 style="text-align:center; margin:6px 0; letter-spacing:1px;">PICKUP SLIP</h2>
+	{% if doc.get("azzir_buy_from_sister") %}<div style="text-align:center; color:#b00; font-size:11px; margin:-2px 0 8px;">Pick from the <b>sister company</b> warehouse(s) shown below</div>{% endif %}
 
 	<table style="width:100%; margin-bottom:10px;">
 		<tr>
@@ -1370,6 +1371,14 @@ PICKUP_SLIP_HTML = """
 				<td style="padding:5px;">
 					{% if comps %}
 						<span style="color:#999;">See components ↓</span>
+					{% elif doc.get("azzir_buy_from_sister") and row.get("azzir_supply_warehouse") %}
+						{# Buy-from-sister: pick from the SISTER warehouse the stock was
+						   requested from (the Delivery Note source), not our landing warehouse. #}
+						{% set sw = row.azzir_supply_warehouse %}
+						{% set sqty = frappe.db.get_value("Bin", {"item_code": row.item_code, "warehouse": sw}, "actual_qty") or 0 %}
+						<div style="font-weight:600;">{{ sw }} : {{ "%.2f"|format(sqty) }}</div>
+						{% if row.get("azzir_supply_company") %}<div style="color:#777; font-size:11px;">Sister: {{ row.azzir_supply_company }}</div>{% endif %}
+						{% if row.get("azzir_sister_delivery_note") %}<div style="color:#777; font-size:11px;">DN: {{ row.azzir_sister_delivery_note }}</div>{% endif %}
 					{% elif row.warehouse %}
 						{% set branch = get_stock_branch(row.item_code, row.warehouse) %}
 						{% for w in branch %}
