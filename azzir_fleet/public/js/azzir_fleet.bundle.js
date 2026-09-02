@@ -9,5 +9,6 @@ import "./portal_redirect";
 import "./azzir_compat";
 import "./azzir_alias";
 import "./azzir_stock";
+import "./azzir_purchase";
 import "./azzir_vat";
 import "./azzir_tax";

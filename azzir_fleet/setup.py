@@ -588,6 +588,82 @@ CUSTOM_FIELDS.setdefault("Quotation", []).extend(
 	]
 )
 
+# --- Purchase cycle: buy for another (internal) company ---------------------
+# Per-row Target Company + Target Warehouse on Purchase Order / Receipt / Invoice
+# items. Only used when the target company differs from the buying company (then
+# the received stock is transferred there at submit — see azzir_fleet.purchase_cycle).
+_ROW_TARGET_FIELDS = [
+	{
+		"fieldname": "azzir_target_company",
+		"label": "Target Company",
+		"fieldtype": "Link",
+		"options": "Company",
+		"insert_after": "warehouse",
+		"in_list_view": 1,
+		"columns": 2,
+		"description": "Buy this line for another internal company. Leave blank for a normal purchase.",
+	},
+	{
+		"fieldname": "azzir_target_warehouse",
+		"label": "Target Warehouse",
+		"fieldtype": "Link",
+		"options": "Warehouse",
+		"insert_after": "azzir_target_company",
+		"in_list_view": 1,
+		"columns": 2,
+		"description": "Warehouse in the Target Company that receives this line.",
+	},
+]
+for _dt in ("Purchase Order Item", "Purchase Receipt Item", "Purchase Invoice Item"):
+	for _f in _ROW_TARGET_FIELDS:
+		CUSTOM_FIELDS.setdefault(_dt, []).append(dict(_f))
+
+# Header defaults (populate the rows) on the three buying documents.
+for _dt in ("Purchase Order", "Purchase Receipt", "Purchase Invoice"):
+	CUSTOM_FIELDS.setdefault(_dt, []).extend(
+		[
+			{
+				"fieldname": "azzir_target_company",
+				"label": "Target Company (default)",
+				"fieldtype": "Link",
+				"options": "Company",
+				"insert_after": "company",
+				"description": "Default Target Company copied onto item rows that don't set their own.",
+			},
+			{
+				"fieldname": "azzir_target_warehouse",
+				"label": "Target Warehouse (default)",
+				"fieldtype": "Link",
+				"options": "Warehouse",
+				"insert_after": "azzir_target_company",
+				"depends_on": "eval:doc.azzir_target_company",
+			},
+		]
+	)
+
+# Idempotency + audit trail on the stock-moving documents.
+for _dt in ("Purchase Receipt", "Purchase Invoice"):
+	CUSTOM_FIELDS.setdefault(_dt, []).extend(
+		[
+			{
+				"fieldname": "azzir_target_done",
+				"label": "Inter-company Target Transfer Done",
+				"fieldtype": "Check",
+				"insert_after": "azzir_target_warehouse",
+				"read_only": 1,
+				"hidden": 1,
+			},
+			{
+				"fieldname": "azzir_target_refs",
+				"label": "Inter-company Target Transfers",
+				"fieldtype": "Small Text",
+				"insert_after": "azzir_target_done",
+				"read_only": 1,
+			},
+		]
+	)
+
+
 OVERRIDE_ROLE = "Azzir Stock Override"
 
 

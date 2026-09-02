@@ -3,7 +3,18 @@
   (function() {
     function onDesk() {
       const p = (window.location.pathname || "/app").replace(/\/+$/, "") || "/app";
-      return /^\/(app|desk|apps)(\/|$)/.test(p);
+      return /^\/(app|apps)$/.test(p);
+    }
+    function deskEscape() {
+      try {
+        if (new URLSearchParams(window.location.search).get("desk") === "1") {
+          document.cookie = "azzir_desk=1; path=/; SameSite=Lax";
+          return true;
+        }
+        return /(?:^|;\s*)azzir_desk=1(?:;|$)/.test(document.cookie);
+      } catch (e) {
+        return false;
+      }
     }
     function roles() {
       try {
@@ -19,7 +30,7 @@
           return false;
         const isPortal = r.includes("Sales Portal");
         const bypass = window.frappe && frappe.session && frappe.session.user === "Administrator";
-        if (isPortal && !bypass && onDesk()) {
+        if (isPortal && !bypass && onDesk() && !deskEscape()) {
           window.location.replace("/sales");
           return true;
         }
@@ -370,6 +381,76 @@
   );
   $('<style>.grid-row [data-fieldname="azzir_all_stock"]{cursor:pointer;color:#1a73e8;text-decoration:underline;}</style>').appendTo("head");
 
+  // ../azzir_fleet/azzir_fleet/public/js/azzir_purchase.js
+  frappe.provide("azzir_fleet");
+  azzir_fleet.set_target_wh_query = function(frm) {
+    if (!frm.fields_dict.items)
+      return;
+    frm.set_query("azzir_target_warehouse", "items", function(doc, cdt, cdn) {
+      const row = locals[cdt][cdn] || {};
+      return {
+        filters: {
+          company: row.azzir_target_company || doc.azzir_target_company || "",
+          is_group: 0,
+          disabled: 0
+        }
+      };
+    });
+    if (frm.fields_dict.azzir_target_warehouse) {
+      frm.set_query("azzir_target_warehouse", function(doc) {
+        return { filters: { company: doc.azzir_target_company || "", is_group: 0, disabled: 0 } };
+      });
+    }
+  };
+  azzir_fleet.populate_target = function(frm, field) {
+    const val = frm.doc[field];
+    if (!val)
+      return;
+    (frm.doc.items || []).forEach((r) => frappe.model.set_value(r.doctype, r.name, field, val));
+  };
+  azzir_fleet.autofill_purchase_warehouse = function(frm, cdt, cdn) {
+    const row = locals[cdt] && locals[cdt][cdn];
+    if (!row || !row.item_code || row.warehouse)
+      return;
+    frappe.call({
+      method: "azzir_fleet.stock_info.last_warehouse",
+      args: { item_code: row.item_code, company: frm.doc.company },
+      callback(r) {
+        if (r.message && locals[cdt][cdn] && !locals[cdt][cdn].warehouse) {
+          frappe.model.set_value(cdt, cdn, "warehouse", r.message);
+        }
+      }
+    });
+  };
+  ["Purchase Order", "Purchase Receipt", "Purchase Invoice"].forEach(function(dt) {
+    frappe.ui.form.on(dt, {
+      onload: azzir_fleet.set_target_wh_query,
+      refresh: azzir_fleet.set_target_wh_query,
+      azzir_target_company(frm) {
+        azzir_fleet.set_target_wh_query(frm);
+        frm.set_value("azzir_target_warehouse", "");
+        azzir_fleet.populate_target(frm, "azzir_target_company");
+      },
+      azzir_target_warehouse(frm) {
+        azzir_fleet.populate_target(frm, "azzir_target_warehouse");
+      }
+    });
+  });
+  ["Purchase Order Item", "Purchase Invoice Item"].forEach(function(dt) {
+    frappe.ui.form.on(dt, {
+      item_code(frm, cdt, cdn) {
+        azzir_fleet.autofill_purchase_warehouse(frm, cdt, cdn);
+      }
+    });
+  });
+  ["Purchase Order Item", "Purchase Receipt Item", "Purchase Invoice Item"].forEach(function(dt) {
+    frappe.ui.form.on(dt, {
+      azzir_target_company(frm, cdt, cdn) {
+        frappe.model.set_value(cdt, cdn, "azzir_target_warehouse", "");
+      }
+    });
+  });
+
   // ../azzir_fleet/azzir_fleet/public/js/azzir_vat.js
   ["Sales Invoice", "Sales Order", "Quotation", "Delivery Note"].forEach(function(dt) {
     frappe.ui.form.on(dt, {
@@ -440,4 +521,4 @@
     azzir_tax_rate: (frm, cdt, cdn) => apply_calc(frm, cdt, cdn, je_base(cdt, cdn))
   });
 })();
-//# sourceMappingURL=azzir_fleet.bundle.QQWT33AS.js.map
+//# sourceMappingURL=azzir_fleet.bundle.JS4S6Z7J.js.map

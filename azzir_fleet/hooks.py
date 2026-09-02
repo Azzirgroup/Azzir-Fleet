@@ -153,6 +153,22 @@ fixtures = [
 					"Sales Invoice-azzir_intercompany_refs",
 					"Sales Invoice Item-azzir_supply_company",
 					"Sales Invoice Item-azzir_supply_warehouse",
+					"Purchase Order-azzir_target_company",
+					"Purchase Order-azzir_target_warehouse",
+					"Purchase Order Item-azzir_target_company",
+					"Purchase Order Item-azzir_target_warehouse",
+					"Purchase Receipt-azzir_target_company",
+					"Purchase Receipt-azzir_target_warehouse",
+					"Purchase Receipt-azzir_target_done",
+					"Purchase Receipt-azzir_target_refs",
+					"Purchase Receipt Item-azzir_target_company",
+					"Purchase Receipt Item-azzir_target_warehouse",
+					"Purchase Invoice-azzir_target_company",
+					"Purchase Invoice-azzir_target_warehouse",
+					"Purchase Invoice-azzir_target_done",
+					"Purchase Invoice-azzir_target_refs",
+					"Purchase Invoice Item-azzir_target_company",
+					"Purchase Invoice Item-azzir_target_warehouse",
 				],
 			]
 		],
@@ -279,23 +295,40 @@ doc_events = {
 	},
 	# Maximum Order Qty — buying documents
 	"Material Request": {"validate": "azzir_fleet.qty_limits.validate_buying"},
-	"Purchase Order": {"validate": "azzir_fleet.qty_limits.validate_buying"},
+	"Purchase Order": {
+		"validate": [
+			"azzir_fleet.qty_limits.validate_buying",
+			"azzir_fleet.purchase_cycle.default_target_rows",
+		]
+	},
 	"Purchase Invoice": {
 		"before_validate": "azzir_fleet.intercompany.apply_intercompany_discount",
 		"validate": [
 			"azzir_fleet.qty_limits.validate_buying",
 			"azzir_fleet.purchase_invoice.validate_unique_bill_no",
+			"azzir_fleet.purchase_cycle.default_target_rows",
 		],
+		# Buy-for-another-company: transfer received stock to the target company
+		# (only when Update Stock is on — checked inside the handler).
+		"on_submit": "azzir_fleet.purchase_cycle.process_target_transfer",
 	},
 	"Purchase Receipt": {
 		"before_validate": "azzir_fleet.intercompany.apply_intercompany_discount",
-		"validate": "azzir_fleet.qty_limits.validate_buying",
+		"validate": [
+			"azzir_fleet.qty_limits.validate_buying",
+			"azzir_fleet.purchase_cycle.default_target_rows",
+		],
+		"on_submit": "azzir_fleet.purchase_cycle.process_target_transfer",
 	},
 	# Maximum Sales Qty — selling documents.
 	# apply_vat_option runs LAST on validate (after ERPNext re-applies default taxes).
 	"Quotation": {
 		"before_validate": "azzir_fleet.customer_name.capture_override",
 		"validate": [
+			# Buy-from-sister: default the row supply company/warehouse from the header
+			# and point each row at its sister's landing warehouse (same as Sales Invoice),
+			# so the Quotation shows the landing warehouse too.
+			"azzir_fleet.intercompany_sale.set_landing_warehouse",
 			"azzir_fleet.warehouse.require_warehouse_for_stock",
 			"azzir_fleet.qty_limits.validate_selling",
 			"azzir_fleet.quotation.set_quotation_validity",
