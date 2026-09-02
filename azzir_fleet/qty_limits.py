@@ -15,9 +15,12 @@ def _can_override():
 
 
 def validate_buying(doc, method=None):
-	if _can_override():
-		return
-	_enforce(doc, "max_order_qty", _("ordered or requested"))
+	# Purchasing is intentionally UNRESTRICTED: users may order any quantity — below
+	# the Minimum Order Qty or above the Maximum Order Qty. Min/Max Order Qty now only
+	# drive the Reorder Level Report, they are not a purchase floor/ceiling. (Re-enable
+	# the ceiling by restoring the _enforce call below.)
+	return
+	_enforce(doc, "max_order_qty", _("ordered or requested"))  # noqa: unreachable
 
 
 def validate_selling(doc, method=None):
