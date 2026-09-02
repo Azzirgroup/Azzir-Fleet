@@ -85,9 +85,14 @@ def route_portal_users_on_login(login_manager=None):
 	Runs during on_session_creation, before Frappe computes the post-login
 	home page, so setting `flags.home_page` here wins over the default
 	workspace / desk redirect."""
-	if frappe.session.user == "Guest":
+	user = frappe.session.user
+	# Administrator is exempt: frappe.get_roles("Administrator") returns EVERY role in
+	# the system (not just assigned ones), so a plain role check would wrongly treat
+	# Administrator as a portal user and send it to /sales on login.
+	if user in ("Guest", "Administrator"):
 		return
-	if SALES_PORTAL_ROLE in frappe.get_roles():
+	# Check the ACTUAL role assignment (Has Role), not get_roles — same reason.
+	if frappe.db.exists("Has Role", {"parent": user, "parenttype": "User", "role": SALES_PORTAL_ROLE}):
 		frappe.local.flags.home_page = "sales"
 		# A user's default workspace otherwise overrides the home page (frappe
 		# get_home_page), sending them to the desk instead of the portal. Clear it
