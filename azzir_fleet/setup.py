@@ -431,6 +431,22 @@ for _dt in ("Quotation Item", "Sales Invoice Item"):
 	for _f in _ROW_SUPPLY_FIELDS:
 		CUSTOM_FIELDS.setdefault(_dt, []).append(dict(_f))
 
+# Per-row link to the sister Delivery Note created for that line at submit.
+CUSTOM_FIELDS.setdefault("Sales Invoice Item", []).append(
+	{
+		"fieldname": "azzir_sister_delivery_note",
+		"label": "Delivery Note",
+		"fieldtype": "Link",
+		"options": "Delivery Note",
+		"insert_after": "azzir_supply_warehouse",
+		"read_only": 1,
+		"in_list_view": 1,
+		"columns": 2,
+		"depends_on": "eval:parent.azzir_buy_from_sister",
+		"description": "The sister Delivery Note auto-created for this line.",
+	}
+)
+
 # --- Sell sister-company stock (corporate company buys from a sister at a discount)
 # Flag a Cost Center as "Corporate": its assigned users can buy sister stock.
 CUSTOM_FIELDS.setdefault("Cost Center", []).append(

@@ -377,6 +377,11 @@ def _build_one_transfer(doc, corporate, sister, rows, ic_price_list, factor, cor
 	dn.insert()
 	dn.submit()
 
+	# Stamp each corporate item row with its sister Delivery Note (per row).
+	for r, _wh in rows:
+		if r.meta.has_field("azzir_sister_delivery_note"):
+			r.azzir_sister_delivery_note = dn.name
+
 	# 2) Sister Sales Invoice from that Delivery Note (sister earns the discounted price).
 	from erpnext.stock.doctype.delivery_note.delivery_note import make_sales_invoice as _dn_to_si
 

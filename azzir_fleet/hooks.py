@@ -153,6 +153,7 @@ fixtures = [
 					"Sales Invoice-azzir_intercompany_refs",
 					"Sales Invoice Item-azzir_supply_company",
 					"Sales Invoice Item-azzir_supply_warehouse",
+					"Sales Invoice Item-azzir_sister_delivery_note",
 					"Purchase Order-azzir_target_company",
 					"Purchase Order-azzir_target_warehouse",
 					"Purchase Order Item-azzir_target_company",
