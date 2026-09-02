@@ -4,3 +4,4 @@ node_modules/
 __pycache__/
 *.pyc
 frontend/dist/
+azzir_fleet/public/node_modules/
