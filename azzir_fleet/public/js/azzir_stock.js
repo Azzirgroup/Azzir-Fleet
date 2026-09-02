@@ -44,6 +44,8 @@ azzir_fleet.toggle_buy_from_sister = function (frm) {
 	const apply = (can) => {
 		frm.toggle_display("azzir_buy_from_sister", !!can);
 		if (!can && frm.doc.azzir_buy_from_sister) frm.set_value("azzir_buy_from_sister", 0);
+		// Eligible user, brand-new doc: default the checkbox ON.
+		if (can && frm.is_new() && !frm.doc.azzir_buy_from_sister) frm.set_value("azzir_buy_from_sister", 1);
 	};
 	if (azzir_fleet._can_buy_sister !== null) {
 		apply(azzir_fleet._can_buy_sister);

@@ -38,5 +38,12 @@ def route_portal_users_on_login(login_manager=None):
 		return
 	if SALES_PORTAL_ROLE in frappe.get_roles():
 		frappe.local.flags.home_page = "sales"
+		# A user's default workspace otherwise overrides the home page (frappe
+		# get_home_page), sending them to the desk instead of the portal. Clear it
+		# so the portal redirect always wins, on every login path.
+		if frappe.db.get_value("User", frappe.session.user, "default_workspace"):
+			frappe.db.set_value(
+				"User", frappe.session.user, "default_workspace", None, update_modified=False
+			)
 
 

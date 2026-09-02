@@ -134,6 +134,9 @@ onMounted(async () => {
       buyFromSister.value = true
       supplyCompany.value = src.azzir_supply_company || ''
       supplyWarehouse.value = src.azzir_supply_warehouse || ''
+    } else if (canBuySister.value && !props.edit) {
+      // Eligible user, brand-new doc: default the checkbox ON.
+      buyFromSister.value = true
     }
   }
   if (props.edit) {
