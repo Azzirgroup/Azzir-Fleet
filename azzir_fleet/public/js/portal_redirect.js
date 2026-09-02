@@ -9,9 +9,23 @@
 // where the login carried a redirect-to=/app that the login page honours first.
 (function () {
 	function onDesk() {
-		// The desk is /app on older Frappe, /desk on newer builds (/apps launcher too).
+		// Only the login landing — the bare /app (or /apps launcher). /desk and any
+		// specific desk page (/desk/item, /app/quotation, …) are deliberate and left
+		// alone, so a portal user can still reach the desk when they mean to.
 		const p = (window.location.pathname || "/app").replace(/\/+$/, "") || "/app";
-		return /^\/(app|desk|apps)(\/|$)/.test(p);
+		return /^\/(app|apps)$/.test(p);
+	}
+	function deskEscape() {
+		// ?desk=1 (or the azzir_desk session cookie) lets the user into the desk.
+		try {
+			if (new URLSearchParams(window.location.search).get("desk") === "1") {
+				document.cookie = "azzir_desk=1; path=/; SameSite=Lax";
+				return true;
+			}
+			return /(?:^|;\s*)azzir_desk=1(?:;|$)/.test(document.cookie);
+		} catch (e) {
+			return false;
+		}
 	}
 	function roles() {
 		try {
@@ -33,7 +47,7 @@
 			// role overrides every other role (System Manager included).
 			const bypass =
 				window.frappe && frappe.session && frappe.session.user === "Administrator";
-			if (isPortal && !bypass && onDesk()) {
+			if (isPortal && !bypass && onDesk() && !deskEscape()) {
 				window.location.replace("/sales");
 				return true;
 			}

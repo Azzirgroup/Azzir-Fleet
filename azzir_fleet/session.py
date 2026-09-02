@@ -27,30 +27,40 @@ def enforce_session_limit(login_manager=None):
 	clear_sessions(user, keep_current=True, force=False)
 
 
-# The desk lives under different roots across Frappe versions: older builds serve it
-# at /app, newer ones at /desk (with /app and /apps redirected to /desk). Guard all of
-# them so this works on every version.
-_DESK_PREFIXES = ("/app", "/desk", "/apps")
+# After login a portal user lands on the bare /app (or /apps launcher) — that is what
+# we bounce to /sales. We deliberately do NOT touch /desk: typing /desk (or any desk
+# page like /desk/item, /desk/user) is a deliberate visit and is always allowed
+# through, so a portal user can still reach the desk when they mean to.
+_DESK_ROOTS = ("/app", "/apps")
 
 
 def redirect_portal_users_off_desk():
-	"""before_request: server-side, bulletproof redirect of 'Sales Portal' users away
-	from the desk (/app or /desk) to the /sales portal.
+	"""before_request: send 'Sales Portal' users who land on the bare desk root to the
+	/sales portal (their home), while letting them open any SPECIFIC desk page they
+	type — /desk/item, /desk/user, /desk/quotation, etc.
 
-	This runs on EVERY request, before the page renders, so it works no matter how the
-	user got to the desk — a fresh login, a Frappe Cloud SSO landing straight on the
-	desk, a bookmarked desk URL, or a stale cached desk shell. The Sales Portal role
-	wins over every other role (System Manager included); only the Administrator
-	superuser account is exempt. Uses a 302 (temporary) so nothing is cached if the
-	role is later removed.
+	Runs on every request before the page renders, so it catches the desk landing no
+	matter how they got there — a fresh login, a Frappe Cloud SSO landing on the desk
+	root, or a bookmarked root. The Sales Portal role wins over every other role
+	(System Manager included); only the Administrator superuser account is exempt.
+	302 (temporary) so nothing is cached if the role is later removed.
 	"""
 	req = getattr(frappe.local, "request", None)
 	if not req:
 		return
-	# Only the desk HTML pages — never /api, /assets, /files, /sales, etc.
+	# Only the BARE desk root — a deeper path like /desk/item is a page they meant to
+	# open. Never /api, /assets, /files, /sales, etc.
 	p = (req.path or "").rstrip("/") or "/"
-	if not any(p == pre or p.startswith(pre + "/") for pre in _DESK_PREFIXES):
+	if p not in _DESK_ROOTS:
 		return
+	# Escape hatch: ?desk=1 on the root lets a portal user into the desk home on
+	# purpose; the client guard then drops an `azzir_desk=1` session cookie so it
+	# sticks for the rest of that browser session (cleared when the browser closes).
+	try:
+		if req.args.get("desk") == "1" or req.cookies.get("azzir_desk") == "1":
+			return
+	except Exception:
+		pass
 	user = getattr(frappe.session, "user", None)
 	if not user or user in ("Guest", "Administrator"):
 		return
