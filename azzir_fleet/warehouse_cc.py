@@ -43,8 +43,59 @@ def allowed_cost_centers(user: str | None = None) -> set | None:
 	return set(ccs) if ccs else None
 
 
+def warehouse_permission_bounds(user: str | None = None) -> list | None:
+	"""(lft, rgt) ranges of the warehouses the user holds a Warehouse User Permission
+	for. Because warehouses are a tree, a permission on a GROUP warehouse thus covers
+	every child warehouse beneath it.
+
+	Returns None = this dimension does NOT restrict (Administrator, System Manager, or
+	a user with no Warehouse user permission). A list = only warehouses inside those
+	ranges may be selected.
+	"""
+	user = user or frappe.session.user
+	if user == "Administrator" or "System Manager" in frappe.get_roles(user):
+		return None
+	names = frappe.get_all(
+		"User Permission", filters={"user": user, "allow": "Warehouse"}, pluck="for_value"
+	)
+	if not names:
+		return None
+	bounds = []
+	for w in names:
+		b = frappe.db.get_value("Warehouse", w, ["lft", "rgt"])
+		if b and b[0] is not None:
+			bounds.append((b[0], b[1]))
+	return bounds or None
+
+
+def _within_bounds(lft, rgt, bounds) -> bool:
+	if not bounds or lft is None:
+		return False
+	return any(lft >= lo and rgt <= hi for lo, hi in bounds)
+
+
+def warehouse_selectable(
+	cost_center: str | None, lft, rgt, cc_allowed: set | None, wh_bounds: list | None
+) -> bool:
+	"""Whether a (leaf) warehouse may be SELECTED, across BOTH granting dimensions:
+
+	* a Cost Center the user is assigned (cc_allowed), and/or
+	* a Warehouse User Permission covering this warehouse — directly, or via one of
+	  its ancestor GROUP warehouses (wh_bounds).
+
+	Both dimensions None = the user is unrestricted. Otherwise the warehouse is
+	selectable if it satisfies AT LEAST ONE dimension the user actually has (union),
+	so granting either a cost center or a group warehouse opens it up.
+	"""
+	if cc_allowed is None and wh_bounds is None:
+		return True
+	if cc_allowed is not None and cost_center and cost_center in cc_allowed:
+		return True
+	return _within_bounds(lft, rgt, wh_bounds)
+
+
 def is_selectable(warehouse_cost_center: str | None, allowed: set | None) -> bool:
-	"""Whether a warehouse (by its cost center) may be selected by the user."""
+	"""Back-compat: cost-center-only selectability. Prefer warehouse_selectable()."""
 	if allowed is None:
 		return True
 	return bool(warehouse_cost_center) and warehouse_cost_center in allowed
@@ -85,6 +136,7 @@ def warehouse_query(
 	allowed to SELECT (attached to a cost center they're assigned; all if the user
 	is unrestricted). Honours an incoming company / is_group filter."""
 	allowed = allowed_cost_centers()
+	bounds = warehouse_permission_bounds()
 	filters = frappe.parse_json(filters) if isinstance(filters, str) else (filters or {})
 
 	conds = ["w.disabled = 0", "(w.name like %(txt)s or w.warehouse_name like %(txt)s)"]
@@ -95,11 +147,24 @@ def warehouse_query(
 	if filters.get("is_group") is not None:
 		conds.append("w.is_group = %(is_group)s")
 		vals["is_group"] = frappe.utils.cint(filters.get("is_group"))
-	if allowed is not None:
-		if not allowed:
+	# Selection is granted by a Cost Center and/or a Warehouse user permission (the
+	# latter also covers a group's children via lft/rgt). Union of what the user has.
+	if allowed is not None or bounds is not None:
+		grants = []
+		if allowed is not None:
+			grants.append("w.azzir_cost_center in %(allowed)s")
+			vals["allowed"] = tuple(allowed)
+		if bounds is not None:
+			ors = []
+			for i, (lo, hi) in enumerate(bounds):
+				ors.append("(w.lft >= %(lo{i})s and w.rgt <= %(hi{i})s)".format(i=i))
+				vals["lo%d" % i] = lo
+				vals["hi%d" % i] = hi
+			if ors:
+				grants.append("(" + " or ".join(ors) + ")")
+		if not grants:
 			return []
-		conds.append("w.azzir_cost_center in %(allowed)s")
-		vals["allowed"] = tuple(allowed)
+		conds.append("(" + " or ".join(grants) + ")")
 
 	return frappe.db.sql(
 		"select w.name from `tabWarehouse` w where "

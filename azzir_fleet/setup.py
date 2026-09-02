@@ -438,6 +438,20 @@ CUSTOM_FIELDS.setdefault("Cost Center", []).append(
 		"sister company (buy-from-sister on the Sales Invoice).",
 	}
 )
+# A per-user default Company. Setting it makes every new Quotation / Sales Invoice
+# (desk + /sales portal) auto-fill the company (synced to the user's Company
+# default — see azzir_fleet.company_default.sync_user_company).
+CUSTOM_FIELDS.setdefault("User", []).append(
+	{
+		"fieldname": "azzir_company",
+		"label": "Company",
+		"fieldtype": "Link",
+		"options": "Company",
+		"insert_after": "user_type",
+		"description": "Default company for this user — new Quotations and Sales "
+		"Invoices (desk and the /sales portal) auto-fill with it.",
+	}
+)
 # On a corporate warehouse, mark it as the landing point for one sister company's stock.
 CUSTOM_FIELDS.setdefault("Warehouse", []).extend(
 	[

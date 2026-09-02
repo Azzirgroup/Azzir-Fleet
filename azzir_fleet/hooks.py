@@ -225,6 +225,11 @@ doc_events = {
 		"on_update": "azzir_fleet.item_codes.on_update",
 		"after_rename": "azzir_fleet.item_codes.after_rename",
 	},
+	# A user's Company field (azzir_company) becomes their default company, so new
+	# Quotations / Sales Invoices auto-fill it (desk + /sales portal).
+	"User": {
+		"on_update": "azzir_fleet.company_default.sync_user_company",
+	},
 	# Mirror the Employee 'Cost Centers' table into User Permissions so the
 	# linked user only sees data for their cost center(s); none = sees all.
 	"Employee": {

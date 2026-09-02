@@ -170,7 +170,11 @@ def get_stock_tree(
 	# Cost-center scoping: the user may SEE every warehouse, but may only SELECT
 	# ones attached to a cost center they are assigned to (None = no restriction).
 	# Guarded so it degrades gracefully if the field hasn't been migrated yet.
-	from azzir_fleet.warehouse_cc import allowed_cost_centers, is_selectable
+	from azzir_fleet.warehouse_cc import (
+		allowed_cost_centers,
+		warehouse_permission_bounds,
+		warehouse_selectable,
+	)
 
 	has_cc = frappe.get_meta("Warehouse").has_field("azzir_cost_center")
 	wh_fields = ["name", "parent_warehouse", "is_group", "lft", "rgt", "company"]
@@ -178,7 +182,10 @@ def get_stock_tree(
 		wh_fields.append("azzir_cost_center")
 	wh_info = {w.name: w for w in frappe.get_all("Warehouse", fields=wh_fields)}
 
+	# Selection is granted by a Cost Center and/or a Warehouse user permission (a
+	# permission on a GROUP warehouse opens all its child warehouses).
 	allowed = allowed_cost_centers()
+	wh_bounds = warehouse_permission_bounds()
 
 	# Company scope: only holders of "Azzir Group Stock" (or Administrator) see ALL
 	# companies' stock; everyone else sees only their own default company.
@@ -230,9 +237,13 @@ def get_stock_tree(
 				"depth": _depth(wh, wh_info),
 				"company": info.company,
 				"cost_center": info.get("azzir_cost_center"),
-				# Groups are never picked; leaves are selectable only if their cost
-				# center is one the user is assigned.
-				"selectable": True if info.is_group else is_selectable(info.get("azzir_cost_center"), allowed),
+				# Groups are never picked; a leaf is selectable if the user is granted
+				# it by a cost center OR by a Warehouse permission on it / its group.
+				"selectable": True
+				if info.is_group
+				else warehouse_selectable(
+					info.get("azzir_cost_center"), info.lft, info.rgt, allowed, wh_bounds
+				),
 			}
 		)
 
