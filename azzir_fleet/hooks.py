@@ -283,7 +283,12 @@ doc_events = {
 	# Mirror the Employee 'Cost Centers' table into User Permissions so the
 	# linked user only sees data for their cost center(s); none = sees all.
 	"Employee": {
-		"on_update": "azzir_fleet.employee_permissions.sync_cost_center_permissions",
+		"on_update": [
+			"azzir_fleet.employee_permissions.sync_cost_center_permissions",
+			# Linked user's default company = the employee's company (auto-fills
+			# Quotation / Sales Invoice).
+			"azzir_fleet.company_default.sync_employee_company",
+		],
 		"on_trash": "azzir_fleet.employee_permissions.clear_cost_center_permissions",
 	},
 	# Maker-checker: the creator of a Stock Entry draft cannot submit it.

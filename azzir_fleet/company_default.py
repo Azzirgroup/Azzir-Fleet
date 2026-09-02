@@ -32,3 +32,18 @@ def sync_user_company(doc, method=None):
 	elif current:
 		# Field cleared — drop the per-user default so it falls back to the global one.
 		frappe.defaults.clear_user_default("company", doc.name)
+
+
+def sync_employee_company(doc, method=None):
+	"""Employee on_update: make the linked user's default Company = the employee's
+	company, so new Quotations / Sales Invoices auto-fill it (desk + /sales portal).
+
+	The Employee is the source of truth here — a user connected to an employee gets
+	that employee's company. (Backfilled once for existing employees by the
+	backfill_employee_company_defaults patch.)"""
+	user = (doc.get("user_id") or "").strip()
+	company = (doc.get("company") or "").strip()
+	if not user or not company or user in ("Administrator", "Guest"):
+		return
+	if frappe.defaults.get_user_default("company", user) != company:
+		frappe.defaults.set_user_default("company", company, user)
