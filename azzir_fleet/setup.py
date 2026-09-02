@@ -812,22 +812,24 @@ def _ensure_unrealized_pl_accounts():
 
 
 def _setup_sales_portal_role():
-	"""Users with this role are taken straight to the /sales portal on login;
-	everyone else lands on the desk dashboard.
+	"""Users with this role are taken straight to the /sales portal on login.
 
-	Two mechanisms, so it works regardless of the login path:
-	  * Role.home_page = "sales" — read directly by frappe.get_home_page (works
-	    even on a resumed session).
-	  * on_session_creation flag (route_portal_users_on_login) — wins over a
-	    user's default workspace for a fresh login."""
+	We deliberately do NOT set Role.home_page = "sales": frappe.get_home_page walks
+	EVERY role's home_page, and the Administrator account implicitly has all roles —
+	so a role home_page of "sales" would send Administrator to /sales on login. The
+	redirect is driven instead by:
+	  * route_portal_users_on_login (on_session_creation) — sets flags.home_page for
+	    users who ACTUALLY hold the role (Has Role check, Administrator exempt); and
+	  * redirect_portal_users_off_desk (before_request) — the authoritative guard.
+	If an old Role.home_page = "sales" is present (from a previous version), clear it."""
 	if not frappe.db.exists("Role", "Sales Portal"):
 		frappe.get_doc(
-			{"doctype": "Role", "role_name": "Sales Portal", "desk_access": 1, "home_page": "sales"}
+			{"doctype": "Role", "role_name": "Sales Portal", "desk_access": 1}
 		).insert(ignore_permissions=True)
-	elif frappe.db.get_value("Role", "Sales Portal", "home_page") != "sales":
-		frappe.db.set_value("Role", "Sales Portal", "home_page", "sales")
-	# The home page is cached per user; drop it so the new landing takes effect.
-	frappe.cache.delete_key("home_page")
+	if frappe.db.get_value("Role", "Sales Portal", "home_page"):
+		frappe.db.set_value("Role", "Sales Portal", "home_page", None)
+		# The home page is cached per user; drop it so the change takes effect.
+		frappe.cache.delete_key("home_page")
 
 
 def _setup_overdue_todo_notification():
