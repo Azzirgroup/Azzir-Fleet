@@ -187,6 +187,57 @@ def _company_cost_center(company: str) -> str | None:
 	)
 
 
+def _settlement(company: str) -> tuple:
+	"""A (Mode of Payment, cash/bank Account) to auto-settle intercompany invoices
+	in `company`. Returns (None, None) when the company has neither configured — in
+	that case we leave the invoice outstanding rather than block the sale."""
+	account = (
+		frappe.get_cached_value("Company", company, "default_cash_account")
+		or frappe.get_cached_value("Company", company, "default_bank_account")
+		or frappe.db.get_value(
+			"Account", {"company": company, "account_type": "Cash", "is_group": 0, "disabled": 0}, "name"
+		)
+		or frappe.db.get_value(
+			"Account", {"company": company, "account_type": "Bank", "is_group": 0, "disabled": 0}, "name"
+		)
+	)
+	mop = "Cash" if frappe.db.exists("Mode of Payment", "Cash") else frappe.db.get_value(
+		"Mode of Payment", {"enabled": 1}, "name"
+	)
+	return (mop, account) if (mop and account) else (None, None)
+
+
+def _mark_si_paid(si, company: str) -> None:
+	"""Mark a (just-inserted, draft) Sales Invoice fully paid via its POS payment,
+	so it submits as Paid (outstanding 0). No-op if the company has no cash account."""
+	mop, account = _settlement(company)
+	total = flt(si.rounded_total) or flt(si.grand_total)
+	if not (mop and account) or total <= 0:
+		return
+	si.is_pos = 1
+	si.flags.ignore_pos_profile = True
+	si.set("payments", [])
+	si.append("payments", {"mode_of_payment": mop, "amount": total, "account": account})
+	si.flags.ignore_permissions = True
+	si.save()
+
+
+def _mark_pi_paid(pi, company: str) -> None:
+	"""Mark a (just-inserted, draft) Purchase Invoice paid (Is Paid), so it submits
+	as Paid (outstanding 0). No-op if the company has no cash account."""
+	mop, account = _settlement(company)
+	total = flt(pi.rounded_total) or flt(pi.grand_total)
+	if not (mop and account) or total <= 0:
+		return
+	pi.is_paid = 1
+	pi.mode_of_payment = mop
+	pi.cash_bank_account = account
+	pi.paid_amount = total
+	pi.base_paid_amount = total * flt(pi.conversion_rate or 1)
+	pi.flags.ignore_permissions = True
+	pi.save()
+
+
 def _force_cost_center(target, cost_center: str | None) -> None:
 	"""Set the cost center on every item (and tax) row so nothing inherits a
 	cost center from a different company."""
@@ -333,6 +384,8 @@ def _build_one_transfer(doc, corporate, sister, rows, ic_price_list, factor, cor
 	_force_cost_center(sister_si, sister_cc)
 	sister_si.flags.ignore_permissions = True
 	sister_si.insert()
+	# Come in already paid (the sister has received the money from the corporate).
+	_mark_si_paid(sister_si, sister)
 	sister_si.submit()
 
 	# 3) Corporate Purchase Invoice (update stock into the sister's landing warehouse).
@@ -347,6 +400,8 @@ def _build_one_transfer(doc, corporate, sister, rows, ic_price_list, factor, cor
 	pi.flags.azzir_intercompany_priced = True
 	pi.flags.ignore_permissions = True
 	pi.insert()
+	# Come in already paid (the corporate has paid the sister for the stock).
+	_mark_pi_paid(pi, corporate)
 	pi.submit()
 
 	return (dn.name, sister_si.name, pi.name)
