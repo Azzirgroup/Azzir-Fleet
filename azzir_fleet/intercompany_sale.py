@@ -142,25 +142,37 @@ def _landing_warehouse(corporate_company: str, sister_company: str) -> str | Non
 
 
 def set_landing_warehouse(doc, method=None):
-	"""Sales Invoice validate: for a buy-from-sister invoice, point the stock rows
-	at the corporate landing warehouse (same company as the invoice), so the doc is
-	consistent from draft. The stock itself is transferred in at submit."""
+	"""Sales Invoice validate: default each row's sister company/warehouse from the
+	header, then point each stock row at the landing warehouse for ITS sister company
+	(rows can be sourced from different sisters). Stock is transferred in at submit."""
 	if not doc.get("azzir_buy_from_sister"):
 		return
-	sister = doc.get("azzir_supply_company")
-	if not sister:
-		return  # mandatory_depends_on will prompt for it
-	landing = _landing_warehouse(doc.company, sister)
-	if not landing:
-		frappe.throw(
-			_(
-				"Configure a landing warehouse in {0} for sister company {1}: on a {0} "
-				"warehouse tick 'Receives Sister Company Stock' and set its Sister Company to {1}."
-			).format(frappe.bold(doc.company), frappe.bold(sister))
-		)
+	default_company = doc.get("azzir_supply_company")
+	default_wh = doc.get("azzir_supply_warehouse")
+	landing_cache = {}
 	for r in doc.get("items") or []:
-		if r.get("item_code") and frappe.get_cached_value("Item", r.item_code, "is_stock_item"):
-			r.warehouse = landing
+		if not r.get("item_code") or not frappe.get_cached_value("Item", r.item_code, "is_stock_item"):
+			continue
+		# Default the row's source from the header when the row doesn't set its own.
+		if not r.get("azzir_supply_company"):
+			r.azzir_supply_company = default_company
+		if not r.get("azzir_supply_warehouse") and r.get("azzir_supply_company") == default_company:
+			r.azzir_supply_warehouse = default_wh
+		sister = r.get("azzir_supply_company")
+		if not sister:
+			continue  # mandatory_depends_on on the header will prompt
+		if sister not in landing_cache:
+			lw = _landing_warehouse(doc.company, sister)
+			if not lw:
+				frappe.throw(
+					_(
+						"Configure a landing warehouse in {0} for sister company {1}: on a {0} "
+						"warehouse tick 'Receives Sister Company Stock' and set its Sister Company to {1}."
+					).format(frappe.bold(doc.company), frappe.bold(sister))
+				)
+			landing_cache[sister] = lw
+		# The corporate row sells from the landing warehouse for its sister.
+		r.warehouse = landing_cache[sister]
 
 
 def _company_cost_center(company: str) -> str | None:
@@ -188,25 +200,38 @@ def _force_cost_center(target, cost_center: str | None) -> None:
 
 
 def process_sister_purchase(doc, method=None):
-	"""Sales Invoice before_submit: orchestrate the intercompany transfer so the
-	corporate company holds the sister's stock (at a discount) before it sells."""
+	"""Sales Invoice before_submit: for each sister company sourced on the item
+	rows, create one intercompany transfer (rows from the same sister share a
+	transfer; different sisters get separate transfers)."""
 	if not doc.get("azzir_buy_from_sister"):
 		return
-	# Idempotent: if we already built the chain for this invoice, do nothing.
-	if doc.get("azzir_intercompany_purchase_invoice"):
+	# Idempotent: already built for this invoice.
+	if doc.get("azzir_intercompany_done"):
 		return
 
 	corporate = doc.company
-	sister = doc.get("azzir_supply_company")
-	supply_wh = doc.get("azzir_supply_warehouse")
-	if not sister or not supply_wh:
-		frappe.throw(_("Select the Supply Company and the Supply Company Warehouse."))
-	if sister == corporate:
-		frappe.throw(_("The supply company must be a different (sister) company."))
 
-	# ERPNext requires an Unrealized Profit / Loss Account on every company in an
-	# intercompany transfer — check both up front with a clear message.
-	for co in (corporate, sister):
+	# Group the stock rows by their sister company (defaulting to the header).
+	groups = {}
+	for r in doc.get("items") or []:
+		if not r.get("item_code") or flt(r.get("qty")) <= 0:
+			continue
+		if not frappe.get_cached_value("Item", r.item_code, "is_stock_item"):
+			continue
+		sister = r.get("azzir_supply_company") or doc.get("azzir_supply_company")
+		if not sister:
+			frappe.throw(_("Row #{0}: choose a Supply Company.").format(r.idx))
+		if sister == corporate:
+			frappe.throw(_("Row #{0}: the supply company must be a different (sister) company.").format(r.idx))
+		wh = r.get("azzir_supply_warehouse") or doc.get("azzir_supply_warehouse")
+		if not wh:
+			frappe.throw(_("Row #{0}: choose a Supply Warehouse.").format(r.idx))
+		groups.setdefault(sister, []).append((r, wh))
+	if not groups:
+		frappe.throw(_("Add at least one stock item to buy from a sister company."))
+
+	# ERPNext requires an Unrealized Profit / Loss Account on every company involved.
+	for co in [corporate, *groups]:
 		if not frappe.db.get_value("Company", co, "unrealized_profit_loss_account"):
 			frappe.throw(
 				_(
@@ -215,35 +240,8 @@ def process_sister_purchase(doc, method=None):
 				).format(frappe.bold(co))
 			)
 
-	landing = _landing_warehouse(corporate, sister)
-	if not landing:
-		frappe.throw(
-			_(
-				"No warehouse in {0} is set to receive {1} stock. On a {0} warehouse, tick "
-				"'Receives sister company stock' and set its Sister Company to {1}."
-			).format(frappe.bold(corporate), frappe.bold(sister))
-		)
-
-	internal_customer = _internal_customer(corporate, sister)
-	if not internal_customer:
-		frappe.throw(
-			_("No internal Customer represents {0} for company {1}. Create one (Is Internal Customer).").format(
-				frappe.bold(corporate), frappe.bold(sister)
-			)
-		)
-	internal_supplier = _internal_supplier(sister)
-	if not internal_supplier:
-		frappe.throw(
-			_("No internal Supplier represents {0}. Create one in {1} (Is Internal Supplier).").format(
-				frappe.bold(sister), frappe.bold(corporate)
-			)
-		)
-
-	# ERPNext inter-company transactions require a price list enabled for BOTH
-	# buying and selling (so the same list serves the sister SI and the corporate PI).
-	ic_price_list = frappe.db.get_value(
-		"Price List", {"enabled": 1, "selling": 1, "buying": 1}, "name"
-	)
+	# ERPNext inter-company needs a Price List enabled for BOTH buying and selling.
+	ic_price_list = frappe.db.get_value("Price List", {"enabled": 1, "selling": 1, "buying": 1}, "name")
 	if not ic_price_list:
 		frappe.throw(
 			_(
@@ -252,45 +250,64 @@ def process_sister_purchase(doc, method=None):
 			)
 		)
 
-	disc = flt(frappe.db.get_value("Company", corporate, "azzir_intercompany_discount"))
-	factor = 1 - disc / 100.0
-
-	lines = [r for r in (doc.get("items") or []) if r.get("item_code") and flt(r.get("qty")) > 0]
-	if not lines:
-		frappe.throw(_("Add at least one item before buying from a sister company."))
-
-	sister_cc = _company_cost_center(sister)
+	factor = 1 - flt(frappe.db.get_value("Company", corporate, "azzir_intercompany_discount")) / 100.0
 	corporate_cc = _company_cost_center(corporate)
 
-	# Build the intercompany documents as Administrator. The submitting user is
-	# restricted (User Permission) to their own Corporate cost center, and ERPNext
-	# would otherwise force THAT cost center onto the sister/corporate docs — which
-	# belong to other companies — and reject them. Administrator has no such
-	# restriction, so each doc keeps its own company's cost center.
+	# Build everything as Administrator so the submitting user's own Cost Center
+	# User Permission can't force a wrong-company cost center onto these docs.
+	refs = []
 	_prev_user = frappe.session.user
 	frappe.set_user("Administrator")
 	try:
-		_build_intercompany_docs(doc, sister, supply_wh, landing, internal_customer,
-		                         ic_price_list, factor, sister_cc, corporate_cc, lines)
+		for sister, rows in groups.items():
+			names = _build_one_transfer(doc, corporate, sister, rows, ic_price_list, factor, corporate_cc)
+			refs.append("{0}: DN {1} / SI {2} / PI {3}".format(sister, *names))
+			# Keep the single link fields populated with the first (or only) transfer.
+			if not doc.get("azzir_intercompany_purchase_invoice"):
+				doc.azzir_intercompany_delivery_note = names[0]
+				doc.azzir_intercompany_sister_invoice = names[1]
+				doc.azzir_intercompany_purchase_invoice = names[2]
 	finally:
 		frappe.set_user(_prev_user)
 
-	# Point the corporate invoice's own rows at the landing warehouse, so it sells
-	# (to the real customer, at full market rate) from the stock we just received.
-	for r in lines:
-		r.warehouse = landing
+	doc.azzir_intercompany_done = 1
+	doc.azzir_intercompany_refs = "\n".join(refs)
 
 
-def _build_intercompany_docs(doc, sister, supply_wh, landing, internal_customer,
-                             ic_price_list, factor, sister_cc, corporate_cc, lines):
-	# 1) Sister Delivery Note — stock leaves the chosen sister warehouse.
+def _build_one_transfer(doc, corporate, sister, rows, ic_price_list, factor, corporate_cc):
+	"""Create the DN + sister SI + corporate PI for one sister company. `rows` is a
+	list of (corporate item row, sister supply warehouse). Returns (dn, si, pi)."""
+	landing = _landing_warehouse(corporate, sister)
+	if not landing:
+		frappe.throw(
+			_(
+				"No warehouse in {0} is set to receive {1} stock. On a {0} warehouse tick "
+				"'Receives Sister Company Stock' and set its Sister Company to {1}."
+			).format(frappe.bold(corporate), frappe.bold(sister))
+		)
+	internal_customer = _internal_customer(corporate, sister)
+	if not internal_customer:
+		frappe.throw(
+			_("No internal Customer represents {0} for company {1} (Is Internal Customer).").format(
+				frappe.bold(corporate), frappe.bold(sister)
+			)
+		)
+	internal_supplier = _internal_supplier(sister)
+	if not internal_supplier:
+		frappe.throw(
+			_("No internal Supplier represents {0} in {1} (Is Internal Supplier).").format(
+				frappe.bold(sister), frappe.bold(corporate)
+			)
+		)
+	sister_cc = _company_cost_center(sister)
+
+	# 1) Sister Delivery Note — stock leaves each row's sister warehouse.
 	dn = frappe.new_doc("Delivery Note")
 	dn.company = sister
 	dn.customer = internal_customer
 	dn.selling_price_list = ic_price_list
 	dn.ignore_pricing_rule = 1
-	dn.set_warehouse = supply_wh
-	for r in lines:
+	for r, wh in rows:
 		transfer_rate = flt(r.rate) * factor
 		dn.append(
 			"items",
@@ -300,7 +317,7 @@ def _build_intercompany_docs(doc, sister, supply_wh, landing, internal_customer,
 				"uom": r.get("uom"),
 				"rate": transfer_rate,
 				"price_list_rate": transfer_rate,
-				"warehouse": supply_wh,
+				"warehouse": wh,
 				"cost_center": sister_cc,
 			},
 		)
@@ -309,7 +326,7 @@ def _build_intercompany_docs(doc, sister, supply_wh, landing, internal_customer,
 	dn.insert()
 	dn.submit()
 
-	# 2) Sister Sales Invoice from that Delivery Note (sister earns the 70%).
+	# 2) Sister Sales Invoice from that Delivery Note (sister earns the discounted price).
 	from erpnext.stock.doctype.delivery_note.delivery_note import make_sales_invoice as _dn_to_si
 
 	sister_si = _dn_to_si(dn.name)
@@ -318,11 +335,8 @@ def _build_intercompany_docs(doc, sister, supply_wh, landing, internal_customer,
 	sister_si.insert()
 	sister_si.submit()
 
-	# 3) Corporate Purchase Invoice, linked to the sister SI, receiving stock into
-	#    the landing warehouse at the same (already discounted) transfer price.
-	from erpnext.accounts.doctype.sales_invoice.sales_invoice import (
-		make_inter_company_purchase_invoice,
-	)
+	# 3) Corporate Purchase Invoice (update stock into the sister's landing warehouse).
+	from erpnext.accounts.doctype.sales_invoice.sales_invoice import make_inter_company_purchase_invoice
 
 	pi = make_inter_company_purchase_invoice(sister_si.name)
 	pi.update_stock = 1
@@ -330,13 +344,9 @@ def _build_intercompany_docs(doc, sister, supply_wh, landing, internal_customer,
 	for r in pi.get("items") or []:
 		r.warehouse = landing
 	_force_cost_center(pi, corporate_cc)
-	# Already priced at the transfer rate — don't let the receipt hook discount again.
 	pi.flags.azzir_intercompany_priced = True
 	pi.flags.ignore_permissions = True
 	pi.insert()
 	pi.submit()
 
-	# Record the links on the corporate invoice (idempotency + audit trail).
-	doc.azzir_intercompany_delivery_note = dn.name
-	doc.azzir_intercompany_sister_invoice = sister_si.name
-	doc.azzir_intercompany_purchase_invoice = pi.name
+	return (dn.name, sister_si.name, pi.name)

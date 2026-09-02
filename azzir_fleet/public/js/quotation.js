@@ -9,6 +9,10 @@ frappe.ui.form.on("Quotation", {
 	azzir_supply_company(frm) {
 		azzir_fleet.set_supply_wh_query(frm);
 		frm.set_value("azzir_supply_warehouse", "");
+		azzir_fleet.populate_row_supply(frm, "azzir_supply_company");
+	},
+	azzir_supply_warehouse(frm) {
+		azzir_fleet.populate_row_supply(frm, "azzir_supply_warehouse");
 	},
 	refresh(frm) {
 		azzir_fleet.set_warehouse_cc_query(frm);

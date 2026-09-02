@@ -194,6 +194,22 @@
         item_codes: (frm.doc.items || []).map((i) => i.item_code).filter(Boolean)
       }
     }));
+    frm.set_query("azzir_supply_warehouse", "items", function(doc, cdt, cdn) {
+      const row = locals[cdt][cdn] || {};
+      return {
+        query: "azzir_fleet.intercompany_sale.supply_warehouse_link_query",
+        filters: {
+          company: row.azzir_supply_company || doc.azzir_supply_company || "",
+          item_codes: row.item_code ? [row.item_code] : []
+        }
+      };
+    });
+  };
+  azzir_fleet.populate_row_supply = function(frm, field) {
+    const val = frm.doc[field];
+    if (!val)
+      return;
+    (frm.doc.items || []).forEach((r) => frappe.model.set_value(r.doctype, r.name, field, val));
   };
   azzir_fleet.autoset_cc_warehouse = function(frm, cdt, cdn) {
     const row = locals[cdt] && locals[cdt][cdn];
@@ -397,4 +413,4 @@
     azzir_tax_rate: (frm, cdt, cdn) => apply_calc(frm, cdt, cdn, je_base(cdt, cdn))
   });
 })();
-//# sourceMappingURL=azzir_fleet.bundle.75WQGSO7.js.map
+//# sourceMappingURL=azzir_fleet.bundle.333RFOUV.js.map

@@ -59,8 +59,8 @@ azzir_fleet.toggle_buy_from_sister = function (frm) {
 		},
 	});
 };
-// The supply warehouse: only warehouses in the chosen sister company that HOLD
-// stock of the doc's items, showing the qty.
+// Header supply warehouse (the default): warehouses in the chosen sister company
+// holding stock of the doc's items, with qty.
 azzir_fleet.set_supply_wh_query = function (frm) {
 	frm.set_query("azzir_supply_warehouse", () => ({
 		query: "azzir_fleet.intercompany_sale.supply_warehouse_link_query",
@@ -69,6 +69,25 @@ azzir_fleet.set_supply_wh_query = function (frm) {
 			item_codes: (frm.doc.items || []).map((i) => i.item_code).filter(Boolean),
 		},
 	}));
+	// Per-row supply warehouse: filtered to the row's sister company + item, with qty.
+	frm.set_query("azzir_supply_warehouse", "items", function (doc, cdt, cdn) {
+		const row = locals[cdt][cdn] || {};
+		return {
+			query: "azzir_fleet.intercompany_sale.supply_warehouse_link_query",
+			filters: {
+				company: row.azzir_supply_company || doc.azzir_supply_company || "",
+				item_codes: row.item_code ? [row.item_code] : [],
+			},
+		};
+	});
+};
+
+// Header supply company/warehouse are DEFAULTS: pushing them onto the item rows
+// (each row can then be changed to a different sister company).
+azzir_fleet.populate_row_supply = function (frm, field) {
+	const val = frm.doc[field];
+	if (!val) return;
+	(frm.doc.items || []).forEach((r) => frappe.model.set_value(r.doctype, r.name, field, val));
 };
 
 // When an item is picked, override ERPNext's default-warehouse fetch with a

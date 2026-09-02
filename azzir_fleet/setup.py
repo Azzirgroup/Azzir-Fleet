@@ -401,6 +401,31 @@ _IS_STOCK_ITEM_FIELD = {
 for _dt in ("Quotation Item", "Sales Invoice Item", "Delivery Note Item"):
 	CUSTOM_FIELDS.setdefault(_dt, []).append(dict(_IS_STOCK_ITEM_FIELD))
 
+# Per-row buy-from-sister source: which sister company/warehouse THIS line is
+# bought from. Defaults from the header, but each row can point at a different
+# sister; on submit the rows are grouped by sister company into separate transfers.
+_ROW_SUPPLY_FIELDS = [
+	{
+		"fieldname": "azzir_supply_company",
+		"label": "Supply Company",
+		"fieldtype": "Link",
+		"options": "Company",
+		"insert_after": "warehouse",
+		"depends_on": "eval:parent.azzir_buy_from_sister",
+	},
+	{
+		"fieldname": "azzir_supply_warehouse",
+		"label": "Supply Warehouse",
+		"fieldtype": "Link",
+		"options": "Warehouse",
+		"insert_after": "azzir_supply_company",
+		"depends_on": "eval:parent.azzir_buy_from_sister",
+	},
+]
+for _dt in ("Quotation Item", "Sales Invoice Item"):
+	for _f in _ROW_SUPPLY_FIELDS:
+		CUSTOM_FIELDS.setdefault(_dt, []).append(dict(_f))
+
 # --- Sell sister-company stock (corporate company buys from a sister at a discount)
 # Flag a Cost Center as "Corporate": its assigned users can buy sister stock.
 CUSTOM_FIELDS.setdefault("Cost Center", []).append(
@@ -488,6 +513,23 @@ CUSTOM_FIELDS.setdefault("Sales Invoice", []).extend(
 			"options": "Purchase Invoice",
 			"insert_after": "azzir_intercompany_sister_invoice",
 			"read_only": 1,
+		},
+		{
+			"fieldname": "azzir_intercompany_done",
+			"label": "Intercompany Transfer Done",
+			"fieldtype": "Check",
+			"insert_after": "azzir_intercompany_purchase_invoice",
+			"read_only": 1,
+			"print_hide": 1,
+		},
+		{
+			"fieldname": "azzir_intercompany_refs",
+			"label": "Intercompany Transfers",
+			"fieldtype": "Small Text",
+			"insert_after": "azzir_intercompany_done",
+			"read_only": 1,
+			"print_hide": 1,
+			"description": "All sister transfers created for this invoice (one per sister company).",
 		},
 	]
 )

@@ -52,6 +52,8 @@ def make_sales_invoice(source_name: str, target_doc: str | None = None) -> dict:
 					"rate": "rate",
 					"warehouse": "warehouse",
 					"discount_percentage": "discount_percentage",
+					"azzir_supply_company": "azzir_supply_company",
+					"azzir_supply_warehouse": "azzir_supply_warehouse",
 				},
 			},
 		},
