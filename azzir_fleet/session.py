@@ -42,14 +42,17 @@ def _is_desk_path(path: str) -> bool:
 
 def is_portal_restricted(user: str | None = None) -> bool:
 	"""True when this user is confined to the /sales portal and must not reach the
-	desk. The 'Sales Portal' role wins over every other role (System Manager
-	included); only the built-in Administrator account is exempt, so a site is
-	never left without a way into the desk."""
+	desk. Confines a PURE portal user (holds 'Sales Portal') — but never an admin:
+	the Administrator account and any System Manager can always reach the desk, so a
+	site is never left without a way in and admins can administer normally."""
 	user = user or getattr(frappe.session, "user", None)
 	if not user or user in ("Guest", "Administrator"):
 		return False
 	try:
-		return SALES_PORTAL_ROLE in frappe.get_roles(user)
+		roles = frappe.get_roles(user)
+		if "System Manager" in roles:
+			return False
+		return SALES_PORTAL_ROLE in roles
 	except Exception:
 		return False
 
@@ -87,12 +90,11 @@ def route_portal_users_on_login(login_manager=None):
 	home page, so setting `flags.home_page` here wins over the default
 	workspace / desk redirect."""
 	user = frappe.session.user
-	# Administrator is exempt: frappe.get_roles("Administrator") returns EVERY role in
-	# the system (not just assigned ones), so a plain role check would wrongly treat
-	# Administrator as a portal user and send it to /sales on login.
-	if user in ("Guest", "Administrator"):
+	# Administrator + any System Manager are exempt (admins land on the desk).
+	# NB: frappe.get_roles("Administrator") returns EVERY role, so we also check the
+	# ACTUAL Has Role assignment for the portal role rather than get_roles.
+	if user in ("Guest", "Administrator") or "System Manager" in frappe.get_roles(user):
 		return
-	# Check the ACTUAL role assignment (Has Role), not get_roles — same reason.
 	if frappe.db.exists("Has Role", {"parent": user, "parenttype": "User", "role": SALES_PORTAL_ROLE}):
 		frappe.local.flags.home_page = "sales"
 		# A user's default workspace otherwise overrides the home page (frappe

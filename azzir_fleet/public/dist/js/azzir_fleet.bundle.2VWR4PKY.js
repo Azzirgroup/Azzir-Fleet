@@ -17,7 +17,7 @@
         const r = roles();
         if (!r.length)
           return false;
-        const bypass = window.frappe && frappe.session && frappe.session.user === "Administrator";
+        const bypass = window.frappe && frappe.session && frappe.session.user === "Administrator" || r.includes("System Manager");
         if (r.includes("Sales Portal") && !bypass && onDesk()) {
           window.location.replace("/sales");
           return true;
@@ -513,4 +513,4 @@
     azzir_tax_rate: (frm, cdt, cdn) => apply_calc(frm, cdt, cdn, je_base(cdt, cdn))
   });
 })();
-//# sourceMappingURL=azzir_fleet.bundle.DN7XW2YV.js.map
+//# sourceMappingURL=azzir_fleet.bundle.2VWR4PKY.js.map

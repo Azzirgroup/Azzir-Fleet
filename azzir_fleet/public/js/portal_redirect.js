@@ -30,7 +30,8 @@
 			const r = roles();
 			if (!r.length) return false; // boot not ready yet
 			const bypass =
-				window.frappe && frappe.session && frappe.session.user === "Administrator";
+				(window.frappe && frappe.session && frappe.session.user === "Administrator") ||
+				r.includes("System Manager"); // admins always reach the desk
 			if (r.includes("Sales Portal") && !bypass && onDesk()) {
 				window.location.replace("/sales");
 				return true;
