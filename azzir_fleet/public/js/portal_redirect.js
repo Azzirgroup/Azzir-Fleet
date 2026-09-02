@@ -9,8 +9,9 @@
 // where the login carried a redirect-to=/app that the login page honours first.
 (function () {
 	function onDesk() {
+		// The desk is /app on older Frappe, /desk on newer builds (/apps launcher too).
 		const p = (window.location.pathname || "/app").replace(/\/+$/, "") || "/app";
-		return /^\/app(\/|$)/.test(p);
+		return /^\/(app|desk|apps)(\/|$)/.test(p);
 	}
 	function roles() {
 		try {

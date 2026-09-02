@@ -27,22 +27,29 @@ def enforce_session_limit(login_manager=None):
 	clear_sessions(user, keep_current=True, force=False)
 
 
+# The desk lives under different roots across Frappe versions: older builds serve it
+# at /app, newer ones at /desk (with /app and /apps redirected to /desk). Guard all of
+# them so this works on every version.
+_DESK_PREFIXES = ("/app", "/desk", "/apps")
+
+
 def redirect_portal_users_off_desk():
 	"""before_request: server-side, bulletproof redirect of 'Sales Portal' users away
-	from the desk (/app) to the /sales portal.
+	from the desk (/app or /desk) to the /sales portal.
 
 	This runs on EVERY request, before the page renders, so it works no matter how the
-	user got to the desk — a fresh login, a Frappe Cloud SSO landing straight on /app,
-	a bookmarked /app URL, or a stale cached desk shell. The Sales Portal role wins over
-	every other role (System Manager included); only the Administrator superuser account
-	is exempt. Uses a 302 (temporary) so nothing is cached if the role is later removed.
+	user got to the desk — a fresh login, a Frappe Cloud SSO landing straight on the
+	desk, a bookmarked desk URL, or a stale cached desk shell. The Sales Portal role
+	wins over every other role (System Manager included); only the Administrator
+	superuser account is exempt. Uses a 302 (temporary) so nothing is cached if the
+	role is later removed.
 	"""
 	req = getattr(frappe.local, "request", None)
 	if not req:
 		return
-	path = req.path or ""
 	# Only the desk HTML pages — never /api, /assets, /files, /sales, etc.
-	if path != "/app" and not path.startswith("/app/"):
+	p = (req.path or "").rstrip("/") or "/"
+	if not any(p == pre or p.startswith(pre + "/") for pre in _DESK_PREFIXES):
 		return
 	user = getattr(frappe.session, "user", None)
 	if not user or user in ("Guest", "Administrator"):

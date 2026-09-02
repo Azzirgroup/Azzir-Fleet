@@ -3,7 +3,7 @@
   (function() {
     function onDesk() {
       const p = (window.location.pathname || "/app").replace(/\/+$/, "") || "/app";
-      return /^\/app(\/|$)/.test(p);
+      return /^\/(app|desk|apps)(\/|$)/.test(p);
     }
     function roles() {
       try {
@@ -440,4 +440,4 @@
     azzir_tax_rate: (frm, cdt, cdn) => apply_calc(frm, cdt, cdn, je_base(cdt, cdn))
   });
 })();
-//# sourceMappingURL=azzir_fleet.bundle.7DQNJAO3.js.map
+//# sourceMappingURL=azzir_fleet.bundle.QQWT33AS.js.map
