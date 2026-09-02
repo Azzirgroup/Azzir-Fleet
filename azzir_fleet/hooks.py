@@ -391,7 +391,10 @@ override_whitelisted_methods = {
 
 # Request Events
 # ----------------
-# before_request = ["azzir_fleet.utils.before_request"]
+# Server-side, bulletproof redirect of Sales Portal users off the desk (/app) to
+# /sales — runs before any desk page renders, so it works regardless of login path
+# (fresh login, Frappe Cloud SSO landing on /app, bookmark, or a stale desk shell).
+before_request = ["azzir_fleet.session.redirect_portal_users_off_desk"]
 # after_request = ["azzir_fleet.utils.after_request"]
 
 # Job Events

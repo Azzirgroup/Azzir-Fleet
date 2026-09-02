@@ -1,16 +1,43 @@
 (() => {
   // ../azzir_fleet/azzir_fleet/public/js/portal_redirect.js
   (function() {
-    try {
-      const roles = frappe.boot && frappe.boot.user && frappe.boot.user.roles || [];
-      const isPortal = roles.includes("Sales Portal");
-      const bypass = roles.includes("System Manager") || roles.includes("Azzir Sales Overseer") || frappe.session.user === "Administrator";
-      const onDesk = /^\/app(\/|$)/.test(window.location.pathname.replace(/\/+$/, "") || "/app");
-      if (isPortal && !bypass && onDesk) {
-        window.location.replace("/sales");
+    function onDesk() {
+      const p = (window.location.pathname || "/app").replace(/\/+$/, "") || "/app";
+      return /^\/app(\/|$)/.test(p);
+    }
+    function roles() {
+      try {
+        return window.frappe && frappe.boot && frappe.boot.user && frappe.boot.user.roles || window.frappe && frappe.user_roles || [];
+      } catch (e) {
+        return [];
       }
+    }
+    function maybeRedirect() {
+      try {
+        const r = roles();
+        if (!r.length)
+          return false;
+        const isPortal = r.includes("Sales Portal");
+        const bypass = window.frappe && frappe.session && frappe.session.user === "Administrator";
+        if (isPortal && !bypass && onDesk()) {
+          window.location.replace("/sales");
+          return true;
+        }
+      } catch (e) {
+      }
+      return false;
+    }
+    if (!onDesk())
+      return;
+    if (maybeRedirect())
+      return;
+    try {
+      if (window.frappe && frappe.ready)
+        frappe.ready(maybeRedirect);
     } catch (e) {
     }
+    setTimeout(maybeRedirect, 300);
+    setTimeout(maybeRedirect, 1200);
   })();
 
   // ../azzir_fleet/azzir_fleet/public/js/azzir_compat.js
@@ -413,4 +440,4 @@
     azzir_tax_rate: (frm, cdt, cdn) => apply_calc(frm, cdt, cdn, je_base(cdt, cdn))
   });
 })();
-//# sourceMappingURL=azzir_fleet.bundle.333RFOUV.js.map
+//# sourceMappingURL=azzir_fleet.bundle.7DQNJAO3.js.map

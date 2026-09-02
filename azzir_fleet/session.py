@@ -27,6 +27,40 @@ def enforce_session_limit(login_manager=None):
 	clear_sessions(user, keep_current=True, force=False)
 
 
+def redirect_portal_users_off_desk():
+	"""before_request: server-side, bulletproof redirect of 'Sales Portal' users away
+	from the desk (/app) to the /sales portal.
+
+	This runs on EVERY request, before the page renders, so it works no matter how the
+	user got to the desk — a fresh login, a Frappe Cloud SSO landing straight on /app,
+	a bookmarked /app URL, or a stale cached desk shell. The Sales Portal role wins over
+	every other role (System Manager included); only the Administrator superuser account
+	is exempt. Uses a 302 (temporary) so nothing is cached if the role is later removed.
+	"""
+	req = getattr(frappe.local, "request", None)
+	if not req:
+		return
+	path = req.path or ""
+	# Only the desk HTML pages — never /api, /assets, /files, /sales, etc.
+	if path != "/app" and not path.startswith("/app/"):
+		return
+	user = getattr(frappe.session, "user", None)
+	if not user or user in ("Guest", "Administrator"):
+		return
+	try:
+		if SALES_PORTAL_ROLE not in frappe.get_roles(user):
+			return
+	except Exception:
+		return
+
+	from werkzeug.routing import RequestRedirect
+
+	class _TempRedirect(RequestRedirect):
+		code = 302
+
+	raise _TempRedirect("/sales")
+
+
 def route_portal_users_on_login(login_manager=None):
 	"""Send users with the 'Sales Portal' role straight to the /sales app after
 	login; everyone else lands on their normal desk dashboard.
