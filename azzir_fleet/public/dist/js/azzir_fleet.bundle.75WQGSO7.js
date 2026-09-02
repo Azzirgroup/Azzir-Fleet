@@ -1,4 +1,18 @@
 (() => {
+  // ../azzir_fleet/azzir_fleet/public/js/portal_redirect.js
+  (function() {
+    try {
+      const roles = frappe.boot && frappe.boot.user && frappe.boot.user.roles || [];
+      const isPortal = roles.includes("Sales Portal");
+      const bypass = roles.includes("System Manager") || roles.includes("Azzir Sales Overseer") || frappe.session.user === "Administrator";
+      const onDesk = /^\/app(\/|$)/.test(window.location.pathname.replace(/\/+$/, "") || "/app");
+      if (isPortal && !bypass && onDesk) {
+        window.location.replace("/sales");
+      }
+    } catch (e) {
+    }
+  })();
+
   // ../azzir_fleet/azzir_fleet/public/js/azzir_compat.js
   frappe.provide("frappe.model");
   (function() {
@@ -383,4 +397,4 @@
     azzir_tax_rate: (frm, cdt, cdn) => apply_calc(frm, cdt, cdn, je_base(cdt, cdn))
   });
 })();
-//# sourceMappingURL=azzir_fleet.bundle.T2MBQUQB.js.map
+//# sourceMappingURL=azzir_fleet.bundle.75WQGSO7.js.map

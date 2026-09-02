@@ -5,6 +5,7 @@
 // the desk service worker can't serve a stale copy across devices (the reason
 // the raw /assets/*.js includes showed up inconsistently after deploys).
 
+import "./portal_redirect";
 import "./azzir_compat";
 import "./azzir_alias";
 import "./azzir_stock";
