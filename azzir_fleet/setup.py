@@ -412,6 +412,9 @@ _ROW_SUPPLY_FIELDS = [
 		"options": "Company",
 		"insert_after": "warehouse",
 		"depends_on": "eval:parent.azzir_buy_from_sister",
+		# Show as a grid column (each row can point at a different sister company).
+		"in_list_view": 1,
+		"columns": 2,
 	},
 	{
 		"fieldname": "azzir_supply_warehouse",
@@ -420,6 +423,8 @@ _ROW_SUPPLY_FIELDS = [
 		"options": "Warehouse",
 		"insert_after": "azzir_supply_company",
 		"depends_on": "eval:parent.azzir_buy_from_sister",
+		"in_list_view": 1,
+		"columns": 2,
 	},
 ]
 for _dt in ("Quotation Item", "Sales Invoice Item"):

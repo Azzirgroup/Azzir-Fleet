@@ -127,6 +127,37 @@ after_migrate = "azzir_fleet.setup.after_migrate"
 # reliably (imported on every migrate) instead of being created by runtime code.
 fixtures = [
 	{
+		# Buy-from-sister custom fields shipped as data (JSON) so they deploy
+		# reliably on every site — the runtime create_custom_fields step could
+		# silently skip a doctype's batch, leaving the Supply Company / Supply
+		# Warehouse fields missing on live. Covers the header + per-row fields on
+		# Quotation / Sales Invoice and the intercompany link fields.
+		"dt": "Custom Field",
+		"filters": [
+			[
+				"name",
+				"in",
+				[
+					"Quotation-azzir_buy_from_sister",
+					"Quotation-azzir_supply_company",
+					"Quotation-azzir_supply_warehouse",
+					"Quotation Item-azzir_supply_company",
+					"Quotation Item-azzir_supply_warehouse",
+					"Sales Invoice-azzir_buy_from_sister",
+					"Sales Invoice-azzir_supply_company",
+					"Sales Invoice-azzir_supply_warehouse",
+					"Sales Invoice-azzir_intercompany_delivery_note",
+					"Sales Invoice-azzir_intercompany_sister_invoice",
+					"Sales Invoice-azzir_intercompany_purchase_invoice",
+					"Sales Invoice-azzir_intercompany_done",
+					"Sales Invoice-azzir_intercompany_refs",
+					"Sales Invoice Item-azzir_supply_company",
+					"Sales Invoice Item-azzir_supply_warehouse",
+				],
+			]
+		],
+	},
+	{
 		# Role home dashboards, shipped as data (JSON) — synced BEFORE the sidebars
 		# so the sidebar 'Home' links resolve. Only names that don't clash with
 		# ERPNext/HRMS defaults (Accounting/HR reuse those existing workspaces).
