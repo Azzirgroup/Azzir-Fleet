@@ -7,33 +7,45 @@ from frappe.utils import flt, getdate, get_first_day, get_last_day, nowdate
 
 
 SALES_DOCTYPES = {"Quotation", "Sales Invoice", "Delivery Note"}
-# Only these see EVERYONE's sales. Sales Manager is deliberately NOT here — a
-# salesperson often needs that role to submit, but must still see only their own.
-# Give a user "Azzir Sales Overseer" to let them see all.
+# Owner-scoping is OPT-IN: give a user this role and they only ever see the
+# Quotations / Sales Invoices / Delivery Notes they created themselves — on the
+# desk (list views, reports, opening a doc by URL) and in the /sales portal.
+# Users without it keep whatever their normal role permissions allow.
+OWN_ONLY_ROLE = "Document Creator"
+# These override the role — a system/sales overseer still sees everyone's sales
+# even if "Document Creator" was also assigned to them.
 SEE_ALL_ROLES = {"Azzir Sales Overseer", "System Manager"}
 
 
-def _can_see_all() -> bool:
-	"""Holders of an overseer role see everyone's sales; others see only their own."""
-	return bool(set(frappe.get_roles()) & SEE_ALL_ROLES)
+def _own_only(user: str | None = None) -> bool:
+	"""True when this user is restricted to the sales documents they created."""
+	roles = set(frappe.get_roles(user) if user else frappe.get_roles())
+	if roles & SEE_ALL_ROLES:
+		return False
+	return OWN_ONLY_ROLE in roles
+
+
+def _can_see_all(user: str | None = None) -> bool:
+	"""Everyone except a 'Document Creator' sees the whole sales pipeline."""
+	return not _own_only(user)
 
 
 def get_permission_query_conditions(user: str | None = None) -> str:
-	"""Desk list views / reports: a salesperson sees only the documents they
-	created; overseers (Azzir Sales Overseer / Sales Manager / System Manager) see
-	all. Same rule as the /sales app, now on the desk too."""
-	if _can_see_all():
-		return ""
+	"""Desk list views / reports: a 'Document Creator' sees only the documents
+	they created; everyone else is left to the standard role permissions. Same
+	rule as the /sales portal, now on the desk too."""
 	user = user or frappe.session.user
+	if not _own_only(user):
+		return ""
 	return "`owner` = {user}".format(user=frappe.db.escape(user))
 
 
 def has_permission(doc, ptype: str | None = None, user: str | None = None) -> bool:
-	"""Block opening someone else's sales document by URL unless the user is an
-	overseer or the creator."""
-	if _can_see_all():
-		return True
+	"""Block a 'Document Creator' from opening someone else's sales document by
+	URL. Returning True defers to Frappe's standard role permissions."""
 	user = user or frappe.session.user
+	if not _own_only(user):
+		return True
 	return (doc.owner == user) if getattr(doc, "owner", None) else True
 
 
@@ -54,14 +66,14 @@ def get_defaults() -> dict:
 @frappe.whitelist()
 def sales_list(doctype: str, fields: list | str | None = None, filters: dict | str | None = None,
                order_by: str = "modified desc", limit_page_length: int = 100, limit_start: int = 0) -> list:
-	"""List sales documents. A normal salesperson only sees the ones THEY created;
-	holders of an overseer role (Azzir Sales Overseer / Sales Manager / System
-	Manager) see all. Enforced on the server, not just hidden in the UI."""
+	"""List sales documents. A 'Document Creator' only sees the ones THEY created;
+	everyone else sees all they have permission to. Enforced on the server, not
+	just hidden in the UI."""
 	if doctype not in SALES_DOCTYPES:
 		frappe.throw(frappe._("Not allowed."))
 	filters = frappe.parse_json(filters) if isinstance(filters, str) else (filters or {})
 	fields = frappe.parse_json(fields) if isinstance(fields, str) else (fields or ["name"])
-	if not _can_see_all():
+	if _own_only():
 		filters["owner"] = frappe.session.user
 	return frappe.get_list(
 		doctype, fields=fields, filters=filters, order_by=order_by,
@@ -74,7 +86,7 @@ def dashboard_stats() -> dict:
 	"""KPI counts for the Sales dashboard."""
 	company = frappe.defaults.get_user_default("Company") or frappe.db.get_value("Company", {}, "name")
 	start, end = get_first_day(nowdate()), get_last_day(nowdate())
-	mine = not _can_see_all()
+	mine = _own_only()
 	owner = frappe.session.user
 
 	def cnt(dt, f):

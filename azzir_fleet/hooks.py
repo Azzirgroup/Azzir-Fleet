@@ -219,8 +219,11 @@ permission_query_conditions = {
 		"Purchase Invoice",
 	)
 }
-# Sales people see only the quotations / invoices / delivery notes they created;
-# the 'Azzir Sales Overseer' role (or Sales Manager / System Manager) sees all.
+# Owner-scoping for sales documents, opt-in via the 'Document Creator' role:
+# a holder sees ONLY the Quotations / Sales Invoices / Delivery Notes they
+# created (desk list views, reports, and opening a doc by URL) — the same rule
+# the /sales portal applies. 'Azzir Sales Overseer' / 'System Manager' override
+# it and still see everything.
 permission_query_conditions.update(
 	{
 		dt: "azzir_fleet.sales_api.get_permission_query_conditions"

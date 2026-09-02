@@ -639,6 +639,7 @@ def after_migrate():
 		("multicurrency", _enable_multicurrency),
 		("sales_overseer_role", _setup_sales_overseer_role),
 		("procurement_overseer_role", _setup_procurement_overseer_role),
+		("document_creator_role", _setup_document_creator_role),
 		("sales_portal_role", _setup_sales_portal_role),
 	]
 	for label, fn in steps:
@@ -664,6 +665,19 @@ def _setup_sales_overseer_role():
 	if not frappe.db.exists("Role", "Azzir Sales Overseer"):
 		frappe.get_doc(
 			{"doctype": "Role", "role_name": "Azzir Sales Overseer", "desk_access": 1}
+		).insert(ignore_permissions=True)
+
+
+def _setup_document_creator_role():
+	"""Owner-scoping role for sales documents. A user holding 'Document Creator'
+	only ever sees the Quotations / Sales Invoices / Delivery Notes they created
+	themselves — on the desk (list views, reports, opening a doc by URL) and in
+	the /sales portal. Enforced by permission_query_conditions / has_permission
+	in azzir_fleet.sales_api; the role itself grants no document permissions, it
+	is added ALONGSIDE a user's normal Sales role."""
+	if not frappe.db.exists("Role", "Document Creator"):
+		frappe.get_doc(
+			{"doctype": "Role", "role_name": "Document Creator", "desk_access": 1}
 		).insert(ignore_permissions=True)
 
 
