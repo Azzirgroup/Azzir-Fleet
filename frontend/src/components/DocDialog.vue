@@ -55,19 +55,33 @@
               <tr><th class="px-3 py-2">Item</th><th class="px-2 py-2 w-16">Qty</th><th class="px-2 py-2 w-24">Rate</th><th class="px-2 py-2 w-44">Warehouse</th><th class="px-2 py-2 w-24 text-right">Amount</th><th></th></tr>
             </thead>
             <tbody>
-              <tr v-for="(row, i) in rows" :key="i" class="border-t align-top">
-                <td class="px-2 py-2 w-64"><Combo v-model="row.item_code" doctype="Item" display="item_name" placeholder="Select item / part no." query-method="azzir_fleet.alias.item_search_for_spa" @update:model-value="(v) => onItem(i, v)" /></td>
-                <td class="px-2 py-2"><input v-model.number="row.qty" type="number" class="w-14 rounded border px-2 py-1" /></td>
-                <td class="px-2 py-2"><input v-model.number="row.rate" type="number" class="w-20 rounded border px-2 py-1" /></td>
-                <td class="px-2 py-2">
-                  <div class="flex items-center gap-1">
-                    <input v-model="row.warehouse" placeholder="—" class="w-28 rounded border px-2 py-1" />
-                    <button v-if="row.item_code" class="rounded border px-1.5 py-1 text-xs" title="See all warehouses" @click="stockRow = i">📦</button>
-                  </div>
-                </td>
-                <td class="px-2 py-2 text-right">{{ fmt((row.qty || 0) * (row.rate || 0)) }}</td>
-                <td class="px-2 py-2"><button class="text-gray-400 hover:text-red-500" @click="rows.splice(i, 1)">✕</button></td>
-              </tr>
+              <template v-for="(row, i) in rows" :key="i">
+                <tr class="border-t align-top">
+                  <td class="px-2 py-2 w-64"><Combo v-model="row.item_code" doctype="Item" display="item_name" placeholder="Select item / part no." query-method="azzir_fleet.alias.item_search_for_spa" @update:model-value="(v) => onItem(i, v)" /></td>
+                  <td class="px-2 py-2"><input v-model.number="row.qty" type="number" class="w-14 rounded border px-2 py-1" /></td>
+                  <td class="px-2 py-2"><input v-model.number="row.rate" type="number" class="w-20 rounded border px-2 py-1" /></td>
+                  <td class="px-2 py-2">
+                    <div class="flex items-center gap-1">
+                      <input v-model="row.warehouse" placeholder="—" class="w-28 rounded border px-2 py-1" />
+                      <button v-if="row.item_code" class="rounded border px-1.5 py-1 text-xs" title="See all warehouses" @click="stockRow = i">📦</button>
+                    </div>
+                  </td>
+                  <td class="px-2 py-2 text-right">{{ fmt((row.qty || 0) * (row.rate || 0)) }}</td>
+                  <td class="px-2 py-2"><button class="text-gray-400 hover:text-red-500" @click="rows.splice(i, 1)">✕</button></td>
+                </tr>
+                <!-- Per-row sister source (buy-from-sister), like the desk -->
+                <tr v-if="sisterEligible && buyFromSister">
+                  <td colspan="6" class="px-2 pb-2">
+                    <div class="flex flex-wrap items-center gap-2 rounded bg-amber-50 px-2 py-1 text-xs">
+                      <span class="text-gray-500">From sister:</span>
+                      <div class="w-48"><Combo v-model="row.supply_company" doctype="Company" display="name" placeholder="Sister company" /></div>
+                      <div class="w-56"><Combo v-model="row.supply_warehouse" doctype="Warehouse" display="label" placeholder="Warehouse (in stock)"
+                        query-method="azzir_fleet.intercompany_sale.supply_warehouses"
+                        :query-args="{ company: row.supply_company || supplyCompany, item_codes: row.item_code ? [row.item_code] : [] }" /></div>
+                    </div>
+                  </td>
+                </tr>
+              </template>
               <tr v-if="!rows.length"><td colspan="6" class="px-3 py-6 text-center text-gray-400">No items.</td></tr>
             </tbody>
             <tfoot><tr class="border-t"><td colspan="4"></td><td class="px-3 py-2 text-right font-semibold">Total</td><td class="px-3 py-2 text-right font-semibold">{{ fmt(total) }}</td></tr></tfoot>
@@ -118,6 +132,10 @@ const supplyWarehouse = ref('')
 watch(supplyCompany, (n, o) => { if (o) supplyWarehouse.value = '' })
 const sisterDoctype = (dt) => dt === 'Sales Invoice' || dt === 'Quotation'
 const sisterEligible = computed(() => canBuySister.value && sisterDoctype(props.doctype))
+// Header supply company/warehouse are defaults: push them onto the rows (each row
+// can then be changed to a different sister company).
+watch(supplyCompany, (v) => { rows.value.forEach((r) => { r.supply_company = v; r.supply_warehouse = '' }) })
+watch(supplyWarehouse, (v) => { if (v) rows.value.forEach((r) => { if (!r.supply_warehouse) r.supply_warehouse = v }) })
 
 const total = computed(() => rows.value.reduce((s, r) => s + (Number(r.qty) || 0) * (Number(r.rate) || 0), 0))
 
@@ -142,17 +160,17 @@ onMounted(async () => {
   if (props.edit) {
     base.value = props.edit
     customer.value = props.edit.party_name || props.edit.customer || ''
-    rows.value = (props.edit.items || []).map((r) => ({ item_code: r.item_code, qty: r.qty, rate: r.rate, warehouse: r.warehouse || '' }))
+    rows.value = (props.edit.items || []).map((r) => ({ item_code: r.item_code, qty: r.qty, rate: r.rate, warehouse: r.warehouse || '', supply_company: r.azzir_supply_company || '', supply_warehouse: r.azzir_supply_warehouse || '' }))
     if (!rows.value.length) addRow()
   } else if (props.initial) {
     customer.value = props.initial.customer || ''
-    rows.value = (props.initial.items || []).map((r) => ({ item_code: r.item_code, qty: r.qty || 1, rate: r.rate || 0, warehouse: r.warehouse || '' }))
+    rows.value = (props.initial.items || []).map((r) => ({ item_code: r.item_code, qty: r.qty || 1, rate: r.rate || 0, warehouse: r.warehouse || '', supply_company: r.azzir_supply_company || '', supply_warehouse: r.azzir_supply_warehouse || '' }))
     if (!rows.value.length) addRow()
   } else {
     addRow()
   }
 })
-function addRow() { rows.value.push({ item_code: '', qty: 1, rate: 0, warehouse: '' }) }
+function addRow() { rows.value.push({ item_code: '', qty: 1, rate: 0, warehouse: '', supply_company: supplyCompany.value || '', supply_warehouse: '' }) }
 function setWarehouse(wh) { if (stockRow.value !== null) rows.value[stockRow.value].warehouse = wh; stockRow.value = null }
 function close() { emit('close') }
 
@@ -166,11 +184,18 @@ async function onItem(i, item_code) {
 async function save(submit) {
   msg.value = ''
   if (!customer.value) { err.value = true; msg.value = 'Pick a customer.'; return }
-  const items = rows.value.filter((r) => r.item_code).map((r) => ({ item_code: r.item_code, qty: r.qty || 1, rate: r.rate || 0, warehouse: r.warehouse || undefined }))
-  if (!items.length) { err.value = true; msg.value = 'Add at least one item.'; return }
   const sister = sisterDoctype(props.doctype) && canBuySister.value && buyFromSister.value
-  if (sister && (!supplyCompany.value || !supplyWarehouse.value)) {
-    err.value = true; msg.value = 'Pick the Supply Company and Supply Company Warehouse.'; return
+  const items = rows.value.filter((r) => r.item_code).map((r) => {
+    const it = { item_code: r.item_code, qty: r.qty || 1, rate: r.rate || 0, warehouse: r.warehouse || undefined }
+    if (sister) {
+      it.azzir_supply_company = r.supply_company || supplyCompany.value || undefined
+      it.azzir_supply_warehouse = r.supply_warehouse || supplyWarehouse.value || undefined
+    }
+    return it
+  })
+  if (!items.length) { err.value = true; msg.value = 'Add at least one item.'; return }
+  if (sister && items.some((it) => !it.azzir_supply_company || !it.azzir_supply_warehouse)) {
+    err.value = true; msg.value = 'Each item needs a Supply Company and an in-stock Supply Warehouse.'; return
   }
   const applySister = (d) => {
     if (!sisterDoctype(props.doctype) || !canBuySister.value) return
