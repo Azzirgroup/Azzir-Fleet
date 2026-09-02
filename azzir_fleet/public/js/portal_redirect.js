@@ -1,31 +1,18 @@
-// Force "Sales Portal" users onto the /sales app whenever they land on the desk
-// (covers every login path, including /login?redirect-to=/app). The Sales Portal
-// role wins over EVERY other role — even System Manager — so a portal user can
-// never slip onto the desk. Only the built-in Administrator account is exempt (an
-// escape hatch; it is never assigned the portal role in practice).
+// Confine "Sales Portal" users to the /sales app. The Sales Portal role wins over
+// EVERY other role — System Manager included — so a portal user can never slip
+// onto the desk. Only the built-in Administrator account is exempt, so a site is
+// never left without a way in.
 //
-// The primary redirect is server-side (azzir_fleet.session.route_portal_users_on_login
-// sets the post-login home_page to "sales"). This is the safety net for the case
-// where the login carried a redirect-to=/app that the login page honours first.
+// The server-side guard (azzir_fleet.session.redirect_portal_users_off_desk) is
+// authoritative and already 302s these requests. This is the safety net for a desk
+// shell that is already open in a tab — e.g. the role was assigned mid-session, or
+// the SPA routed client-side without a new request hitting the server.
 (function () {
 	function onDesk() {
-		// Only the login landing — the bare /app (or /apps launcher). /desk and any
-		// specific desk page (/desk/item, /app/quotation, …) are deliberate and left
-		// alone, so a portal user can still reach the desk when they mean to.
+		// The desk root AND every page under it: /app, /app/quotation/QTN-0001,
+		// /apps, /desk/user … all bounce. No ?desk=1 / cookie escape hatch.
 		const p = (window.location.pathname || "/app").replace(/\/+$/, "") || "/app";
-		return /^\/(app|apps)$/.test(p);
-	}
-	function deskEscape() {
-		// ?desk=1 (or the azzir_desk session cookie) lets the user into the desk.
-		try {
-			if (new URLSearchParams(window.location.search).get("desk") === "1") {
-				document.cookie = "azzir_desk=1; path=/; SameSite=Lax";
-				return true;
-			}
-			return /(?:^|;\s*)azzir_desk=1(?:;|$)/.test(document.cookie);
-		} catch (e) {
-			return false;
-		}
+		return /^\/(app|apps|desk)(\/|$)/.test(p);
 	}
 	function roles() {
 		try {
@@ -42,12 +29,9 @@
 		try {
 			const r = roles();
 			if (!r.length) return false; // boot not ready yet
-			const isPortal = r.includes("Sales Portal");
-			// Only the Administrator superuser account is exempt — the Sales Portal
-			// role overrides every other role (System Manager included).
 			const bypass =
 				window.frappe && frappe.session && frappe.session.user === "Administrator";
-			if (isPortal && !bypass && onDesk() && !deskEscape()) {
+			if (r.includes("Sales Portal") && !bypass && onDesk()) {
 				window.location.replace("/sales");
 				return true;
 			}
@@ -65,4 +49,8 @@
 	} catch (e) {}
 	setTimeout(maybeRedirect, 300);
 	setTimeout(maybeRedirect, 1200);
+	// The desk is a SPA: a client-side route change does not hit the server guard.
+	try {
+		window.addEventListener("popstate", maybeRedirect);
+	} catch (e) {}
 })();

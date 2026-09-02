@@ -27,47 +27,48 @@ def enforce_session_limit(login_manager=None):
 	clear_sessions(user, keep_current=True, force=False)
 
 
-# After login a portal user lands on the bare /app (or /apps launcher) — that is what
-# we bounce to /sales. We deliberately do NOT touch /desk: typing /desk (or any desk
-# page like /desk/item, /desk/user) is a deliberate visit and is always allowed
-# through, so a portal user can still reach the desk when they mean to.
-_DESK_ROOTS = ("/app", "/apps")
+# Desk page roots a 'Sales Portal' user is locked out of. Matched on the path's
+# leading segment, so /app, /app/quotation/QTN-0001, /desk and /desk/item are all
+# covered. Deliberately NOT /api, /assets, /files or /printview — the portal
+# itself makes those requests and would break without them.
+_DESK_ROOTS = ("/app", "/apps", "/desk")
+
+
+def _is_desk_path(path: str) -> bool:
+	"""True for the desk itself and every page under it."""
+	p = (path or "").rstrip("/") or "/"
+	return any(p == root or p.startswith(root + "/") for root in _DESK_ROOTS)
+
+
+def is_portal_restricted(user: str | None = None) -> bool:
+	"""True when this user is confined to the /sales portal and must not reach the
+	desk. The 'Sales Portal' role wins over every other role (System Manager
+	included); only the built-in Administrator account is exempt, so a site is
+	never left without a way into the desk."""
+	user = user or getattr(frappe.session, "user", None)
+	if not user or user in ("Guest", "Administrator"):
+		return False
+	try:
+		return SALES_PORTAL_ROLE in frappe.get_roles(user)
+	except Exception:
+		return False
 
 
 def redirect_portal_users_off_desk():
-	"""before_request: send 'Sales Portal' users who land on the bare desk root to the
-	/sales portal (their home), while letting them open any SPECIFIC desk page they
-	type — /desk/item, /desk/user, /desk/quotation, etc.
+	"""before_request: confine 'Sales Portal' users to the /sales portal.
 
-	Runs on every request before the page renders, so it catches the desk landing no
-	matter how they got there — a fresh login, a Frappe Cloud SSO landing on the desk
-	root, or a bookmarked root. The Sales Portal role wins over every other role
-	(System Manager included); only the Administrator superuser account is exempt.
-	302 (temporary) so nothing is cached if the role is later removed.
+	EVERY desk page is bounced to /sales — the bare root AND any deep link such as
+	/app/quotation/QTN-0001 or /desk/user, typed, bookmarked or followed from an
+	email. There is no ?desk=1 / cookie escape hatch: the role means 'portal only'.
+
+	Runs on every request before the page renders, so it catches the desk no matter
+	how the user got there — a fresh login, a Frappe Cloud SSO landing, or a stale
+	desk shell. 302 (temporary) so nothing is cached if the role is later removed.
 	"""
 	req = getattr(frappe.local, "request", None)
-	if not req:
+	if not req or not _is_desk_path(getattr(req, "path", "")):
 		return
-	# Only the BARE desk root — a deeper path like /desk/item is a page they meant to
-	# open. Never /api, /assets, /files, /sales, etc.
-	p = (req.path or "").rstrip("/") or "/"
-	if p not in _DESK_ROOTS:
-		return
-	# Escape hatch: ?desk=1 on the root lets a portal user into the desk home on
-	# purpose; the client guard then drops an `azzir_desk=1` session cookie so it
-	# sticks for the rest of that browser session (cleared when the browser closes).
-	try:
-		if req.args.get("desk") == "1" or req.cookies.get("azzir_desk") == "1":
-			return
-	except Exception:
-		pass
-	user = getattr(frappe.session, "user", None)
-	if not user or user in ("Guest", "Administrator"):
-		return
-	try:
-		if SALES_PORTAL_ROLE not in frappe.get_roles(user):
-			return
-	except Exception:
+	if not is_portal_restricted():
 		return
 
 	from werkzeug.routing import RequestRedirect

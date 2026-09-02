@@ -29,7 +29,14 @@
         <button class="rounded p-1 hover:bg-gray-100" @click="sidebar = !sidebar">☰</button>
         <div class="font-medium">{{ title }}</div>
         <div class="ml-auto">
-          <a href="/app" class="text-sm text-gray-500 hover:text-gray-900">Desk →</a>
+          <!-- 'Sales Portal' users are confined to this app; the desk would just
+               302 them back here, so don't offer the link at all. -->
+          <a
+            v-if="!portalOnly"
+            href="/app"
+            class="text-sm text-gray-500 hover:text-gray-900"
+            >Desk →</a
+          >
         </div>
       </header>
       <main class="min-h-0 flex-1 overflow-y-auto p-4">
@@ -46,7 +53,11 @@ import { useRoute } from 'vue-router'
 const route = useRoute()
 const sidebar = ref(true)
 const logo = '/assets/azzir_fleet/frontend/logo.svg'
-const user = window.frappe?.boot?.user || ''
+// www/sales.py's boot dict is emitted by the sales.html template as TOP-LEVEL
+// globals (window.user, window.portal_only, …), not as window.frappe.boot — the
+// desk-style path is kept only as a fallback.
+const user = window.user || window.frappe?.boot?.user || ''
+const portalOnly = window.portal_only ?? window.frappe?.boot?.portal_only ?? false
 const links = [
   { to: '/dashboard', label: 'Dashboard', icon: '📊' },
   { to: '/quotations', label: 'Quotations', icon: '📝' },
