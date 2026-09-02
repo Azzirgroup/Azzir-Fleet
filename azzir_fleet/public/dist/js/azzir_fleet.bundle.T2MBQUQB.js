@@ -157,6 +157,8 @@
       frm.toggle_display("azzir_buy_from_sister", !!can);
       if (!can && frm.doc.azzir_buy_from_sister)
         frm.set_value("azzir_buy_from_sister", 0);
+      if (can && frm.is_new() && !frm.doc.azzir_buy_from_sister)
+        frm.set_value("azzir_buy_from_sister", 1);
     };
     if (azzir_fleet._can_buy_sister !== null) {
       apply(azzir_fleet._can_buy_sister);
@@ -381,4 +383,4 @@
     azzir_tax_rate: (frm, cdt, cdn) => apply_calc(frm, cdt, cdn, je_base(cdt, cdn))
   });
 })();
-//# sourceMappingURL=azzir_fleet.bundle.P2YZTK6G.js.map
+//# sourceMappingURL=azzir_fleet.bundle.T2MBQUQB.js.map
