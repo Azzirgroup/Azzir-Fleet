@@ -514,7 +514,6 @@ CUSTOM_FIELDS.setdefault("Sales Invoice", []).extend(
 			"options": "Company",
 			"insert_after": "azzir_buy_from_sister",
 			"depends_on": "eval:doc.azzir_buy_from_sister",
-			"mandatory_depends_on": "eval:doc.azzir_buy_from_sister",
 		},
 		{
 			"fieldname": "azzir_supply_warehouse",
@@ -523,7 +522,6 @@ CUSTOM_FIELDS.setdefault("Sales Invoice", []).extend(
 			"options": "Warehouse",
 			"insert_after": "azzir_supply_company",
 			"depends_on": "eval:doc.azzir_buy_from_sister",
-			"mandatory_depends_on": "eval:doc.azzir_buy_from_sister",
 		},
 		{
 			"fieldname": "azzir_intercompany_delivery_note",
@@ -590,7 +588,6 @@ CUSTOM_FIELDS.setdefault("Quotation", []).extend(
 			"options": "Company",
 			"insert_after": "azzir_buy_from_sister",
 			"depends_on": "eval:doc.azzir_buy_from_sister",
-			"mandatory_depends_on": "eval:doc.azzir_buy_from_sister",
 		},
 		{
 			"fieldname": "azzir_supply_warehouse",
@@ -599,7 +596,6 @@ CUSTOM_FIELDS.setdefault("Quotation", []).extend(
 			"options": "Warehouse",
 			"insert_after": "azzir_supply_company",
 			"depends_on": "eval:doc.azzir_buy_from_sister",
-			"mandatory_depends_on": "eval:doc.azzir_buy_from_sister",
 		},
 	]
 )
