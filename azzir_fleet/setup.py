@@ -442,6 +442,11 @@ _ROW_SUPPLY_FIELDS = [
 		# Show as a grid column (each row can point at a different sister company).
 		"in_list_view": 1,
 		"columns": 2,
+		# The sister company is deliberately OUTSIDE the salesperson's own-company
+		# restriction: a user may be limited (via a Company User Permission) to their
+		# own company for everything else, but must still be able to source a line from
+		# a sister here. Ignore User Permissions so that restriction doesn't block it.
+		"ignore_user_permissions": 1,
 	},
 	{
 		"fieldname": "azzir_supply_warehouse",
@@ -452,6 +457,12 @@ _ROW_SUPPLY_FIELDS = [
 		"depends_on": "eval:doc.azzir_row_from_sister",
 		"in_list_view": 1,
 		"columns": 2,
+		# Same idea as the sister company: a user restricted to their OWN warehouse
+		# (a Warehouse User Permission) must still be able to pick ANY sister-company
+		# warehouse on a "from sister" line. The normal `warehouse` field below stays
+		# restricted; only this sister field is exempt. That's the "own = restricted,
+		# sister = not restricted" rule.
+		"ignore_user_permissions": 1,
 	},
 ]
 for _dt in ("Quotation Item", "Sales Invoice Item"):
@@ -469,7 +480,9 @@ CUSTOM_FIELDS.setdefault("Sales Invoice Item", []).append(
 		"read_only": 1,
 		"in_list_view": 1,
 		"columns": 2,
-		"depends_on": "eval:parent.azzir_buy_from_sister",
+		# Per-row now (the old header `azzir_buy_from_sister` was removed).
+		"depends_on": "eval:doc.azzir_row_from_sister",
+		"ignore_user_permissions": 1,
 		"description": "The sister Delivery Note auto-created for this line.",
 	}
 )
