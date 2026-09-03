@@ -239,7 +239,19 @@
     const val = frm.doc[field];
     if (!val)
       return;
-    (frm.doc.items || []).forEach((r) => frappe.model.set_value(r.doctype, r.name, field, val));
+    (frm.doc.items || []).forEach((r) => {
+      if (r.azzir_row_from_sister)
+        frappe.model.set_value(r.doctype, r.name, field, val);
+    });
+  };
+  azzir_fleet.on_row_from_sister = function(frm, cdt, cdn) {
+    const row = locals[cdt] && locals[cdt][cdn];
+    if (!row || !row.azzir_row_from_sister)
+      return;
+    if (!row.azzir_supply_company && frm.doc.azzir_supply_company)
+      frappe.model.set_value(cdt, cdn, "azzir_supply_company", frm.doc.azzir_supply_company);
+    if (!row.azzir_supply_warehouse && frm.doc.azzir_supply_warehouse)
+      frappe.model.set_value(cdt, cdn, "azzir_supply_warehouse", frm.doc.azzir_supply_warehouse);
   };
   azzir_fleet.autoset_cc_warehouse = function(frm, cdt, cdn) {
     const row = locals[cdt] && locals[cdt][cdn];
@@ -520,4 +532,4 @@
     azzir_tax_rate: (frm, cdt, cdn) => apply_calc(frm, cdt, cdn, je_base(cdt, cdn))
   });
 })();
-//# sourceMappingURL=azzir_fleet.bundle.DA7US2UD.js.map
+//# sourceMappingURL=azzir_fleet.bundle.5L6MXL6K.js.map

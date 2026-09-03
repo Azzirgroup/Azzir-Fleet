@@ -46,6 +46,9 @@ frappe.ui.form.on("Quotation", {
 });
 
 frappe.ui.form.on("Quotation Item", {
+	azzir_row_from_sister(frm, cdt, cdn) {
+		azzir_fleet.on_row_from_sister(frm, cdt, cdn);
+	},
 	item_code(frm, cdt, cdn) {
 		azzir_fleet.fetch_row_stock(cdt, cdn);
 		azzir_fleet.autoset_cc_warehouse(frm, cdt, cdn);

@@ -82,12 +82,25 @@ azzir_fleet.set_supply_wh_query = function (frm) {
 	});
 };
 
-// Header supply company/warehouse are DEFAULTS: pushing them onto the item rows
-// (each row can then be changed to a different sister company).
+// Header supply company/warehouse are DEFAULTS: push them onto the item rows that
+// are marked "From Sister" (each such row can then be changed to a different sister).
 azzir_fleet.populate_row_supply = function (frm, field) {
 	const val = frm.doc[field];
 	if (!val) return;
-	(frm.doc.items || []).forEach((r) => frappe.model.set_value(r.doctype, r.name, field, val));
+	(frm.doc.items || []).forEach((r) => {
+		if (r.azzir_row_from_sister) frappe.model.set_value(r.doctype, r.name, field, val);
+	});
+};
+
+// A row was just marked / unmarked "From Sister": when marked, seed its supply
+// company + warehouse from the header defaults so the user rarely retypes them.
+azzir_fleet.on_row_from_sister = function (frm, cdt, cdn) {
+	const row = locals[cdt] && locals[cdt][cdn];
+	if (!row || !row.azzir_row_from_sister) return;
+	if (!row.azzir_supply_company && frm.doc.azzir_supply_company)
+		frappe.model.set_value(cdt, cdn, "azzir_supply_company", frm.doc.azzir_supply_company);
+	if (!row.azzir_supply_warehouse && frm.doc.azzir_supply_warehouse)
+		frappe.model.set_value(cdt, cdn, "azzir_supply_warehouse", frm.doc.azzir_supply_warehouse);
 };
 
 // When an item is picked, override ERPNext's default-warehouse fetch with a

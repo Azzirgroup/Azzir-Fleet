@@ -151,6 +151,8 @@ def set_landing_warehouse(doc, method=None):
 	default_wh = doc.get("azzir_supply_warehouse")
 	landing_cache = {}
 	for r in doc.get("items") or []:
+		if not r.get("azzir_row_from_sister"):
+			continue  # normal line — keep its own warehouse
 		if not r.get("item_code") or not frappe.get_cached_value("Item", r.item_code, "is_stock_item"):
 			continue
 		# Default the row's source from the header when the row doesn't set its own.
@@ -262,9 +264,12 @@ def process_sister_purchase(doc, method=None):
 
 	corporate = doc.company
 
-	# Group the stock rows by their sister company (defaulting to the header).
+	# Group the SISTER-flagged stock rows by their sister company (defaulting to the
+	# header). Rows not marked 'From Sister' are normal lines and left untouched.
 	groups = {}
 	for r in doc.get("items") or []:
+		if not r.get("azzir_row_from_sister"):
+			continue
 		if not r.get("item_code") or flt(r.get("qty")) <= 0:
 			continue
 		if not frappe.get_cached_value("Item", r.item_code, "is_stock_item"):
@@ -279,7 +284,7 @@ def process_sister_purchase(doc, method=None):
 			frappe.throw(_("Row #{0}: choose a Supply Warehouse.").format(r.idx))
 		groups.setdefault(sister, []).append((r, wh))
 	if not groups:
-		frappe.throw(_("Add at least one stock item to buy from a sister company."))
+		return  # header ticked but no row marked 'From Sister' — nothing to transfer
 
 	# ERPNext requires an Unrealized Profit / Loss Account on every company involved.
 	for co in [corporate, *groups]:

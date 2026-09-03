@@ -406,12 +406,25 @@ for _dt in ("Quotation Item", "Sales Invoice Item", "Delivery Note Item"):
 # sister; on submit the rows are grouped by sister company into separate transfers.
 _ROW_SUPPLY_FIELDS = [
 	{
+		# Per-row toggle: only THIS line is sourced from a sister company. The header
+		# checkbox just reveals these columns; the per-row check drives the logic, so
+		# an invoice can mix sister lines with normal ones.
+		"fieldname": "azzir_row_from_sister",
+		"label": "From Sister",
+		"fieldtype": "Check",
+		"insert_after": "warehouse",
+		"depends_on": "eval:parent.azzir_buy_from_sister",
+		"in_list_view": 1,
+		"columns": 1,
+	},
+	{
 		"fieldname": "azzir_supply_company",
 		"label": "Supply Company",
 		"fieldtype": "Link",
 		"options": "Company",
-		"insert_after": "warehouse",
-		"depends_on": "eval:parent.azzir_buy_from_sister",
+		"insert_after": "azzir_row_from_sister",
+		# Only relevant on a row that's actually from a sister.
+		"depends_on": "eval:parent.azzir_buy_from_sister && doc.azzir_row_from_sister",
 		# Show as a grid column (each row can point at a different sister company).
 		"in_list_view": 1,
 		"columns": 2,
@@ -422,7 +435,7 @@ _ROW_SUPPLY_FIELDS = [
 		"fieldtype": "Link",
 		"options": "Warehouse",
 		"insert_after": "azzir_supply_company",
-		"depends_on": "eval:parent.azzir_buy_from_sister",
+		"depends_on": "eval:parent.azzir_buy_from_sister && doc.azzir_row_from_sister",
 		"in_list_view": 1,
 		"columns": 2,
 	},
