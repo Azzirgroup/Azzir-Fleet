@@ -150,6 +150,8 @@ fixtures = [
 					"Sales Invoice Item-azzir_supply_company",
 					"Sales Invoice Item-azzir_supply_warehouse",
 					"Sales Invoice Item-azzir_sister_delivery_note",
+					"Quotation-azzir_hide_part_no",
+					"Sales Invoice-azzir_hide_part_no",
 					"Purchase Order Item-azzir_row_to_target",
 					"Purchase Order Item-azzir_target_company",
 					"Purchase Order Item-azzir_target_warehouse",

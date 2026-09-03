@@ -301,14 +301,29 @@ CUSTOM_FIELDS.setdefault("Quotation", []).append(
 	}
 )
 
-# Doc-level toggle to hide the Part Number column on the proforma printout.
+# Doc-level toggle to hide the Part Number column on the proforma printout —
+# on both Quotation and Sales Invoice.
+_HIDE_PART_NO_DESC = (
+	"Tick to hide BOTH the Part Number column AND the alternative/previous part "
+	"number (in the Description) on this document's printout, so the table starts "
+	"at Description."
+)
 CUSTOM_FIELDS.setdefault("Quotation", []).append(
 	{
 		"fieldname": "azzir_hide_part_no",
 		"label": "Hide Part Numbers on Print",
 		"fieldtype": "Check",
 		"insert_after": "azzir_invoiced",
-		"description": "Tick to hide BOTH the Part Number column AND the alternative/previous part number (in the Description) on this quotation's printout, so the table starts at Description.",
+		"description": _HIDE_PART_NO_DESC,
+	}
+)
+CUSTOM_FIELDS.setdefault("Sales Invoice", []).append(
+	{
+		"fieldname": "azzir_hide_part_no",
+		"label": "Hide Part Numbers on Print",
+		"fieldtype": "Check",
+		"insert_after": "azzir_apply_vat",
+		"description": _HIDE_PART_NO_DESC,
 	}
 )
 
