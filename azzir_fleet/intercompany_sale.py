@@ -128,17 +128,28 @@ def _internal_supplier(represents_company: str) -> str | None:
 
 
 def _landing_warehouse(corporate_company: str, sister_company: str) -> str | None:
-	"""The corporate warehouse configured to receive this sister's stock."""
-	return frappe.db.get_value(
-		"Warehouse",
-		{
-			"company": corporate_company,
-			"azzir_is_sister_landing": 1,
-			"azzir_sister_company": sister_company,
-			"disabled": 0,
-		},
-		"name",
-	)
+	"""The corporate LEAF warehouse configured to receive this sister's stock. Stock
+	can't post to a group node, so if the only tagged landing is a Group we raise a
+	clear message instead of ERPNext's cryptic 'Group node not allowed' error."""
+	base = {
+		"company": corporate_company,
+		"azzir_is_sister_landing": 1,
+		"azzir_sister_company": sister_company,
+		"disabled": 0,
+	}
+	leaf = frappe.db.get_value("Warehouse", {**base, "is_group": 0}, "name")
+	if leaf:
+		return leaf
+	grp = frappe.db.get_value("Warehouse", {**base, "is_group": 1}, "name")
+	if grp:
+		frappe.throw(
+			_(
+				"The landing warehouse {0} (for sister company {1}) is a Group — stock can't "
+				"be received into a group node. Untick 'Is Group' on it, or tag a non-group "
+				"(leaf) warehouse as 'Receives Sister Company Stock' for {1} instead."
+			).format(frappe.bold(grp), frappe.bold(sister_company))
+		)
+	return None
 
 
 def set_landing_warehouse(doc, method=None):
