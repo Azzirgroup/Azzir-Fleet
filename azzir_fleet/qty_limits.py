@@ -38,12 +38,11 @@ def validate_sales_stock(doc, method=None):
 
 	# Sum this invoice's qty per (item, warehouse) — covers the same item on
 	# multiple rows.
-	sister_doc = doc.get("azzir_buy_from_sister")
 	needed = {}
 	for row in doc.get("items") or []:
-		# A 'From Sister' line receives its stock via the intercompany transfer at
-		# submit — the draft check would wrongly see the landing warehouse as empty.
-		if sister_doc and row.get("azzir_row_from_sister"):
+		# A 'Buy From Sister Company' line receives its stock via the intercompany
+		# transfer at submit — the draft check would wrongly see the landing empty.
+		if row.get("azzir_row_from_sister"):
 			continue
 		code, wh = row.get("item_code"), row.get("warehouse")
 		if not code or not wh:
@@ -68,9 +67,8 @@ def validate_sales_stock(doc, method=None):
 
 def _enforce(doc, field, action):
 	limits = {}
-	sister_doc = doc.get("azzir_buy_from_sister")
 	for row in doc.get("items") or []:
-		if sister_doc and row.get("azzir_row_from_sister"):
+		if row.get("azzir_row_from_sister"):
 			continue  # sister line — sourced from another company, not our sales cap
 		code = row.get("item_code")
 		if not code:

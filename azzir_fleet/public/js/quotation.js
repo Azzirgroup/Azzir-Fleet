@@ -4,19 +4,12 @@
 
 frappe.ui.form.on("Quotation", {
 	onload_post_render(frm) {
-		azzir_fleet.toggle_buy_from_sister(frm);
-	},
-	azzir_supply_company(frm) {
+		azzir_fleet.toggle_sister_columns(frm);
 		azzir_fleet.set_supply_wh_query(frm);
-		frm.set_value("azzir_supply_warehouse", "");
-		azzir_fleet.populate_row_supply(frm, "azzir_supply_company");
-	},
-	azzir_supply_warehouse(frm) {
-		azzir_fleet.populate_row_supply(frm, "azzir_supply_warehouse");
 	},
 	refresh(frm) {
 		azzir_fleet.set_warehouse_cc_query(frm);
-		azzir_fleet.toggle_buy_from_sister(frm);
+		azzir_fleet.toggle_sister_columns(frm);
 		azzir_fleet.set_supply_wh_query(frm);
 		const drop_sales_order = () => frm.remove_custom_button(__("Sales Order"), __("Create"));
 		// Remove now and again shortly after, in case ERPNext adds it late.
@@ -46,9 +39,6 @@ frappe.ui.form.on("Quotation", {
 });
 
 frappe.ui.form.on("Quotation Item", {
-	azzir_row_from_sister(frm, cdt, cdn) {
-		azzir_fleet.on_row_from_sister(frm, cdt, cdn);
-	},
 	item_code(frm, cdt, cdn) {
 		azzir_fleet.fetch_row_stock(cdt, cdn);
 		azzir_fleet.autoset_cc_warehouse(frm, cdt, cdn);

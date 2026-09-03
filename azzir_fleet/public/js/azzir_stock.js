@@ -36,16 +36,18 @@ azzir_fleet.set_warehouse_cc_query = function (frm, table) {
 	});
 };
 
-// Sell sister-company stock: only users with a Corporate cost center see the
-// "Buy Stock From Sister Company" toggle. Cached per session.
+// Buy-from-sister is PER ROW now (no header field). Only users with a Corporate
+// cost center may use it — for others we hide the per-row columns. Cached per session.
 azzir_fleet._can_buy_sister = null;
-azzir_fleet.toggle_buy_from_sister = function (frm) {
-	if (!frm.fields_dict.azzir_buy_from_sister) return;
+azzir_fleet.toggle_sister_columns = function (frm) {
+	if (!frm.fields_dict.items) return;
+	const grid = frm.fields_dict.items.grid;
+	const cols = ["azzir_row_from_sister", "azzir_supply_company", "azzir_supply_warehouse"];
 	const apply = (can) => {
-		frm.toggle_display("azzir_buy_from_sister", !!can);
-		if (!can && frm.doc.azzir_buy_from_sister) frm.set_value("azzir_buy_from_sister", 0);
-		// Eligible user, brand-new doc: default the checkbox ON.
-		if (can && frm.is_new() && !frm.doc.azzir_buy_from_sister) frm.set_value("azzir_buy_from_sister", 1);
+		cols.forEach((f) => {
+			if (frappe.meta.has_field(grid.doctype, f)) grid.update_docfield_property(f, "hidden", can ? 0 : 1);
+		});
+		grid.refresh();
 	};
 	if (azzir_fleet._can_buy_sister !== null) {
 		apply(azzir_fleet._can_buy_sister);
@@ -59,48 +61,21 @@ azzir_fleet.toggle_buy_from_sister = function (frm) {
 		},
 	});
 };
-// Header supply warehouse (the default): warehouses in the chosen sister company
-// holding stock of the doc's items, with qty.
+
+// Per-row supply warehouse: warehouses in the row's sister company holding stock of
+// the row's item, with qty.
 azzir_fleet.set_supply_wh_query = function (frm) {
-	frm.set_query("azzir_supply_warehouse", () => ({
-		query: "azzir_fleet.intercompany_sale.supply_warehouse_link_query",
-		filters: {
-			company: frm.doc.azzir_supply_company || "",
-			item_codes: (frm.doc.items || []).map((i) => i.item_code).filter(Boolean),
-		},
-	}));
-	// Per-row supply warehouse: filtered to the row's sister company + item, with qty.
+	if (!frm.fields_dict.items) return;
 	frm.set_query("azzir_supply_warehouse", "items", function (doc, cdt, cdn) {
 		const row = locals[cdt][cdn] || {};
 		return {
 			query: "azzir_fleet.intercompany_sale.supply_warehouse_link_query",
 			filters: {
-				company: row.azzir_supply_company || doc.azzir_supply_company || "",
+				company: row.azzir_supply_company || "",
 				item_codes: row.item_code ? [row.item_code] : [],
 			},
 		};
 	});
-};
-
-// Header supply company/warehouse are DEFAULTS: push them onto the item rows that
-// are marked "From Sister" (each such row can then be changed to a different sister).
-azzir_fleet.populate_row_supply = function (frm, field) {
-	const val = frm.doc[field];
-	if (!val) return;
-	(frm.doc.items || []).forEach((r) => {
-		if (r.azzir_row_from_sister) frappe.model.set_value(r.doctype, r.name, field, val);
-	});
-};
-
-// A row was just marked / unmarked "From Sister": when marked, seed its supply
-// company + warehouse from the header defaults so the user rarely retypes them.
-azzir_fleet.on_row_from_sister = function (frm, cdt, cdn) {
-	const row = locals[cdt] && locals[cdt][cdn];
-	if (!row || !row.azzir_row_from_sister) return;
-	if (!row.azzir_supply_company && frm.doc.azzir_supply_company)
-		frappe.model.set_value(cdt, cdn, "azzir_supply_company", frm.doc.azzir_supply_company);
-	if (!row.azzir_supply_warehouse && frm.doc.azzir_supply_warehouse)
-		frappe.model.set_value(cdt, cdn, "azzir_supply_warehouse", frm.doc.azzir_supply_warehouse);
 };
 
 // When an item is picked, override ERPNext's default-warehouse fetch with a

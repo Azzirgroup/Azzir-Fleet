@@ -18,12 +18,8 @@ def make_sales_invoice(source_name: str, target_doc: str | None = None) -> dict:
 		# set_missing_values has re-fetched it from the Customer master.
 		if source.get("customer_name"):
 			target.customer_name = source.customer_name
-		# Carry the buy-from-sister choice so the intercompany transfer runs when
-		# THIS Sales Invoice is submitted.
-		if source.get("azzir_buy_from_sister"):
-			target.azzir_buy_from_sister = 1
-			target.azzir_supply_company = source.get("azzir_supply_company")
-			target.azzir_supply_warehouse = source.get("azzir_supply_warehouse")
+		# The per-row 'Buy From Sister Company' flag + supply company/warehouse carry
+		# via the item field_map, so the transfer runs when THIS Sales Invoice submits.
 
 	return get_mapped_doc(
 		"Quotation",

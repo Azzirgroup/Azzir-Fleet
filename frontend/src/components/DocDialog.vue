@@ -24,26 +24,8 @@
           </div>
         </div>
 
-        <!-- Buy stock from a sister company — starts on the Quotation, carries to
-             the Sales Invoice. Only for Corporate-cost-center users. -->
-        <div v-if="sisterEligible" class="mb-4 rounded-lg border bg-amber-50 p-3">
-          <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
-            <input type="checkbox" v-model="buyFromSister" />
-            Buy Stock From Sister Company
-          </label>
-          <div v-if="buyFromSister" class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-            <div>
-              <label class="mb-1 block text-xs text-gray-500">Supply Company</label>
-              <Combo v-model="supplyCompany" doctype="Company" display="name" placeholder="Sister company" />
-            </div>
-            <div>
-              <label class="mb-1 block text-xs text-gray-500">Supply Company Warehouse (in stock)</label>
-              <Combo v-model="supplyWarehouse" doctype="Warehouse" display="label" placeholder="Warehouse with stock"
-                query-method="azzir_fleet.intercompany_sale.supply_warehouses"
-                :query-args="{ company: supplyCompany, item_codes: rows.filter((r) => r.item_code).map((r) => r.item_code) }" />
-            </div>
-          </div>
-        </div>
+        <!-- Buy-from-sister is per item line (tick 'From sister' on a row below).
+             Only Corporate-cost-center users see those columns. -->
 
         <div class="rounded-lg border">
           <div class="flex items-center border-b px-3 py-2">
@@ -71,7 +53,7 @@
                 </tr>
                 <!-- Per-row sister source (buy-from-sister): tick only the lines that
                      come from a sister; the rest stay normal. -->
-                <tr v-if="sisterEligible && buyFromSister">
+                <tr v-if="sisterEligible">
                   <td colspan="6" class="px-2 pb-2">
                     <div class="flex flex-wrap items-center gap-2 rounded bg-amber-50 px-2 py-1 text-xs">
                       <label class="flex items-center gap-1"><input type="checkbox" v-model="row.from_sister" @change="onRowFromSister(row)" /> From sister</label>
@@ -79,7 +61,7 @@
                         <div class="w-48"><Combo v-model="row.supply_company" doctype="Company" display="name" placeholder="Sister company" /></div>
                         <div class="w-56"><Combo v-model="row.supply_warehouse" doctype="Warehouse" display="label" placeholder="Warehouse (in stock)"
                           query-method="azzir_fleet.intercompany_sale.supply_warehouses"
-                          :query-args="{ company: row.supply_company || supplyCompany, item_codes: row.item_code ? [row.item_code] : [] }" /></div>
+                          :query-args="{ company: row.supply_company, item_codes: row.item_code ? [row.item_code] : [] }" /></div>
                       </template>
                     </div>
                   </td>
@@ -127,18 +109,10 @@ const msg = ref('')
 const err = ref(false)
 const stockRow = ref(null)
 
-// Buy stock from a sister company (Sales Invoice only, corporate-cost-center users).
+// Buy-from-sister is per item row now (corporate-cost-center users). No header field.
 const canBuySister = ref(false)
-const buyFromSister = ref(false)
-const supplyCompany = ref('')
-const supplyWarehouse = ref('')
-watch(supplyCompany, (n, o) => { if (o) supplyWarehouse.value = '' })
 const sisterDoctype = (dt) => dt === 'Sales Invoice' || dt === 'Quotation'
 const sisterEligible = computed(() => canBuySister.value && sisterDoctype(props.doctype))
-// Header supply company/warehouse are defaults: push them onto the rows (each row
-// can then be changed to a different sister company).
-watch(supplyCompany, (v) => { rows.value.forEach((r) => { if (r.from_sister) { r.supply_company = v; r.supply_warehouse = '' } }) })
-watch(supplyWarehouse, (v) => { if (v) rows.value.forEach((r) => { if (r.from_sister && !r.supply_warehouse) r.supply_warehouse = v }) })
 
 const total = computed(() => rows.value.reduce((s, r) => s + (Number(r.qty) || 0) * (Number(r.rate) || 0), 0))
 
@@ -150,15 +124,6 @@ onMounted(async () => {
   company.value = props.edit?.company || props.initial?.company || defaults.value.company || ''
   if (sisterDoctype(props.doctype)) {
     canBuySister.value = await userCanBuySister().catch(() => false)
-    const src = props.edit || props.initial
-    if (src?.azzir_buy_from_sister) {
-      buyFromSister.value = true
-      supplyCompany.value = src.azzir_supply_company || ''
-      supplyWarehouse.value = src.azzir_supply_warehouse || ''
-    } else if (canBuySister.value && !props.edit) {
-      // Eligible user, brand-new doc: default the checkbox ON.
-      buyFromSister.value = true
-    }
   }
   if (props.edit) {
     base.value = props.edit
@@ -174,11 +139,9 @@ onMounted(async () => {
   }
 })
 function addRow() { rows.value.push({ item_code: '', qty: 1, rate: 0, warehouse: '', from_sister: false, supply_company: '', supply_warehouse: '' }) }
-// A row was ticked "From sister": seed its supply company/warehouse from the header.
+// A row was un-ticked "From sister": clear its supply picks so stale values aren't sent.
 function onRowFromSister(row) {
-  if (!row.from_sister) return
-  if (!row.supply_company && supplyCompany.value) row.supply_company = supplyCompany.value
-  if (!row.supply_warehouse && supplyWarehouse.value) row.supply_warehouse = supplyWarehouse.value
+  if (!row.from_sister) { row.supply_company = ''; row.supply_warehouse = '' }
 }
 function setWarehouse(wh) { if (stockRow.value !== null) rows.value[stockRow.value].warehouse = wh; stockRow.value = null }
 function close() { emit('close') }
@@ -193,13 +156,13 @@ async function onItem(i, item_code) {
 async function save(submit) {
   msg.value = ''
   if (!customer.value) { err.value = true; msg.value = 'Pick a customer.'; return }
-  const sister = sisterDoctype(props.doctype) && canBuySister.value && buyFromSister.value
+  const sister = sisterDoctype(props.doctype) && canBuySister.value
   const items = rows.value.filter((r) => r.item_code).map((r) => {
     const it = { item_code: r.item_code, qty: r.qty || 1, rate: r.rate || 0, warehouse: r.warehouse || undefined }
     if (sister && r.from_sister) {
       it.azzir_row_from_sister = 1
-      it.azzir_supply_company = r.supply_company || supplyCompany.value || undefined
-      it.azzir_supply_warehouse = r.supply_warehouse || supplyWarehouse.value || undefined
+      it.azzir_supply_company = r.supply_company || undefined
+      it.azzir_supply_warehouse = r.supply_warehouse || undefined
     }
     return it
   })
@@ -208,25 +171,17 @@ async function save(submit) {
   if (sister && items.some((it) => it.azzir_row_from_sister && (!it.azzir_supply_company || !it.azzir_supply_warehouse))) {
     err.value = true; msg.value = 'Each "From sister" line needs a Supply Company and an in-stock Supply Warehouse.'; return
   }
-  const applySister = (d) => {
-    if (!sisterDoctype(props.doctype) || !canBuySister.value) return
-    d.azzir_buy_from_sister = sister ? 1 : 0
-    d.azzir_supply_company = sister ? supplyCompany.value : undefined
-    d.azzir_supply_warehouse = sister ? supplyWarehouse.value : undefined
-  }
   busy.value = true
   try {
     let saved
     if (base.value) {
       const d = { ...base.value, company: company.value, items }
-      applySister(d)
       saved = await saveDoc(d)
       if (submit) saved = await submitDoc(saved)
     } else {
       const d = { doctype: props.doctype, company: company.value, items }
       if (props.doctype === 'Quotation') { d.quotation_to = 'Customer'; d.party_name = customer.value }
       else d.customer = customer.value
-      applySister(d)
       saved = await insertDoc(d)
       if (submit) saved = await submitDoc(saved)
     }

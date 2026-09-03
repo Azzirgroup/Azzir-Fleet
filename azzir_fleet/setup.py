@@ -406,14 +406,13 @@ for _dt in ("Quotation Item", "Sales Invoice Item", "Delivery Note Item"):
 # sister; on submit the rows are grouped by sister company into separate transfers.
 _ROW_SUPPLY_FIELDS = [
 	{
-		# Per-row toggle: only THIS line is sourced from a sister company. The header
-		# checkbox just reveals these columns; the per-row check drives the logic, so
-		# an invoice can mix sister lines with normal ones.
+		# Per-row toggle: this line is sourced from a sister company. This is the sole
+		# trigger (there is no header checkbox); an invoice can mix sister lines with
+		# normal ones. Only eligible users see the column (hidden client-side otherwise).
 		"fieldname": "azzir_row_from_sister",
-		"label": "From Sister",
+		"label": "Buy From Sister Company",
 		"fieldtype": "Check",
 		"insert_after": "warehouse",
-		"depends_on": "eval:parent.azzir_buy_from_sister",
 		"in_list_view": 1,
 		"columns": 1,
 	},
@@ -424,7 +423,7 @@ _ROW_SUPPLY_FIELDS = [
 		"options": "Company",
 		"insert_after": "azzir_row_from_sister",
 		# Only relevant on a row that's actually from a sister.
-		"depends_on": "eval:parent.azzir_buy_from_sister && doc.azzir_row_from_sister",
+		"depends_on": "eval:doc.azzir_row_from_sister",
 		# Show as a grid column (each row can point at a different sister company).
 		"in_list_view": 1,
 		"columns": 2,
@@ -435,7 +434,7 @@ _ROW_SUPPLY_FIELDS = [
 		"fieldtype": "Link",
 		"options": "Warehouse",
 		"insert_after": "azzir_supply_company",
-		"depends_on": "eval:parent.azzir_buy_from_sister && doc.azzir_row_from_sister",
+		"depends_on": "eval:doc.azzir_row_from_sister",
 		"in_list_view": 1,
 		"columns": 2,
 	},
@@ -508,40 +507,17 @@ CUSTOM_FIELDS.setdefault("Warehouse", []).extend(
 		},
 	]
 )
-# Sales Invoice: buy-from-sister toggle + the supply source, and links to the docs
-# the flow auto-creates (also used to stay idempotent).
+# Sales Invoice: read-only links to the docs the per-row buy-from-sister flow
+# auto-creates (also used to stay idempotent). The trigger now lives per item row
+# (Sales Invoice Item.azzir_row_from_sister) — there is no header toggle.
 CUSTOM_FIELDS.setdefault("Sales Invoice", []).extend(
 	[
-		{
-			"fieldname": "azzir_buy_from_sister",
-			"label": "Buy Stock From Sister Company",
-			"fieldtype": "Check",
-			"insert_after": "company",
-			"description": "Source these items from a sister company at the intercompany "
-			"discount. The transfer documents are created automatically on submit.",
-		},
-		{
-			"fieldname": "azzir_supply_company",
-			"label": "Supply Company",
-			"fieldtype": "Link",
-			"options": "Company",
-			"insert_after": "azzir_buy_from_sister",
-			"depends_on": "eval:doc.azzir_buy_from_sister",
-		},
-		{
-			"fieldname": "azzir_supply_warehouse",
-			"label": "Supply Company Warehouse",
-			"fieldtype": "Link",
-			"options": "Warehouse",
-			"insert_after": "azzir_supply_company",
-			"depends_on": "eval:doc.azzir_buy_from_sister",
-		},
 		{
 			"fieldname": "azzir_intercompany_delivery_note",
 			"label": "Intercompany Delivery Note",
 			"fieldtype": "Link",
 			"options": "Delivery Note",
-			"insert_after": "azzir_supply_warehouse",
+			"insert_after": "company",
 			"read_only": 1,
 		},
 		{
@@ -583,35 +559,8 @@ CUSTOM_FIELDS.setdefault("Sales Invoice", []).extend(
 # Quotation: the buy-from-sister choice starts here and carries to the Sales
 # Invoice. NO intercompany documents are created at quotation stage — the logic
 # only runs when the Sales Invoice is submitted.
-CUSTOM_FIELDS.setdefault("Quotation", []).extend(
-	[
-		{
-			"fieldname": "azzir_buy_from_sister",
-			"label": "Buy Stock From Sister Company",
-			"fieldtype": "Check",
-			"insert_after": "company",
-			"description": "Source these items from a sister company. Choose the supply "
-			"company and warehouse; the transfer happens when this is turned into a "
-			"submitted Sales Invoice.",
-		},
-		{
-			"fieldname": "azzir_supply_company",
-			"label": "Supply Company",
-			"fieldtype": "Link",
-			"options": "Company",
-			"insert_after": "azzir_buy_from_sister",
-			"depends_on": "eval:doc.azzir_buy_from_sister",
-		},
-		{
-			"fieldname": "azzir_supply_warehouse",
-			"label": "Supply Company Warehouse",
-			"fieldtype": "Link",
-			"options": "Warehouse",
-			"insert_after": "azzir_supply_company",
-			"depends_on": "eval:doc.azzir_buy_from_sister",
-		},
-	]
-)
+# Quotation has no header buy-from-sister fields — the trigger lives per item row
+# (Quotation Item.azzir_row_from_sister), same as the Sales Invoice.
 
 # --- Purchase cycle: buy for another (internal) company ---------------------
 # Per-row Target Company + Target Warehouse on Purchase Order / Receipt / Invoice
@@ -1345,7 +1294,7 @@ PICKUP_SLIP_HTML = """
 	{% if not no_letterhead and letter_head %}<div class="letter-head">{{ letter_head }}</div>{% endif %}
 
 	<h2 style="text-align:center; margin:6px 0; letter-spacing:1px;">PICKUP SLIP</h2>
-	{% if doc.get("azzir_buy_from_sister") %}<div style="text-align:center; color:#b00; font-size:11px; margin:-2px 0 8px;">Pick from the <b>sister company</b> warehouse(s) shown below</div>{% endif %}
+	{% if (doc.get("items") or []) | selectattr("azzir_row_from_sister") | list %}<div style="text-align:center; color:#b00; font-size:11px; margin:-2px 0 8px;">Some lines are picked from a <b>sister company</b> warehouse (shown below)</div>{% endif %}
 
 	<table style="width:100%; margin-bottom:10px;">
 		<tr>
@@ -1380,7 +1329,7 @@ PICKUP_SLIP_HTML = """
 				<td style="padding:5px;">
 					{% if comps %}
 						<span style="color:#999;">See components ↓</span>
-					{% elif doc.get("azzir_buy_from_sister") and row.get("azzir_supply_warehouse") %}
+					{% elif row.get("azzir_row_from_sister") and row.get("azzir_supply_warehouse") %}
 						{# Buy-from-sister: pick from the SISTER warehouse the stock was
 						   requested from (the Delivery Note source), not our landing warehouse. #}
 						{% set sw = row.azzir_supply_warehouse %}

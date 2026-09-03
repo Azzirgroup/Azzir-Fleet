@@ -142,27 +142,19 @@ def _landing_warehouse(corporate_company: str, sister_company: str) -> str | Non
 
 
 def set_landing_warehouse(doc, method=None):
-	"""Sales Invoice validate: default each row's sister company/warehouse from the
-	header, then point each stock row at the landing warehouse for ITS sister company
-	(rows can be sourced from different sisters). Stock is transferred in at submit."""
-	if not doc.get("azzir_buy_from_sister"):
-		return
-	default_company = doc.get("azzir_supply_company")
-	default_wh = doc.get("azzir_supply_warehouse")
+	"""Validate: for each item row marked 'Buy From Sister Company', point the row at
+	the landing warehouse for ITS sister company (rows can be sourced from different
+	sisters). Stock is transferred in at submit. Driven entirely per row — there is
+	no header toggle."""
 	landing_cache = {}
 	for r in doc.get("items") or []:
 		if not r.get("azzir_row_from_sister"):
 			continue  # normal line — keep its own warehouse
 		if not r.get("item_code") or not frappe.get_cached_value("Item", r.item_code, "is_stock_item"):
 			continue
-		# Default the row's source from the header when the row doesn't set its own.
-		if not r.get("azzir_supply_company"):
-			r.azzir_supply_company = default_company
-		if not r.get("azzir_supply_warehouse") and r.get("azzir_supply_company") == default_company:
-			r.azzir_supply_warehouse = default_wh
 		sister = r.get("azzir_supply_company")
 		if not sister:
-			continue  # mandatory_depends_on on the header will prompt
+			continue  # process_sister_purchase throws for this at submit
 		if sister not in landing_cache:
 			lw = _landing_warehouse(doc.company, sister)
 			if not lw:
@@ -253,19 +245,16 @@ def _force_cost_center(target, cost_center: str | None) -> None:
 
 
 def process_sister_purchase(doc, method=None):
-	"""Sales Invoice before_submit: for each sister company sourced on the item
-	rows, create one intercompany transfer (rows from the same sister share a
-	transfer; different sisters get separate transfers)."""
-	if not doc.get("azzir_buy_from_sister"):
-		return
+	"""Sales Invoice before_submit: for each item row marked 'Buy From Sister Company',
+	create one intercompany transfer (rows from the same sister share a transfer;
+	different sisters get separate transfers). Rows not marked are normal lines."""
 	# Idempotent: already built for this invoice.
 	if doc.get("azzir_intercompany_done"):
 		return
 
 	corporate = doc.company
 
-	# Group the SISTER-flagged stock rows by their sister company (defaulting to the
-	# header). Rows not marked 'From Sister' are normal lines and left untouched.
+	# Group the sister-flagged stock rows by their sister company.
 	groups = {}
 	for r in doc.get("items") or []:
 		if not r.get("azzir_row_from_sister"):
@@ -274,17 +263,17 @@ def process_sister_purchase(doc, method=None):
 			continue
 		if not frappe.get_cached_value("Item", r.item_code, "is_stock_item"):
 			continue
-		sister = r.get("azzir_supply_company") or doc.get("azzir_supply_company")
+		sister = r.get("azzir_supply_company")
 		if not sister:
 			frappe.throw(_("Row #{0}: choose a Supply Company.").format(r.idx))
 		if sister == corporate:
 			frappe.throw(_("Row #{0}: the supply company must be a different (sister) company.").format(r.idx))
-		wh = r.get("azzir_supply_warehouse") or doc.get("azzir_supply_warehouse")
+		wh = r.get("azzir_supply_warehouse")
 		if not wh:
 			frappe.throw(_("Row #{0}: choose a Supply Warehouse.").format(r.idx))
 		groups.setdefault(sister, []).append((r, wh))
 	if not groups:
-		return  # header ticked but no row marked 'From Sister' — nothing to transfer
+		return  # no row marked 'Buy From Sister Company' — nothing to transfer
 
 	# ERPNext requires an Unrealized Profit / Loss Account on every company involved.
 	for co in [corporate, *groups]:
