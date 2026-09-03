@@ -24,6 +24,12 @@
           </div>
         </div>
 
+        <label class="mb-4 flex items-center gap-2 text-sm text-gray-700">
+          <input type="checkbox" v-model="applyVat" />
+          Apply VAT
+          <span class="text-xs text-gray-400">(untick to remove VAT from this {{ doctype.toLowerCase() }})</span>
+        </label>
+
         <!-- Buy-from-sister is per item line (tick 'From sister' on a row below).
              Only Corporate-cost-center users see those columns. -->
 
@@ -108,6 +114,7 @@ const busy = ref(false)
 const msg = ref('')
 const err = ref(false)
 const stockRow = ref(null)
+const applyVat = ref(true) // Apply VAT (default on); untick to drop VAT from the doc
 
 // Buy-from-sister is per item row now (corporate-cost-center users). No header field.
 const canBuySister = ref(false)
@@ -127,6 +134,7 @@ onMounted(async () => {
   }
   if (props.edit) {
     base.value = props.edit
+    applyVat.value = props.edit.azzir_apply_vat === 0 ? false : true
     customer.value = props.edit.party_name || props.edit.customer || ''
     rows.value = (props.edit.items || []).map((r) => ({ item_code: r.item_code, qty: r.qty, rate: r.rate, warehouse: r.warehouse || '', from_sister: !!r.azzir_row_from_sister, supply_company: r.azzir_supply_company || '', supply_warehouse: r.azzir_supply_warehouse || '' }))
     if (!rows.value.length) addRow()
@@ -175,11 +183,11 @@ async function save(submit) {
   try {
     let saved
     if (base.value) {
-      const d = { ...base.value, company: company.value, items }
+      const d = { ...base.value, company: company.value, items, azzir_apply_vat: applyVat.value ? 1 : 0 }
       saved = await saveDoc(d)
       if (submit) saved = await submitDoc(saved)
     } else {
-      const d = { doctype: props.doctype, company: company.value, items }
+      const d = { doctype: props.doctype, company: company.value, items, azzir_apply_vat: applyVat.value ? 1 : 0 }
       if (props.doctype === 'Quotation') { d.quotation_to = 'Customer'; d.party_name = customer.value }
       else d.customer = customer.value
       saved = await insertDoc(d)
