@@ -45,38 +45,31 @@ def _linked_source_row(r):
 		dt, name = "Purchase Order Item", r.po_detail
 	else:
 		return None
-	if not frappe.get_meta(dt).has_field("azzir_target_company"):
+	if not frappe.get_meta(dt).has_field("azzir_row_to_target"):
 		return None
 	return frappe.db.get_value(
-		dt, name, ["azzir_target_company", "azzir_target_warehouse"], as_dict=True
+		dt, name, ["azzir_row_to_target", "azzir_target_company", "azzir_target_warehouse"], as_dict=True
 	)
 
 
 def default_target_rows(doc, method=None):
-	"""PO / PR / PI validate: default each row's Target Company + Target Warehouse
-	from the header, and carry them from the linked source document row."""
-	header_co = doc.get("azzir_target_company")
-	header_wh = doc.get("azzir_target_warehouse")
+	"""PO / PR / PI validate: carry the per-row target fields from the linked source
+	document row (PO -> PR -> PI), since ERPNext's mapper doesn't copy custom fields.
+	The trigger is per row (azzir_row_to_target) — there is no header default."""
 	for r in doc.get("items") or []:
-		if not r.get("azzir_target_company") and header_co:
-			r.azzir_target_company = header_co
-		if (
-			not r.get("azzir_target_warehouse")
-			and header_wh
-			and r.get("azzir_target_company") == header_co
-		):
-			r.azzir_target_warehouse = header_wh
-		if not r.get("azzir_target_company"):
-			src = _linked_source_row(r)
-			if src and src.get("azzir_target_company"):
-				r.azzir_target_company = src.get("azzir_target_company")
-				if not r.get("azzir_target_warehouse"):
-					r.azzir_target_warehouse = src.get("azzir_target_warehouse")
+		if r.get("azzir_row_to_target"):
+			continue  # already set on this row
+		src = _linked_source_row(r)
+		if src and src.get("azzir_row_to_target"):
+			r.azzir_row_to_target = 1
+			r.azzir_target_company = src.get("azzir_target_company")
+			r.azzir_target_warehouse = src.get("azzir_target_warehouse")
 
 
 def process_target_transfer(doc, method=None):
-	"""PR on_submit (and PI on_submit when Update Stock): for each row whose Target
-	Company is a different internal company, ship the received stock there."""
+	"""PR on_submit (and PI on_submit when Update Stock): for each row marked 'Buy For
+	Target Company' whose target is a different internal company, ship the received
+	stock there. Rows not marked are normal purchase lines."""
 	# A Purchase Invoice only moves stock when it updates stock itself.
 	if doc.doctype == "Purchase Invoice" and not doc.get("update_stock"):
 		return
@@ -86,9 +79,13 @@ def process_target_transfer(doc, method=None):
 	source_company = doc.company
 	groups = {}
 	for r in doc.get("items") or []:
+		if not r.get("azzir_row_to_target"):
+			continue  # normal purchase line
 		tc = r.get("azzir_target_company")
-		if not tc or tc == source_company:
-			continue  # same company / none -> normal ERPNext, nothing to transfer
+		if not tc:
+			frappe.throw(_("Row #{0}: set a Target Company (or untick 'Buy For Target Company').").format(r.idx))
+		if tc == source_company:
+			continue  # same company — normal ERPNext receipt, nothing to transfer
 		if not r.get("item_code") or flt(r.get("qty")) <= 0:
 			continue
 		if not frappe.get_cached_value("Item", r.item_code, "is_stock_item"):

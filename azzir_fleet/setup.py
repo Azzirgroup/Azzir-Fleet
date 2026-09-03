@@ -568,14 +568,25 @@ CUSTOM_FIELDS.setdefault("Sales Invoice", []).extend(
 # the received stock is transferred there at submit — see azzir_fleet.purchase_cycle).
 _ROW_TARGET_FIELDS = [
 	{
+		# Per-row toggle: this line is bought FOR another internal company. Sole
+		# trigger (no header field) — an order can mix target lines with normal ones.
+		"fieldname": "azzir_row_to_target",
+		"label": "Buy For Target Company",
+		"fieldtype": "Check",
+		"insert_after": "warehouse",
+		"in_list_view": 1,
+		"columns": 1,
+	},
+	{
 		"fieldname": "azzir_target_company",
 		"label": "Target Company",
 		"fieldtype": "Link",
 		"options": "Company",
-		"insert_after": "warehouse",
+		"insert_after": "azzir_row_to_target",
+		"depends_on": "eval:doc.azzir_row_to_target",
 		"in_list_view": 1,
 		"columns": 2,
-		"description": "Buy this line for another internal company. Leave blank for a normal purchase.",
+		"description": "Buy this line for another internal company.",
 	},
 	{
 		"fieldname": "azzir_target_warehouse",
@@ -583,6 +594,7 @@ _ROW_TARGET_FIELDS = [
 		"fieldtype": "Link",
 		"options": "Warehouse",
 		"insert_after": "azzir_target_company",
+		"depends_on": "eval:doc.azzir_row_to_target",
 		"in_list_view": 1,
 		"columns": 2,
 		"description": "Warehouse in the Target Company that receives this line.",
@@ -592,30 +604,7 @@ for _dt in ("Purchase Order Item", "Purchase Receipt Item", "Purchase Invoice It
 	for _f in _ROW_TARGET_FIELDS:
 		CUSTOM_FIELDS.setdefault(_dt, []).append(dict(_f))
 
-# Header defaults (populate the rows) on the three buying documents.
-for _dt in ("Purchase Order", "Purchase Receipt", "Purchase Invoice"):
-	CUSTOM_FIELDS.setdefault(_dt, []).extend(
-		[
-			{
-				"fieldname": "azzir_target_company",
-				"label": "Target Company (default)",
-				"fieldtype": "Link",
-				"options": "Company",
-				"insert_after": "company",
-				"description": "Default Target Company copied onto item rows that don't set their own.",
-			},
-			{
-				"fieldname": "azzir_target_warehouse",
-				"label": "Target Warehouse (default)",
-				"fieldtype": "Link",
-				"options": "Warehouse",
-				"insert_after": "azzir_target_company",
-				"depends_on": "eval:doc.azzir_target_company",
-			},
-		]
-	)
-
-# Idempotency + audit trail on the stock-moving documents.
+# Idempotency + audit trail on the stock-moving documents (header, read-only).
 for _dt in ("Purchase Receipt", "Purchase Invoice"):
 	CUSTOM_FIELDS.setdefault(_dt, []).extend(
 		[
@@ -623,7 +612,7 @@ for _dt in ("Purchase Receipt", "Purchase Invoice"):
 				"fieldname": "azzir_target_done",
 				"label": "Inter-company Target Transfer Done",
 				"fieldtype": "Check",
-				"insert_after": "azzir_target_warehouse",
+				"insert_after": "company",
 				"read_only": 1,
 				"hidden": 1,
 			},

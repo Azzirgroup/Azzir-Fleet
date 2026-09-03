@@ -8,3 +8,4 @@ azzir_fleet.patches.remove_custom_customer_statement
 azzir_fleet.patches.ensure_unrealized_pl_accounts
 azzir_fleet.patches.backfill_employee_company_defaults
 azzir_fleet.patches.remove_header_sister_fields
+azzir_fleet.patches.remove_header_target_fields

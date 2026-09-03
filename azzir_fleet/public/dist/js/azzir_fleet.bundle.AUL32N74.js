@@ -372,24 +372,9 @@
     frm.set_query("azzir_target_warehouse", "items", function(doc, cdt, cdn) {
       const row = locals[cdt][cdn] || {};
       return {
-        filters: {
-          company: row.azzir_target_company || doc.azzir_target_company || "",
-          is_group: 0,
-          disabled: 0
-        }
+        filters: { company: row.azzir_target_company || "", is_group: 0, disabled: 0 }
       };
     });
-    if (frm.fields_dict.azzir_target_warehouse) {
-      frm.set_query("azzir_target_warehouse", function(doc) {
-        return { filters: { company: doc.azzir_target_company || "", is_group: 0, disabled: 0 } };
-      });
-    }
-  };
-  azzir_fleet.populate_target = function(frm, field) {
-    const val = frm.doc[field];
-    if (!val)
-      return;
-    (frm.doc.items || []).forEach((r) => frappe.model.set_value(r.doctype, r.name, field, val));
   };
   azzir_fleet.autofill_purchase_warehouse = function(frm, cdt, cdn) {
     const row = locals[cdt] && locals[cdt][cdn];
@@ -415,14 +400,6 @@
           drop();
           setTimeout(drop, 500);
         }
-      },
-      azzir_target_company(frm) {
-        azzir_fleet.set_target_wh_query(frm);
-        frm.set_value("azzir_target_warehouse", "");
-        azzir_fleet.populate_target(frm, "azzir_target_company");
-      },
-      azzir_target_warehouse(frm) {
-        azzir_fleet.populate_target(frm, "azzir_target_warehouse");
       }
     });
   });
@@ -435,6 +412,13 @@
   });
   ["Purchase Order Item", "Purchase Receipt Item", "Purchase Invoice Item"].forEach(function(dt) {
     frappe.ui.form.on(dt, {
+      azzir_row_to_target(frm, cdt, cdn) {
+        const row = locals[cdt][cdn];
+        if (row && !row.azzir_row_to_target) {
+          frappe.model.set_value(cdt, cdn, "azzir_target_company", "");
+          frappe.model.set_value(cdt, cdn, "azzir_target_warehouse", "");
+        }
+      },
       azzir_target_company(frm, cdt, cdn) {
         frappe.model.set_value(cdt, cdn, "azzir_target_warehouse", "");
       }
@@ -511,4 +495,4 @@
     azzir_tax_rate: (frm, cdt, cdn) => apply_calc(frm, cdt, cdn, je_base(cdt, cdn))
   });
 })();
-//# sourceMappingURL=azzir_fleet.bundle.Y5EWW32L.js.map
+//# sourceMappingURL=azzir_fleet.bundle.AUL32N74.js.map
