@@ -175,6 +175,14 @@ fixtures = [
 		],
 	},
 	{
+		# Pickup Slip print format shipped as data so it always deploys — the code
+		# path (setup_print_formats on migrate) can abort on an earlier format and
+		# skip it. Fixtures import before after_migrate, so the new HTML lands
+		# regardless.
+		"dt": "Print Format",
+		"filters": [["name", "in", ["Pickup Slip"]]],
+	},
+	{
 		# Role home dashboards, shipped as data (JSON) — synced BEFORE the sidebars
 		# so the sidebar 'Home' links resolve. Only names that don't clash with
 		# ERPNext/HRMS defaults (Accounting/HR reuse those existing workspaces).
