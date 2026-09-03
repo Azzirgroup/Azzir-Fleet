@@ -53,7 +53,15 @@ azzir_fleet.autofill_purchase_warehouse = function (frm, cdt, cdn) {
 ["Purchase Order", "Purchase Receipt", "Purchase Invoice"].forEach(function (dt) {
 	frappe.ui.form.on(dt, {
 		onload: azzir_fleet.set_target_wh_query,
-		refresh: azzir_fleet.set_target_wh_query,
+		refresh(frm) {
+			azzir_fleet.set_target_wh_query(frm);
+			// Purchase Order: drop the standard "Create > Purchase Receipt" button.
+			if (frm.doc.doctype === "Purchase Order") {
+				const drop = () => frm.remove_custom_button(__("Purchase Receipt"), __("Create"));
+				drop();
+				setTimeout(drop, 500); // in case ERPNext adds it late
+			}
+		},
 		azzir_target_company(frm) {
 			azzir_fleet.set_target_wh_query(frm);
 			frm.set_value("azzir_target_warehouse", "");

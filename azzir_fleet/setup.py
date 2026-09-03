@@ -1443,7 +1443,7 @@ _PROFORMA_TEMPLATE = """
 				{%- if not _cc and doc.get("items") and doc.get("items")[0].get("warehouse") -%}{%- set _cc = frappe.db.get_value("Warehouse", doc.get("items")[0].get("warehouse"), "azzir_cost_center") -%}{%- endif -%}
 				{%- if not _cc -%}{%- set _ucc = frappe.get_all("User Permission", filters={"user": doc.owner, "allow": "Cost Center"}, pluck="for_value") -%}{%- if _ucc -%}{%- set _cc = _ucc[0] -%}{%- endif -%}{%- endif -%}
 				{%- set _branch = frappe.db.get_value("Cost Center", _cc, "cost_center_name") if _cc else None -%}
-				{% if _branch %}<div style="font-size:18px; font-weight:bold; margin-bottom:5px;">Branch: {{ _branch }}</div>{% endif %}
+				{% if _branch and doc.doctype == "Sales Invoice" %}<div style="font-size:18px; font-weight:bold; margin-bottom:5px;">Branch: {{ _branch }}</div>{% endif %}
 				<b>__PARTY_LABEL__:</b> __PARTY_VALUE__
 				{% if cust_logo %}<img src="{{ cust_logo }}" style="height:34px; vertical-align:middle; margin-left:8px;">{% endif %}
 				<div style="border:1px solid #999; padding:6px; margin-top:4px; min-height:70px;">

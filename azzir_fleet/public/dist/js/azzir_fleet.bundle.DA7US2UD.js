@@ -417,7 +417,14 @@
   ["Purchase Order", "Purchase Receipt", "Purchase Invoice"].forEach(function(dt) {
     frappe.ui.form.on(dt, {
       onload: azzir_fleet.set_target_wh_query,
-      refresh: azzir_fleet.set_target_wh_query,
+      refresh(frm) {
+        azzir_fleet.set_target_wh_query(frm);
+        if (frm.doc.doctype === "Purchase Order") {
+          const drop = () => frm.remove_custom_button(__("Purchase Receipt"), __("Create"));
+          drop();
+          setTimeout(drop, 500);
+        }
+      },
       azzir_target_company(frm) {
         azzir_fleet.set_target_wh_query(frm);
         frm.set_value("azzir_target_warehouse", "");
@@ -513,4 +520,4 @@
     azzir_tax_rate: (frm, cdt, cdn) => apply_calc(frm, cdt, cdn, je_base(cdt, cdn))
   });
 })();
-//# sourceMappingURL=azzir_fleet.bundle.2VWR4PKY.js.map
+//# sourceMappingURL=azzir_fleet.bundle.DA7US2UD.js.map
