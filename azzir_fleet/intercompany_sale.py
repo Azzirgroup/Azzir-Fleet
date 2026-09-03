@@ -196,19 +196,34 @@ def _settlement(company: str) -> tuple:
 	"""A (Mode of Payment, cash/bank Account) to auto-settle intercompany invoices
 	in `company`. Returns (None, None) when the company has neither configured — in
 	that case we leave the invoice outstanding rather than block the sale."""
-	account = (
-		frappe.get_cached_value("Company", company, "default_cash_account")
-		or frappe.get_cached_value("Company", company, "default_bank_account")
-		or frappe.db.get_value(
-			"Account", {"company": company, "account_type": "Cash", "is_group": 0, "disabled": 0}, "name"
-		)
-		or frappe.db.get_value(
-			"Account", {"company": company, "account_type": "Bank", "is_group": 0, "disabled": 0}, "name"
-		)
-	)
+	def _usable(acc):
+		# An account with balance_must_be = Debit/Credit rejects a settlement posting
+		# in the wrong direction (e.g. "Petty Cash must always be Debit" when we credit
+		# it to pay a bill). Skip such accounts so the sale isn't blocked.
+		return bool(acc) and not frappe.db.get_value("Account", acc, "balance_must_be")
+
+	account = None
+	for cand in (
+		frappe.get_cached_value("Company", company, "default_cash_account"),
+		frappe.get_cached_value("Company", company, "default_bank_account"),
+	):
+		if _usable(cand):
+			account = cand
+			break
+	if not account:
+		for acc in frappe.get_all(
+			"Account",
+			filters={"company": company, "account_type": ["in", ["Cash", "Bank"]], "is_group": 0, "disabled": 0},
+			pluck="name",
+		):
+			if _usable(acc):
+				account = acc
+				break
 	mop = "Cash" if frappe.db.exists("Mode of Payment", "Cash") else frappe.db.get_value(
 		"Mode of Payment", {"enabled": 1}, "name"
 	)
+	# No unconstrained cash/bank account -> leave the internal invoice outstanding
+	# (a normal intercompany receivable/payable) instead of failing the whole sale.
 	return (mop, account) if (mop and account) else (None, None)
 
 
