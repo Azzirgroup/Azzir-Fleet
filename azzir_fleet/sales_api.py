@@ -184,12 +184,19 @@ def make_next(source_doctype: str, source_name: str, target: str) -> dict:
 		"doctype": target,
 		"data": {
 			"customer": doc.get("customer") or doc.get("party_name"),
-			# Carry the buy-from-sister choice so it's prefilled on the Sales Invoice.
-			"azzir_buy_from_sister": doc.get("azzir_buy_from_sister"),
-			"azzir_supply_company": doc.get("azzir_supply_company"),
-			"azzir_supply_warehouse": doc.get("azzir_supply_warehouse"),
+			"azzir_apply_vat": doc.get("azzir_apply_vat"),
 			"items": [
-				{"item_code": r.item_code, "qty": r.qty, "rate": r.rate, "warehouse": r.get("warehouse")}
+				{
+					"item_code": r.item_code,
+					"qty": r.qty,
+					"rate": r.rate,
+					"warehouse": r.get("warehouse"),
+					# Carry the PER-ROW buy-from-sister choice so the transfer still runs
+					# when this Sales Invoice is submitted (was previously dropped here).
+					"azzir_row_from_sister": r.get("azzir_row_from_sister"),
+					"azzir_supply_company": r.get("azzir_supply_company"),
+					"azzir_supply_warehouse": r.get("azzir_supply_warehouse"),
+				}
 				for r in (doc.get("items") or [])
 			],
 		},
