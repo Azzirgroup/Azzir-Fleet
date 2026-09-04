@@ -34,13 +34,13 @@
       <div class="overflow-x-auto rounded-lg border bg-white">
         <table class="min-w-full text-sm">
           <thead class="bg-gray-50 text-left text-gray-500">
-            <tr><th class="px-3 py-2">Item</th><th class="px-3 py-2">Qty</th><th class="px-3 py-2">List Rate</th><th class="px-3 py-2">Rate</th><th class="px-3 py-2">Warehouse</th><th class="px-3 py-2 text-right">Amount</th></tr>
+            <tr><th class="px-3 py-2">Item</th><th class="px-3 py-2">Qty</th><th class="px-3 py-2">Description</th><th class="px-3 py-2">Rate</th><th class="px-3 py-2">Warehouse</th><th class="px-3 py-2 text-right">Amount</th></tr>
           </thead>
           <tbody>
             <tr v-for="r in doc.items || []" :key="r.name" class="border-t">
               <td class="px-3 py-2"><div class="font-medium">{{ r.item_code }}</div><div class="text-xs text-gray-500">{{ r.item_name }}</div></td>
               <td class="px-3 py-2">{{ r.qty }}</td>
-              <td class="px-3 py-2 text-gray-500">{{ fmt(r.price_list_rate) }}</td>
+              <td class="px-3 py-2 text-gray-500 max-w-xs truncate" v-html="r.description"></td>
               <td class="px-3 py-2">{{ fmt(r.rate) }}</td>
               <td class="px-3 py-2">{{ r.warehouse || '—' }}</td>
               <td class="px-3 py-2 text-right">{{ fmt(r.amount) }}</td>

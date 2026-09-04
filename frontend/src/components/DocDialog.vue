@@ -50,14 +50,13 @@
           </div>
           <table class="min-w-full text-sm">
             <thead class="bg-gray-50 text-left text-gray-500">
-              <tr><th class="px-3 py-2">Item</th><th class="px-2 py-2 w-16">Qty</th><th class="px-2 py-2 w-24">List Rate</th><th class="px-2 py-2 w-24">Rate</th><th class="px-2 py-2 w-44">Warehouse</th><th class="px-2 py-2 w-24 text-right">Amount</th><th></th></tr>
+              <tr><th class="px-3 py-2">Item</th><th class="px-2 py-2 w-16">Qty</th><th class="px-2 py-2 w-24">Rate</th><th class="px-2 py-2 w-44">Warehouse</th><th class="px-2 py-2 w-24 text-right">Amount</th><th></th></tr>
             </thead>
             <tbody>
               <template v-for="(row, i) in rows" :key="i">
                 <tr class="border-t align-top">
                   <td class="px-2 py-2 w-64"><Combo v-model="row.item_code" doctype="Item" display="item_name" placeholder="Select item / part no." query-method="azzir_fleet.alias.item_search_for_spa" @update:model-value="(v) => onItem(i, v)" /></td>
                   <td class="px-2 py-2"><input v-model.number="row.qty" type="number" class="w-14 rounded border px-2 py-1" /></td>
-                  <td class="px-2 py-2 text-gray-500">{{ fmt(row.price_list_rate || 0) }}</td>
                   <td class="px-2 py-2"><input v-model.number="row.rate" type="number" class="w-20 rounded border px-2 py-1" /></td>
                   <td class="px-2 py-2">
                     <div class="flex items-center gap-1">
@@ -68,10 +67,16 @@
                   <td class="px-2 py-2 text-right">{{ fmt((row.qty || 0) * (row.rate || 0)) }}</td>
                   <td class="px-2 py-2"><button class="text-gray-400 hover:text-red-500" @click="rows.splice(i, 1)">✕</button></td>
                 </tr>
+                <!-- Editable item description (auto-fills from the item, override freely). -->
+                <tr v-if="row.item_code">
+                  <td colspan="6" class="px-2 pb-2">
+                    <input v-model="row.description" placeholder="Description (editable)" class="w-full rounded border px-2 py-1 text-xs text-gray-600" />
+                  </td>
+                </tr>
                 <!-- Per-row sister source (buy-from-sister): tick only the lines that
                      come from a sister; the rest stay normal. -->
                 <tr v-if="sisterEligible">
-                  <td colspan="7" class="px-2 pb-2">
+                  <td colspan="6" class="px-2 pb-2">
                     <div class="flex flex-wrap items-center gap-2 rounded bg-amber-50 px-2 py-1 text-xs">
                       <label class="flex items-center gap-1"><input type="checkbox" v-model="row.from_sister" @change="onRowFromSister(row)" /> From sister</label>
                       <template v-if="row.from_sister">
@@ -84,9 +89,9 @@
                   </td>
                 </tr>
               </template>
-              <tr v-if="!rows.length"><td colspan="7" class="px-3 py-6 text-center text-gray-400">No items.</td></tr>
+              <tr v-if="!rows.length"><td colspan="6" class="px-3 py-6 text-center text-gray-400">No items.</td></tr>
             </tbody>
-            <tfoot><tr class="border-t"><td colspan="5"></td><td class="px-3 py-2 text-right font-semibold">Total</td><td class="px-3 py-2 text-right font-semibold">{{ fmt(total) }}</td></tr></tfoot>
+            <tfoot><tr class="border-t"><td colspan="4"></td><td class="px-3 py-2 text-right font-semibold">Total</td><td class="px-3 py-2 text-right font-semibold">{{ fmt(total) }}</td></tr></tfoot>
           </table>
         </div>
       </div>
@@ -153,18 +158,18 @@ onMounted(async () => {
     hidePartNo.value = !!props.edit.azzir_hide_part_no
     customer.value = props.edit.party_name || props.edit.customer || ''
     customerName.value = props.edit.customer_name || ''
-    rows.value = (props.edit.items || []).map((r) => ({ item_code: r.item_code, qty: r.qty, rate: r.rate, price_list_rate: r.price_list_rate || 0, warehouse: r.warehouse || '', from_sister: !!r.azzir_row_from_sister, supply_company: r.azzir_supply_company || '', supply_warehouse: r.azzir_supply_warehouse || '' }))
+    rows.value = (props.edit.items || []).map((r) => ({ item_code: r.item_code, qty: r.qty, rate: r.rate, price_list_rate: r.price_list_rate || 0, description: r.description || '', warehouse: r.warehouse || '', from_sister: !!r.azzir_row_from_sister, supply_company: r.azzir_supply_company || '', supply_warehouse: r.azzir_supply_warehouse || '' }))
     if (!rows.value.length) addRow()
   } else if (props.initial) {
     customer.value = props.initial.customer || ''
     customerName.value = props.initial.customer_name || ''
-    rows.value = (props.initial.items || []).map((r) => ({ item_code: r.item_code, qty: r.qty || 1, rate: r.rate || 0, price_list_rate: r.price_list_rate || 0, warehouse: r.warehouse || '', from_sister: !!r.azzir_row_from_sister, supply_company: r.azzir_supply_company || '', supply_warehouse: r.azzir_supply_warehouse || '' }))
+    rows.value = (props.initial.items || []).map((r) => ({ item_code: r.item_code, qty: r.qty || 1, rate: r.rate || 0, price_list_rate: r.price_list_rate || 0, description: r.description || '', warehouse: r.warehouse || '', from_sister: !!r.azzir_row_from_sister, supply_company: r.azzir_supply_company || '', supply_warehouse: r.azzir_supply_warehouse || '' }))
     if (!rows.value.length) addRow()
   } else {
     addRow()
   }
 })
-function addRow() { rows.value.push({ item_code: '', qty: 1, rate: 0, price_list_rate: 0, warehouse: '', from_sister: false, supply_company: '', supply_warehouse: '' }) }
+function addRow() { rows.value.push({ item_code: '', qty: 1, rate: 0, price_list_rate: 0, description: '', warehouse: '', from_sister: false, supply_company: '', supply_warehouse: '' }) }
 // A row was un-ticked "From sister": clear its supply picks so stale values aren't sent.
 function onRowFromSister(row) {
   if (!row.from_sister) { row.supply_company = ''; row.supply_warehouse = '' }
@@ -177,6 +182,7 @@ async function onItem(i, item_code) {
   if (!item_code) return
   const d = await itemDetails(item_code, customer.value, defaults.value.company, defaults.value.selling_price_list, rows.value[i].qty || 1).catch(() => ({}))
   if (d && d.price_list_rate) rows.value[i].price_list_rate = d.price_list_rate
+  if (d && d.description && !rows.value[i].description) rows.value[i].description = d.description
   if (d && d.rate && !rows.value[i].rate) rows.value[i].rate = d.rate
 }
 
@@ -185,7 +191,7 @@ async function save(submit) {
   if (!customer.value) { err.value = true; msg.value = 'Pick a customer.'; return }
   const sister = sisterDoctype(props.doctype) && canBuySister.value
   const items = rows.value.filter((r) => r.item_code).map((r) => {
-    const it = { item_code: r.item_code, qty: r.qty || 1, rate: r.rate || 0, price_list_rate: r.price_list_rate || undefined, warehouse: r.warehouse || undefined }
+    const it = { item_code: r.item_code, qty: r.qty || 1, rate: r.rate || 0, price_list_rate: r.price_list_rate || undefined, description: r.description || undefined, warehouse: r.warehouse || undefined }
     if (sister && r.from_sister) {
       it.azzir_row_from_sister = 1
       it.azzir_supply_company = r.supply_company || undefined
