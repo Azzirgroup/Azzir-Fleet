@@ -698,6 +698,7 @@ def after_migrate():
 		("group_stock_role", _setup_group_stock_role),
 		("overdue_todo_notification", _setup_overdue_todo_notification),
 		("below_cost_workflow", _setup_below_cost_workflow),
+		("below_cost_no_self_approval", _enforce_no_self_approval),
 		("item_link_code_only", _show_item_code_only_in_links),
 		("warehouse_mandatory", _make_warehouse_mandatory),
 		("editable_customer_name", _make_customer_name_editable),
@@ -951,13 +952,32 @@ def _make_below_cost_workflow(name, doctype, submit_role, approve_role):
 				 "allowed": submit_role, "condition": "doc.azzir_below_cost == 0"},
 				{"state": "Draft", "action": "Request Approval", "next_state": "Pending Approval",
 				 "allowed": submit_role, "condition": "doc.azzir_below_cost == 1"},
+				# Separation of duties: whoever raised the below-cost doc cannot approve
+				# their own — allow_self_approval = 0 blocks the creator (except Administrator).
 				{"state": "Pending Approval", "action": "Approve", "next_state": "Approved",
-				 "allowed": approve_role},
+				 "allowed": approve_role, "allow_self_approval": 0},
 				{"state": "Pending Approval", "action": "Reject", "next_state": "Draft",
 				 "allowed": approve_role},
 			],
 		}
 	).insert(ignore_permissions=True)
+
+
+def _enforce_no_self_approval():
+	"""Below-cost workflows already live on a site were created before self-approval
+	was locked down. Set allow_self_approval = 0 on their 'Approve' transition so the
+	person who raised the doc can't approve it themselves. Idempotent."""
+	for name in ("Sales Below Cost Approval", "Quotation Below Cost Approval"):
+		if not frappe.db.exists("Workflow", name):
+			continue
+		wf = frappe.get_doc("Workflow", name)
+		changed = False
+		for t in wf.transitions:
+			if t.action == "Approve" and t.allow_self_approval:
+				t.allow_self_approval = 0
+				changed = True
+		if changed:
+			wf.save(ignore_permissions=True)
 
 
 def _setup_override_role():
