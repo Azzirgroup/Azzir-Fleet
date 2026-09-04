@@ -12,3 +12,4 @@ import "./azzir_stock";
 import "./azzir_purchase";
 import "./azzir_vat";
 import "./azzir_tax";
+import "./azzir_whatsapp_approve";

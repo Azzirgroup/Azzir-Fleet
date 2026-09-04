@@ -494,5 +494,106 @@
     azzir_tax_type: (frm, cdt, cdn) => apply_calc(frm, cdt, cdn, je_base(cdt, cdn)),
     azzir_tax_rate: (frm, cdt, cdn) => apply_calc(frm, cdt, cdn, je_base(cdt, cdn))
   });
+
+  // ../azzir_fleet/azzir_fleet/public/js/azzir_whatsapp_approve.js
+  var AZZIR_WA_DOCTYPES = ["Quotation", "Sales Invoice", "Delivery Note"];
+  function azzir_wa_available() {
+    try {
+      if (frappe.boot && frappe.boot.versions)
+        return !!frappe.boot.versions.whatsapp_integration;
+    } catch (e) {
+    }
+    return true;
+  }
+  function azzir_wa_pending(frm) {
+    return frm.doc.docstatus === 0 && /pending/i.test(frm.doc.workflow_state || "");
+  }
+  function azzir_wa_doc_phone(doc) {
+    return doc.contact_mobile || doc.customer_mobile_no || doc.mobile_no || doc.phone || doc.contact_phone || "";
+  }
+  function azzir_wa_open_dialog(frm) {
+    frappe.call({
+      method: "whatsapp_integration.api.whatsapp.whatsapp.get_whatsapp_senders",
+      callback(r) {
+        const senders = r.message || [];
+        const phone = azzir_wa_doc_phone(frm.doc);
+        if (phone)
+          return azzir_wa_dialog(frm, senders, phone);
+        if (frm.doc.customer) {
+          frappe.db.get_value("Customer", frm.doc.customer, "mobile_no").then((res) => {
+            azzir_wa_dialog(frm, senders, res && res.message && res.message.mobile_no || "");
+          });
+        } else {
+          azzir_wa_dialog(frm, senders, "");
+        }
+      }
+    });
+  }
+  function azzir_wa_dialog(frm, senders, phone) {
+    const fields = [];
+    if (senders.length) {
+      fields.push({
+        label: __("Send From"),
+        fieldname: "sender",
+        fieldtype: "Select",
+        options: senders.map((s) => s.value),
+        default: (senders.find((s) => s.is_default) || senders[0]).value,
+        reqd: 1
+      });
+    }
+    fields.push(
+      {
+        label: __("WhatsApp Number"),
+        fieldname: "phone_number",
+        fieldtype: "Data",
+        default: phone,
+        reqd: 1,
+        description: __("Include the country code, e.g. 255\u2026")
+      },
+      {
+        label: __("Note (optional)"),
+        fieldname: "note",
+        fieldtype: "Small Text",
+        default: __("This {0} is below buying price and needs your approval.", [frm.doc.doctype])
+      }
+    );
+    const d = new frappe.ui.Dialog({
+      title: __("Send for Approval on WhatsApp"),
+      fields,
+      primary_action_label: __("Send"),
+      primary_action(values) {
+        d.hide();
+        frappe.dom.freeze(__("Sending on WhatsApp\u2026"));
+        frappe.call({
+          method: "azzir_fleet.whatsapp_approve.send_with_approve",
+          args: {
+            doctype: frm.doc.doctype,
+            docname: frm.doc.name,
+            phone_number: values.phone_number,
+            sender: values.sender || null,
+            note: values.note || null
+          },
+          always: () => frappe.dom.unfreeze(),
+          callback() {
+            frappe.show_alert({ message: __("Sent on WhatsApp with an approve link."), indicator: "green" });
+          }
+        });
+      }
+    });
+    d.show();
+  }
+  AZZIR_WA_DOCTYPES.forEach((dt) => {
+    frappe.ui.form.on(dt, {
+      refresh(frm) {
+        if (frm.is_new() || !azzir_wa_available() || !azzir_wa_pending(frm))
+          return;
+        frm.add_custom_button(
+          __("Send for Approval (WhatsApp)"),
+          () => azzir_wa_open_dialog(frm),
+          __("WhatsApp")
+        );
+      }
+    });
+  });
 })();
-//# sourceMappingURL=azzir_fleet.bundle.AUL32N74.js.map
+//# sourceMappingURL=azzir_fleet.bundle.E7ME7JLA.js.map
