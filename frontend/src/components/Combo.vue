@@ -37,7 +37,7 @@ const props = defineProps({
   queryMethod: { type: String, default: '' },
   queryArgs: { type: Object, default: () => ({}) },
 })
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits(['update:modelValue', 'picked'])
 
 const root = ref(null)
 const open = ref(false)
@@ -82,6 +82,7 @@ function onInput(e) {
 }
 function pick(o) {
   emit('update:modelValue', o.name)
+  emit('picked', o) // full record, so callers can autofill related fields (e.g. customer_name)
   label.value = o[props.display] || o.name
   open.value = false
 }

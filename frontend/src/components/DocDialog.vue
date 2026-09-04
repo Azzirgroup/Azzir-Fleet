@@ -13,14 +13,18 @@
       <div class="px-4 py-3">
         <div v-if="msg" class="mb-3 rounded-md px-3 py-2 text-sm" :class="err ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'">{{ msg }}</div>
 
-        <div class="mb-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div class="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
           <div>
             <label class="mb-1 block text-xs text-gray-500">Company</label>
             <Combo v-model="company" doctype="Company" display="name" placeholder="Select company" />
           </div>
           <div>
             <label class="mb-1 block text-xs text-gray-500">Customer</label>
-            <Combo v-model="customer" doctype="Customer" display="customer_name" placeholder="Select customer" query-method="azzir_fleet.sales_api.list_customers" :query-args="{ company }" />
+            <Combo v-model="customer" doctype="Customer" display="customer_name" placeholder="Select customer" query-method="azzir_fleet.sales_api.list_customers" :query-args="{ company }" @picked="onCustomerPicked" />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs text-gray-500">Customer Name <span class="text-gray-400">(editable)</span></label>
+            <input v-model="customerName" placeholder="Auto-fills from customer" class="w-full rounded-md border px-3 py-2 text-sm" />
           </div>
         </div>
 
@@ -46,13 +50,14 @@
           </div>
           <table class="min-w-full text-sm">
             <thead class="bg-gray-50 text-left text-gray-500">
-              <tr><th class="px-3 py-2">Item</th><th class="px-2 py-2 w-16">Qty</th><th class="px-2 py-2 w-24">Rate</th><th class="px-2 py-2 w-44">Warehouse</th><th class="px-2 py-2 w-24 text-right">Amount</th><th></th></tr>
+              <tr><th class="px-3 py-2">Item</th><th class="px-2 py-2 w-16">Qty</th><th class="px-2 py-2 w-24">List Rate</th><th class="px-2 py-2 w-24">Rate</th><th class="px-2 py-2 w-44">Warehouse</th><th class="px-2 py-2 w-24 text-right">Amount</th><th></th></tr>
             </thead>
             <tbody>
               <template v-for="(row, i) in rows" :key="i">
                 <tr class="border-t align-top">
                   <td class="px-2 py-2 w-64"><Combo v-model="row.item_code" doctype="Item" display="item_name" placeholder="Select item / part no." query-method="azzir_fleet.alias.item_search_for_spa" @update:model-value="(v) => onItem(i, v)" /></td>
                   <td class="px-2 py-2"><input v-model.number="row.qty" type="number" class="w-14 rounded border px-2 py-1" /></td>
+                  <td class="px-2 py-2 text-gray-500">{{ fmt(row.price_list_rate || 0) }}</td>
                   <td class="px-2 py-2"><input v-model.number="row.rate" type="number" class="w-20 rounded border px-2 py-1" /></td>
                   <td class="px-2 py-2">
                     <div class="flex items-center gap-1">
@@ -66,7 +71,7 @@
                 <!-- Per-row sister source (buy-from-sister): tick only the lines that
                      come from a sister; the rest stay normal. -->
                 <tr v-if="sisterEligible">
-                  <td colspan="6" class="px-2 pb-2">
+                  <td colspan="7" class="px-2 pb-2">
                     <div class="flex flex-wrap items-center gap-2 rounded bg-amber-50 px-2 py-1 text-xs">
                       <label class="flex items-center gap-1"><input type="checkbox" v-model="row.from_sister" @change="onRowFromSister(row)" /> From sister</label>
                       <template v-if="row.from_sister">
@@ -79,9 +84,9 @@
                   </td>
                 </tr>
               </template>
-              <tr v-if="!rows.length"><td colspan="6" class="px-3 py-6 text-center text-gray-400">No items.</td></tr>
+              <tr v-if="!rows.length"><td colspan="7" class="px-3 py-6 text-center text-gray-400">No items.</td></tr>
             </tbody>
-            <tfoot><tr class="border-t"><td colspan="4"></td><td class="px-3 py-2 text-right font-semibold">Total</td><td class="px-3 py-2 text-right font-semibold">{{ fmt(total) }}</td></tr></tfoot>
+            <tfoot><tr class="border-t"><td colspan="5"></td><td class="px-3 py-2 text-right font-semibold">Total</td><td class="px-3 py-2 text-right font-semibold">{{ fmt(total) }}</td></tr></tfoot>
           </table>
         </div>
       </div>
@@ -100,7 +105,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { insertDoc, submitDoc, saveDoc, itemDetails, salesDefaults, userCanBuySister, fmt } from '@/utils/api.js'
+import { insertDoc, submitSalesDoc, saveDoc, itemDetails, salesDefaults, userCanBuySister, fmt } from '@/utils/api.js'
 import Combo from '@/components/Combo.vue'
 import StockTree from '@/components/StockTree.vue'
 
@@ -114,6 +119,7 @@ const emit = defineEmits(['close', 'saved'])
 const defaults = ref({})
 const company = ref('')
 const customer = ref('')
+const customerName = ref('') // editable Customer Name; auto-fills from the picked customer
 const base = ref(null) // full existing doc when editing
 const rows = ref([])
 const busy = ref(false)
@@ -131,7 +137,9 @@ const sisterEligible = computed(() => canBuySister.value && sisterDoctype(props.
 const total = computed(() => rows.value.reduce((s, r) => s + (Number(r.qty) || 0) * (Number(r.rate) || 0), 0))
 
 // Changing the company clears the picked customer (it may not belong to the new one).
-watch(company, (n, o) => { if (o) customer.value = '' })
+watch(company, (n, o) => { if (o) { customer.value = ''; customerName.value = '' } })
+// Picking a customer auto-fills the (editable) customer name.
+function onCustomerPicked(o) { customerName.value = o?.customer_name || o?.name || '' }
 
 onMounted(async () => {
   defaults.value = await salesDefaults().catch(() => ({}))
@@ -144,17 +152,19 @@ onMounted(async () => {
     applyVat.value = props.edit.azzir_apply_vat === 0 ? false : true
     hidePartNo.value = !!props.edit.azzir_hide_part_no
     customer.value = props.edit.party_name || props.edit.customer || ''
-    rows.value = (props.edit.items || []).map((r) => ({ item_code: r.item_code, qty: r.qty, rate: r.rate, warehouse: r.warehouse || '', from_sister: !!r.azzir_row_from_sister, supply_company: r.azzir_supply_company || '', supply_warehouse: r.azzir_supply_warehouse || '' }))
+    customerName.value = props.edit.customer_name || ''
+    rows.value = (props.edit.items || []).map((r) => ({ item_code: r.item_code, qty: r.qty, rate: r.rate, price_list_rate: r.price_list_rate || 0, warehouse: r.warehouse || '', from_sister: !!r.azzir_row_from_sister, supply_company: r.azzir_supply_company || '', supply_warehouse: r.azzir_supply_warehouse || '' }))
     if (!rows.value.length) addRow()
   } else if (props.initial) {
     customer.value = props.initial.customer || ''
-    rows.value = (props.initial.items || []).map((r) => ({ item_code: r.item_code, qty: r.qty || 1, rate: r.rate || 0, warehouse: r.warehouse || '', from_sister: !!r.azzir_row_from_sister, supply_company: r.azzir_supply_company || '', supply_warehouse: r.azzir_supply_warehouse || '' }))
+    customerName.value = props.initial.customer_name || ''
+    rows.value = (props.initial.items || []).map((r) => ({ item_code: r.item_code, qty: r.qty || 1, rate: r.rate || 0, price_list_rate: r.price_list_rate || 0, warehouse: r.warehouse || '', from_sister: !!r.azzir_row_from_sister, supply_company: r.azzir_supply_company || '', supply_warehouse: r.azzir_supply_warehouse || '' }))
     if (!rows.value.length) addRow()
   } else {
     addRow()
   }
 })
-function addRow() { rows.value.push({ item_code: '', qty: 1, rate: 0, warehouse: '', from_sister: false, supply_company: '', supply_warehouse: '' }) }
+function addRow() { rows.value.push({ item_code: '', qty: 1, rate: 0, price_list_rate: 0, warehouse: '', from_sister: false, supply_company: '', supply_warehouse: '' }) }
 // A row was un-ticked "From sister": clear its supply picks so stale values aren't sent.
 function onRowFromSister(row) {
   if (!row.from_sister) { row.supply_company = ''; row.supply_warehouse = '' }
@@ -166,6 +176,7 @@ function close() { emit('close') }
 async function onItem(i, item_code) {
   if (!item_code) return
   const d = await itemDetails(item_code, customer.value, defaults.value.company, defaults.value.selling_price_list, rows.value[i].qty || 1).catch(() => ({}))
+  if (d && d.price_list_rate) rows.value[i].price_list_rate = d.price_list_rate
   if (d && d.rate && !rows.value[i].rate) rows.value[i].rate = d.rate
 }
 
@@ -174,7 +185,7 @@ async function save(submit) {
   if (!customer.value) { err.value = true; msg.value = 'Pick a customer.'; return }
   const sister = sisterDoctype(props.doctype) && canBuySister.value
   const items = rows.value.filter((r) => r.item_code).map((r) => {
-    const it = { item_code: r.item_code, qty: r.qty || 1, rate: r.rate || 0, warehouse: r.warehouse || undefined }
+    const it = { item_code: r.item_code, qty: r.qty || 1, rate: r.rate || 0, price_list_rate: r.price_list_rate || undefined, warehouse: r.warehouse || undefined }
     if (sister && r.from_sister) {
       it.azzir_row_from_sister = 1
       it.azzir_supply_company = r.supply_company || undefined
@@ -191,15 +202,23 @@ async function save(submit) {
   try {
     let saved
     if (base.value) {
-      const d = { ...base.value, company: company.value, items, azzir_apply_vat: applyVat.value ? 1 : 0, azzir_hide_part_no: hidePartNo.value ? 1 : 0 }
+      const d = { ...base.value, company: company.value, customer_name: customerName.value || undefined, items, azzir_apply_vat: applyVat.value ? 1 : 0, azzir_hide_part_no: hidePartNo.value ? 1 : 0 }
       saved = await saveDoc(d)
-      if (submit) saved = await submitDoc(saved)
     } else {
-      const d = { doctype: props.doctype, company: company.value, items, azzir_apply_vat: applyVat.value ? 1 : 0, azzir_hide_part_no: hidePartNo.value ? 1 : 0 }
+      const d = { doctype: props.doctype, company: company.value, customer_name: customerName.value || undefined, items, azzir_apply_vat: applyVat.value ? 1 : 0, azzir_hide_part_no: hidePartNo.value ? 1 : 0 }
       if (props.doctype === 'Quotation') { d.quotation_to = 'Customer'; d.party_name = customer.value }
       else d.customer = customer.value
       saved = await insertDoc(d)
-      if (submit) saved = await submitDoc(saved)
+    }
+    if (submit) {
+      // Submit through the workflow: a below-cost sale is held for approval instead
+      // of going straight out. If it's held (still a draft), show the message and
+      // keep the dialog open so the seller sees it.
+      const res = await submitSalesDoc(props.doctype, saved.name)
+      if (res && res.docstatus === 0) {
+        err.value = false; msg.value = res.message || 'Sent for approval.'; busy.value = false
+        return
+      }
     }
     emit('saved', saved)
   } catch (e) {

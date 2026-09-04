@@ -151,6 +151,9 @@ def item_details(item_code: str, customer: str | None = None, company: str | Non
 		return {}
 	return {
 		"rate": out.get("price_list_rate") or out.get("rate") or 0,
+		# The undiscounted list price, shown alongside the (editable) rate so the
+		# seller sees what the price list says vs. what they're charging.
+		"price_list_rate": out.get("price_list_rate") or 0,
 		"item_name": out.get("item_name"),
 		"description": out.get("description"),
 		"uom": out.get("stock_uom") or out.get("uom"),
@@ -200,6 +203,46 @@ def make_next(source_doctype: str, source_name: str, target: str) -> dict:
 				for r in (doc.get("items") or [])
 			],
 		},
+	}
+
+
+@frappe.whitelist()
+def submit_sales_doc(doctype: str, name: str) -> dict:
+	"""Submit a sales document, honouring an active Workflow. When a workflow is
+	live on the doctype (e.g. the below-cost approval), we apply the correct workflow
+	ACTION instead of a raw submit: a below-cost doc (azzir_below_cost = 1) routes to
+	'Request Approval' and waits for a manager; a normal doc takes 'Submit' straight
+	through. With no active workflow it's a plain submit (unchanged behaviour)."""
+	if doctype not in SALES_DOCTYPES:
+		frappe.throw(frappe._("Not allowed."))
+	doc = frappe.get_doc(doctype, name)
+	doc.check_permission("submit")
+
+	from frappe.model.workflow import get_workflow_name, get_transitions, apply_workflow
+
+	wf = get_workflow_name(doctype)
+	if not wf:
+		doc.submit()
+		return {"name": doc.name, "docstatus": doc.docstatus, "workflow_state": None,
+		        "below_cost": int(doc.get("azzir_below_cost") or 0), "message": frappe._("Submitted.")}
+
+	# Available transitions already reflect the below-cost condition + the user's role.
+	actions = [t.get("action") for t in (get_transitions(doc) or [])]
+	if not actions:
+		frappe.throw(frappe._(
+			"You are not allowed to submit this document under the current approval "
+			"workflow. It may need a manager's approval."))
+	# Prefer a straight Submit; otherwise the approval route; otherwise whatever's offered.
+	action = "Submit" if "Submit" in actions else ("Request Approval" if "Request Approval" in actions else actions[0])
+	apply_workflow(doc, action)
+	held = doc.docstatus == 0
+	return {
+		"name": doc.name,
+		"docstatus": doc.docstatus,
+		"workflow_state": doc.get("workflow_state"),
+		"below_cost": int(doc.get("azzir_below_cost") or 0),
+		"message": (frappe._("Sent for approval — this sale is below buying price.")
+		            if held else frappe._("Submitted.")),
 	}
 
 

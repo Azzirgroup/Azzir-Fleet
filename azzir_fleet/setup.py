@@ -708,6 +708,12 @@ def after_migrate():
 		("procurement_overseer_role", _setup_procurement_overseer_role),
 		("document_creator_role", _setup_document_creator_role),
 		("sales_portal_role", _setup_sales_portal_role),
+		# Role dashboards + desktop icons. Idempotent (skip-if-exists), so this only
+		# creates NEW ones (e.g. Warehouse); existing ones from fixtures are untouched.
+		# Order matters: workspaces, then sidebars, then the sidebar 'Home' links.
+		("workspaces", _setup_workspaces),
+		("sidebars", _setup_sidebars),
+		("sidebar_homes", _ensure_sidebar_homes),
 	]
 	for label, fn in steps:
 		try:
@@ -1588,7 +1594,7 @@ def _ensure_sidebar_homes():
 	Idempotent; runs after the workspaces exist (order matters for the dynamic link)."""
 	pairs = [
 		("Sales", "Sales"), ("Procurement", "Procurement"), ("HR", "HR"),
-		("Accounting", "Accounting"), ("Director", "Director"),
+		("Accounting", "Accounting"), ("Director", "Director"), ("Warehouse", "Warehouse Ops"),
 	]
 	for sidebar_name, ws in pairs:
 		if not frappe.db.exists("Workspace Sidebar", sidebar_name):
@@ -1626,7 +1632,9 @@ def _make_workspace(spec):
 	ws.label = label
 	ws.name = label
 	ws.icon = spec.get("icon", "dashboard")
-	ws.module = "Azzir Fleet"
+	# Empty module by default keeps a public workspace visible to every role (the
+	# desk hides a public workspace whose `module` a user has no doctype perms in).
+	ws.module = spec.get("module", "Azzir Fleet")
 	ws.public = 1
 	ws.sequence_id = spec.get("sequence", 50)
 
@@ -1716,6 +1724,47 @@ def _setup_workspaces():
 					{"label": "Commission Report", "link_type": "Report", "link_to": "Commission Report"},
 					{"label": "Sales Register", "link_type": "Report", "link_to": "Sales Register"},
 					{"label": "Customer Statement", "link_type": "Page", "link_to": "customer-statement"},
+				]},
+			],
+		},
+		{
+			# Label (= workspace route) is "Warehouse Ops" to avoid colliding with the
+			# Warehouse DocType route; the desktop icon/sidebar and header still read "Warehouse".
+			"label": "Warehouse Ops", "title": "Warehouse", "icon": "stock", "sequence": 54,
+			"module": None,  # visible to Stock Users (they have no "Azzir Fleet" module perms)
+			"roles": ["Stock User", "Stock Manager"],
+			"number_cards": [
+				{"label": "Draft Delivery Notes", "document_type": "Delivery Note",
+				 "filters_json": '[["Delivery Note","docstatus","=",0]]', "color": "#FFB868"},
+				{"label": "Draft Stock Entries", "document_type": "Stock Entry",
+				 "filters_json": '[["Stock Entry","docstatus","=",0]]', "color": "#5E64FF"},
+				{"label": "Pending Material Requests", "document_type": "Material Request",
+				 "filters_json": '[["Material Request","status","=","Pending"]]', "color": "#29CD42"},
+			],
+			"shortcuts": [
+				{"label": "Stock Entry", "link_to": "Stock Entry", "color": "Blue"},
+				{"label": "Delivery Note", "link_to": "Delivery Note", "color": "Orange"},
+				{"label": "Purchase Receipt", "link_to": "Purchase Receipt", "color": "Green"},
+				{"label": "Stock Reconciliation", "link_to": "Stock Reconciliation", "color": "Grey"},
+				{"label": "Stock Balance", "type": "Report", "link_to": "Stock Balance", "color": "Cyan"},
+			],
+			"cards": [
+				{"title": "Stock Operations", "links": [
+					{"label": "Stock Entry", "link_to": "Stock Entry"},
+					{"label": "Material Request", "link_to": "Material Request"},
+					{"label": "Delivery Note", "link_to": "Delivery Note"},
+					{"label": "Purchase Receipt", "link_to": "Purchase Receipt"},
+					{"label": "Stock Reconciliation", "link_to": "Stock Reconciliation"},
+					{"label": "Pick List", "link_to": "Pick List"},
+				]},
+				{"title": "Masters", "links": [
+					{"label": "Item", "link_to": "Item"},
+					{"label": "Warehouse", "link_to": "Warehouse"},
+				]},
+				{"title": "Reports", "links": [
+					{"label": "Stock Balance", "link_type": "Report", "link_to": "Stock Balance"},
+					{"label": "Stock Ledger", "link_type": "Report", "link_to": "Stock Ledger"},
+					{"label": "Stock Projected Qty", "link_type": "Report", "link_to": "Stock Projected Qty"},
 				]},
 			],
 		},
@@ -1921,6 +1970,22 @@ def _setup_sidebars():
 			{"label": "Commission Report", "link_type": "Report", "link_to": "Commission Report", "icon": "notebook-text"},
 			{"label": "Sales Register", "link_type": "Report", "link_to": "Sales Register", "icon": "notebook-text"},
 			{"label": "Customer Statement", "link_type": "Page", "link_to": "customer-statement", "icon": "sheet"},
+		]},
+		{"title": "Warehouse", "icon": "stock", "items": [
+			{"type": "Section Break", "label": "Stock Operations"},
+			{"label": "Stock Entry", "link_to": "Stock Entry", "icon": "package"},
+			{"label": "Material Request", "link_to": "Material Request", "icon": "clipboard-list"},
+			{"label": "Delivery Note", "link_to": "Delivery Note", "icon": "truck"},
+			{"label": "Purchase Receipt", "link_to": "Purchase Receipt", "icon": "truck"},
+			{"label": "Stock Reconciliation", "link_to": "Stock Reconciliation", "icon": "scale"},
+			{"label": "Pick List", "link_to": "Pick List", "icon": "list-checks"},
+			{"type": "Section Break", "label": "Masters"},
+			{"label": "Item", "link_to": "Item", "icon": "package"},
+			{"label": "Warehouse", "link_to": "Warehouse", "icon": "building"},
+			{"type": "Section Break", "label": "Reports"},
+			{"label": "Stock Balance", "link_type": "Report", "link_to": "Stock Balance", "icon": "stock"},
+			{"label": "Stock Ledger", "link_type": "Report", "link_to": "Stock Ledger", "icon": "sheet"},
+			{"label": "Stock Projected Qty", "link_type": "Report", "link_to": "Stock Projected Qty", "icon": "notebook-text"},
 		]},
 		{"title": "Procurement", "icon": "buying", "items": [
 			{"type": "Section Break", "label": "Buying"},

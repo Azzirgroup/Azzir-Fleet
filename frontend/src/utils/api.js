@@ -32,6 +32,13 @@ export const insertDoc = (doc) => call('frappe.client.insert', { doc })
 
 export const submitDoc = (doc) => call('frappe.client.submit', { doc })
 
+// Submit a sales document THROUGH its workflow when one is active (so a below-cost
+// sale routes to "Request Approval" instead of going straight out). Falls back to a
+// plain submit when no workflow is active. Returns {name, docstatus, workflow_state,
+// below_cost, message}.
+export const submitSalesDoc = (doctype, name) =>
+  call('azzir_fleet.sales_api.submit_sales_doc', { doctype, name })
+
 // azzir_fleet backend helpers
 export const stockTree = (item_code, groups_only = 0) =>
   call('azzir_fleet.stock_info.get_stock_tree', { item_code, exclude_invoice: '', groups_only })

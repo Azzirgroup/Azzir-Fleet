@@ -182,7 +182,7 @@ fixtures = [
 		# so the sidebar 'Home' links resolve. Only names that don't clash with
 		# ERPNext/HRMS defaults (Accounting/HR reuse those existing workspaces).
 		"dt": "Workspace",
-		"filters": [["name", "in", ["Sales", "Procurement", "Director"]]],
+		"filters": [["name", "in", ["Sales", "Procurement", "Director", "Warehouse Ops"]]],
 	},
 	{
 		# "Azzir Fleet" is a hidden suppressor (only a section break, so it doesn't
@@ -190,7 +190,7 @@ fixtures = [
 		# leaving ONLY the 5 icons. Each role sidebar carries a 'Home' link to its
 		# workspace.
 		"dt": "Workspace Sidebar",
-		"filters": [["name", "in", ["Sales", "Procurement", "HR", "Accounting", "Director", "Azzir Fleet"]]],
+		"filters": [["name", "in", ["Sales", "Procurement", "HR", "Accounting", "Director", "Warehouse", "Azzir Fleet"]]],
 	},
 ]
 

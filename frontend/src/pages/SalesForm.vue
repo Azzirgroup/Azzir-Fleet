@@ -34,18 +34,19 @@
       <div class="overflow-x-auto rounded-lg border bg-white">
         <table class="min-w-full text-sm">
           <thead class="bg-gray-50 text-left text-gray-500">
-            <tr><th class="px-3 py-2">Item</th><th class="px-3 py-2">Qty</th><th class="px-3 py-2">Rate</th><th class="px-3 py-2">Warehouse</th><th class="px-3 py-2 text-right">Amount</th></tr>
+            <tr><th class="px-3 py-2">Item</th><th class="px-3 py-2">Qty</th><th class="px-3 py-2">List Rate</th><th class="px-3 py-2">Rate</th><th class="px-3 py-2">Warehouse</th><th class="px-3 py-2 text-right">Amount</th></tr>
           </thead>
           <tbody>
             <tr v-for="r in doc.items || []" :key="r.name" class="border-t">
               <td class="px-3 py-2"><div class="font-medium">{{ r.item_code }}</div><div class="text-xs text-gray-500">{{ r.item_name }}</div></td>
               <td class="px-3 py-2">{{ r.qty }}</td>
+              <td class="px-3 py-2 text-gray-500">{{ fmt(r.price_list_rate) }}</td>
               <td class="px-3 py-2">{{ fmt(r.rate) }}</td>
               <td class="px-3 py-2">{{ r.warehouse || '—' }}</td>
               <td class="px-3 py-2 text-right">{{ fmt(r.amount) }}</td>
             </tr>
           </tbody>
-          <tfoot><tr class="border-t"><td colspan="4" class="px-3 py-2 text-right font-semibold">Grand Total</td><td class="px-3 py-2 text-right font-semibold">{{ fmt(doc.grand_total, doc.currency) }}</td></tr></tfoot>
+          <tfoot><tr class="border-t"><td colspan="5" class="px-3 py-2 text-right font-semibold">Grand Total</td><td class="px-3 py-2 text-right font-semibold">{{ fmt(doc.grand_total, doc.currency) }}</td></tr></tfoot>
         </table>
       </div>
     </template>
@@ -58,7 +59,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { getDoc, submitDoc, makeNext, fmt } from '@/utils/api.js'
+import { getDoc, submitSalesDoc, makeNext, fmt } from '@/utils/api.js'
 import DocDialog from '@/components/DocDialog.vue'
 
 const props = defineProps({ doctype: String, name: String })
@@ -92,8 +93,12 @@ onMounted(load)
 
 async function submitDraft() {
   busy.value = true; msg.value = ''
-  try { doc.value = await submitDoc(doc.value); err.value = false; msg.value = 'Submitted.' }
-  catch (e) { err.value = true; msg.value = e?.messages?.join(', ') || 'Could not submit.' }
+  try {
+    // Goes through the workflow: a below-cost sale is routed for approval, not submitted.
+    const res = await submitSalesDoc(props.doctype, props.name)
+    err.value = false; msg.value = res?.message || 'Submitted.'
+    await load()
+  } catch (e) { err.value = true; msg.value = e?.messages?.join(', ') || e?.message || 'Could not submit.' }
   finally { busy.value = false }
 }
 function onEdited() { editing.value = false; load() }
