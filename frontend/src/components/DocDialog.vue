@@ -5,7 +5,7 @@
         <h3 class="font-semibold">{{ edit ? `Edit ${doctype} ${edit.name}` : `New ${doctype}` }}</h3>
         <div class="ml-auto flex gap-2">
           <button :disabled="busy" class="rounded-md border px-3 py-1.5 text-sm" @click="save(false)">Save Draft</button>
-          <button :disabled="busy" class="azzir-brand rounded-md px-3 py-1.5 text-sm text-white" @click="save(true)">Save &amp; Submit</button>
+          <button :disabled="busy" class="rounded-md px-3 py-1.5 text-sm text-white" :class="belowCost ? 'bg-amber-500 hover:bg-amber-600' : 'azzir-brand'" @click="save(true)">{{ belowCost ? 'Send for Approval' : 'Save & Submit' }}</button>
           <button class="rounded-md p-1 text-gray-400 hover:text-gray-700" @click="close">✕</button>
         </div>
       </div>
@@ -140,6 +140,11 @@ const sisterDoctype = (dt) => dt === 'Sales Invoice' || dt === 'Quotation'
 const sisterEligible = computed(() => canBuySister.value && sisterDoctype(props.doctype))
 
 const total = computed(() => rows.value.reduce((s, r) => s + (Number(r.qty) || 0) * (Number(r.rate) || 0), 0))
+// True when any line is priced BELOW its buying price — the submit then routes to
+// approval, so the button reads "Send for Approval" instead of "Save & Submit".
+const belowCost = computed(() =>
+  rows.value.some((r) => r.item_code && Number(r.rate) > 0 && Number(r.buying_rate) > 0 && Number(r.rate) < Number(r.buying_rate)),
+)
 
 // Changing the company clears the picked customer (it may not belong to the new one).
 watch(company, (n, o) => { if (o) { customer.value = ''; customerName.value = '' } })
@@ -158,18 +163,20 @@ onMounted(async () => {
     hidePartNo.value = !!props.edit.azzir_hide_part_no
     customer.value = props.edit.party_name || props.edit.customer || ''
     customerName.value = props.edit.customer_name || ''
-    rows.value = (props.edit.items || []).map((r) => ({ item_code: r.item_code, qty: r.qty, rate: r.rate, price_list_rate: r.price_list_rate || 0, description: r.description || '', warehouse: r.warehouse || '', from_sister: !!r.azzir_row_from_sister, supply_company: r.azzir_supply_company || '', supply_warehouse: r.azzir_supply_warehouse || '' }))
+    rows.value = (props.edit.items || []).map((r) => ({ item_code: r.item_code, qty: r.qty, rate: r.rate, price_list_rate: r.price_list_rate || 0, buying_rate: 0, description: r.description || '', warehouse: r.warehouse || '', from_sister: !!r.azzir_row_from_sister, supply_company: r.azzir_supply_company || '', supply_warehouse: r.azzir_supply_warehouse || '' }))
     if (!rows.value.length) addRow()
+    fetchBuyingRates()
   } else if (props.initial) {
     customer.value = props.initial.customer || ''
     customerName.value = props.initial.customer_name || ''
-    rows.value = (props.initial.items || []).map((r) => ({ item_code: r.item_code, qty: r.qty || 1, rate: r.rate || 0, price_list_rate: r.price_list_rate || 0, description: r.description || '', warehouse: r.warehouse || '', from_sister: !!r.azzir_row_from_sister, supply_company: r.azzir_supply_company || '', supply_warehouse: r.azzir_supply_warehouse || '' }))
+    rows.value = (props.initial.items || []).map((r) => ({ item_code: r.item_code, qty: r.qty || 1, rate: r.rate || 0, price_list_rate: r.price_list_rate || 0, buying_rate: 0, description: r.description || '', warehouse: r.warehouse || '', from_sister: !!r.azzir_row_from_sister, supply_company: r.azzir_supply_company || '', supply_warehouse: r.azzir_supply_warehouse || '' }))
     if (!rows.value.length) addRow()
+    fetchBuyingRates()
   } else {
     addRow()
   }
 })
-function addRow() { rows.value.push({ item_code: '', qty: 1, rate: 0, price_list_rate: 0, description: '', warehouse: '', from_sister: false, supply_company: '', supply_warehouse: '' }) }
+function addRow() { rows.value.push({ item_code: '', qty: 1, rate: 0, price_list_rate: 0, buying_rate: 0, description: '', warehouse: '', from_sister: false, supply_company: '', supply_warehouse: '' }) }
 // A row was un-ticked "From sister": clear its supply picks so stale values aren't sent.
 function onRowFromSister(row) {
   if (!row.from_sister) { row.supply_company = ''; row.supply_warehouse = '' }
@@ -182,8 +189,19 @@ async function onItem(i, item_code) {
   if (!item_code) return
   const d = await itemDetails(item_code, customer.value, defaults.value.company, defaults.value.selling_price_list, rows.value[i].qty || 1).catch(() => ({}))
   if (d && d.price_list_rate) rows.value[i].price_list_rate = d.price_list_rate
+  if (d && d.buying_rate) rows.value[i].buying_rate = d.buying_rate
   if (d && d.description && !rows.value[i].description) rows.value[i].description = d.description
   if (d && d.rate && !rows.value[i].rate) rows.value[i].rate = d.rate
+}
+
+// Fill in buying rates for prefilled rows (edit / next-doc) so the submit button
+// can reflect below-cost immediately, without waiting for the user to touch a row.
+async function fetchBuyingRates() {
+  for (const r of rows.value) {
+    if (!r.item_code || r.buying_rate) continue
+    const d = await itemDetails(r.item_code, customer.value, defaults.value.company, defaults.value.selling_price_list, r.qty || 1).catch(() => ({}))
+    if (d && d.buying_rate) r.buying_rate = d.buying_rate
+  }
 }
 
 async function save(submit) {

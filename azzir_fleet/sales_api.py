@@ -149,11 +149,16 @@ def item_details(item_code: str, customer: str | None = None, company: str | Non
 		out = get_item_details(ctx)
 	except Exception:
 		return {}
+	from azzir_fleet.below_cost import _buying_rate
+
 	return {
 		"rate": out.get("price_list_rate") or out.get("rate") or 0,
 		# The undiscounted list price, shown alongside the (editable) rate so the
 		# seller sees what the price list says vs. what they're charging.
 		"price_list_rate": out.get("price_list_rate") or 0,
+		# Buying/cost price — lets the form warn (and switch the submit button to
+		# "Send for Approval") the moment a rate is typed below this.
+		"buying_rate": _buying_rate(item_code),
 		"item_name": out.get("item_name"),
 		"description": out.get("description"),
 		"uom": out.get("stock_uom") or out.get("uom"),
