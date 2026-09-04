@@ -1,2 +1,0 @@
-import{_ as r}from"./RecordList-B7kStot4.js";import{a as o,i as t}from"./index-C9yszBJj.js";import"./api-CvD96vag.js";import"./DocDialog-CWIgvujl.js";import"./StockTree-B0ohN4Vs.js";const u={__name:"Customers",setup(m){const e=[{field:"name",label:"ID"},{field:"customer_name",label:"Name"},{field:"customer_group",label:"Group"},{field:"territory",label:"Territory"}];return(s,a)=>(o(),t(r,{title:"Customers",doctype:"Customer",columns:e,"search-field":"customer_name"}))}};export{u as default};
-//# sourceMappingURL=Customers-D2b5_zpn.js.map

@@ -236,13 +236,9 @@ async function save(submit) {
     }
     if (submit) {
       // Submit through the workflow: a below-cost sale is held for approval instead
-      // of going straight out. If it's held (still a draft), show the message and
-      // keep the dialog open so the seller sees it.
-      const res = await submitSalesDoc(props.doctype, saved.name)
-      if (res && res.docstatus === 0) {
-        err.value = false; msg.value = res.message || 'Sent for approval.'; busy.value = false
-        return
-      }
+      // of going straight out. Either way the dialog closes; the list will show the
+      // result (Pending Approval for a held below-cost sale).
+      await submitSalesDoc(props.doctype, saved.name)
     }
     emit('saved', saved)
   } catch (e) {
