@@ -39,6 +39,13 @@ export const submitDoc = (doc) => call('frappe.client.submit', { doc })
 export const submitSalesDoc = (doctype, name) =>
   call('azzir_fleet.sales_api.submit_sales_doc', { doctype, name })
 
+// Workflow-aware actions for the view page: what the current user may do now
+// (Approve / Reject / Submit / Request Approval) and applying one.
+export const workflowActions = (doctype, name) =>
+  call('azzir_fleet.sales_api.workflow_actions', { doctype, name })
+export const applyWorkflowAction = (doctype, name, action) =>
+  call('azzir_fleet.sales_api.apply_workflow_action', { doctype, name, action })
+
 // azzir_fleet backend helpers
 export const stockTree = (item_code, groups_only = 0) =>
   call('azzir_fleet.stock_info.get_stock_tree', { item_code, exclude_invoice: '', groups_only })

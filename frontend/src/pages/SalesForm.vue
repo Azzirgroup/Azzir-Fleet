@@ -6,10 +6,17 @@
       <span class="rounded-full px-2 py-0.5 text-xs" :class="statusClass">{{ statusText }}</span>
       <div class="ml-auto flex flex-wrap gap-2">
         <button class="rounded-md border px-3 py-1.5 text-sm" @click="printDoc">🖨 Print</button>
-        <!-- Draft actions -->
+        <!-- Draft actions: the buttons are the workflow actions this user may take
+             right now (Submit / Request Approval / Approve / Reject). Someone with no
+             available action (e.g. the creator of a below-cost doc awaiting approval)
+             sees only a note. -->
         <template v-if="doc.docstatus === 0">
-          <button class="rounded-md border px-3 py-1.5 text-sm" @click="editing = true">Edit</button>
-          <button :disabled="busy" class="azzir-brand rounded-md px-3 py-1.5 text-sm text-white" @click="submitDraft">Submit</button>
+          <button v-if="editable" class="rounded-md border px-3 py-1.5 text-sm" @click="editing = true">Edit</button>
+          <button v-for="a in actions" :key="a.action" :disabled="busy"
+            class="rounded-md px-3 py-1.5 text-sm text-white"
+            :class="a.action === 'Reject' ? 'bg-red-500 hover:bg-red-600' : 'azzir-brand'"
+            @click="doAction(a.action)">{{ a.action }}</button>
+          <span v-if="!actions.length" class="self-center text-xs text-gray-500">Awaiting approval</span>
         </template>
         <!-- Submitted: create next in the flow -->
         <template v-else-if="doc.docstatus === 1">
@@ -59,7 +66,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { getDoc, submitSalesDoc, makeNext, fmt } from '@/utils/api.js'
+import { getDoc, workflowActions, applyWorkflowAction, makeNext, fmt } from '@/utils/api.js'
 import DocDialog from '@/components/DocDialog.vue'
 
 const props = defineProps({ doctype: String, name: String })
@@ -73,9 +80,14 @@ const createTarget = ref(null)
 const createInitial = ref(null)
 const msg = ref('')
 const err = ref(false)
+const actions = ref([]) // workflow actions available to THIS user on this doc
 
-const statusText = computed(() => doc.value.status || (doc.value.docstatus === 1 ? 'Submitted' : doc.value.docstatus === 2 ? 'Cancelled' : 'Draft'))
-const statusClass = computed(() => doc.value.docstatus === 1 ? 'bg-green-100 text-green-700' : doc.value.docstatus === 2 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600')
+// A doc awaiting approval isn't editable by the creator (the workflow's Pending state
+// only allows the approver to edit), so hide Edit then.
+const editable = computed(() => doc.value.docstatus === 0 && !/pending/i.test(doc.value.workflow_state || ''))
+
+const statusText = computed(() => doc.value.workflow_state || doc.value.status || (doc.value.docstatus === 1 ? 'Submitted' : doc.value.docstatus === 2 ? 'Cancelled' : 'Draft'))
+const statusClass = computed(() => doc.value.docstatus === 1 ? 'bg-green-100 text-green-700' : doc.value.docstatus === 2 ? 'bg-red-100 text-red-700' : /pending/i.test(doc.value.workflow_state || '') ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600')
 
 const SPA_ROUTE = { Quotation: '/quotations', 'Sales Invoice': '/invoices', 'Delivery Note': '/delivery-notes' }
 const nextActions = computed(() => {
@@ -86,19 +98,25 @@ const nextActions = computed(() => {
 
 async function load() {
   loading.value = true
-  try { doc.value = await getDoc(props.doctype, props.name) }
-  finally { loading.value = false }
+  try {
+    doc.value = await getDoc(props.doctype, props.name)
+    actions.value = doc.value.docstatus === 0
+      ? ((await workflowActions(props.doctype, props.name).catch(() => ({}))).actions || [])
+      : []
+  } finally { loading.value = false }
 }
 onMounted(load)
 
-async function submitDraft() {
+// Apply the chosen workflow action (Submit / Request Approval / Approve / Reject).
+// Role + self-approval are enforced server-side by the workflow engine.
+async function doAction(action) {
   busy.value = true; msg.value = ''
   try {
-    // Goes through the workflow: a below-cost sale is routed for approval, not submitted.
-    const res = await submitSalesDoc(props.doctype, props.name)
-    err.value = false; msg.value = res?.message || 'Submitted.'
+    const res = await applyWorkflowAction(props.doctype, props.name, action)
+    err.value = false
+    msg.value = res.docstatus === 1 ? 'Approved & submitted.' : (res.workflow_state ? `Moved to ${res.workflow_state}.` : 'Done.')
     await load()
-  } catch (e) { err.value = true; msg.value = e?.messages?.join(', ') || e?.message || 'Could not submit.' }
+  } catch (e) { err.value = true; msg.value = e?.messages?.join(', ') || e?.message || 'Could not complete the action.' }
   finally { busy.value = false }
 }
 function onEdited() { editing.value = false; load() }

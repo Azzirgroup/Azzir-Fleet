@@ -953,11 +953,12 @@ def _make_below_cost_workflow(name, doctype, submit_role, approve_role):
 				{"state": "Draft", "action": "Request Approval", "next_state": "Pending Approval",
 				 "allowed": submit_role, "condition": "doc.azzir_below_cost == 1"},
 				# Separation of duties: whoever raised the below-cost doc cannot approve
-				# their own — allow_self_approval = 0 blocks the creator (except Administrator).
+				# OR reject their own — allow_self_approval = 0 blocks the creator (except
+				# Administrator), so they just see "Awaiting approval" until a manager acts.
 				{"state": "Pending Approval", "action": "Approve", "next_state": "Approved",
 				 "allowed": approve_role, "allow_self_approval": 0},
 				{"state": "Pending Approval", "action": "Reject", "next_state": "Draft",
-				 "allowed": approve_role},
+				 "allowed": approve_role, "allow_self_approval": 0},
 			],
 		}
 	).insert(ignore_permissions=True)
@@ -973,7 +974,8 @@ def _enforce_no_self_approval():
 		wf = frappe.get_doc("Workflow", name)
 		changed = False
 		for t in wf.transitions:
-			if t.action == "Approve" and t.allow_self_approval:
+			# The manager decisions (Approve/Reject) must not be taken by the creator.
+			if t.action in ("Approve", "Reject") and t.allow_self_approval:
 				t.allow_self_approval = 0
 				changed = True
 		if changed:

@@ -251,6 +251,55 @@ def submit_sales_doc(doctype: str, name: str) -> dict:
 	}
 
 
+@frappe.whitelist()
+def workflow_actions(doctype: str, name: str) -> dict:
+	"""The workflow actions the CURRENT user may take on this document right now.
+	Drives the view page's buttons: an approver sees 'Approve'/'Reject', the creator
+	of a below-cost doc awaiting approval sees nothing (self-approval is blocked). With
+	no active workflow, a draft simply offers 'Submit'."""
+	if doctype not in SALES_DOCTYPES:
+		frappe.throw(frappe._("Not allowed."))
+	doc = frappe.get_doc(doctype, name)
+	from frappe.model.workflow import get_workflow_name, get_transitions
+
+	if not get_workflow_name(doctype):
+		can_submit = doc.docstatus == 0 and doc.has_permission("submit")
+		return {"workflow": False, "state": None,
+		        "actions": ([{"action": "Submit"}] if can_submit else [])}
+
+	trans = get_transitions(doc) or []
+	# get_transitions does NOT apply the self-approval rule (Frappe only enforces it
+	# when the action is actually taken), so mirror it here — otherwise the creator of
+	# a below-cost doc would see an "Approve" button that errors on click. A user is
+	# offered a transition only if: they're Administrator, the transition allows self
+	# approval, or they aren't the document's owner.
+	user = frappe.session.user
+	owner = doc.get("owner")
+	def _offerable(t):
+		return user == "Administrator" or t.get("allow_self_approval") or user != owner
+	return {"workflow": True, "state": doc.get("workflow_state"),
+	        "actions": [{"action": t.get("action")} for t in trans if _offerable(t)]}
+
+
+@frappe.whitelist()
+def apply_workflow_action(doctype: str, name: str, action: str) -> dict:
+	"""Apply one workflow action (Approve / Reject / Submit / Request Approval). Role
+	and self-approval rules are enforced by Frappe's workflow engine."""
+	if doctype not in SALES_DOCTYPES:
+		frappe.throw(frappe._("Not allowed."))
+	doc = frappe.get_doc(doctype, name)
+	from frappe.model.workflow import get_workflow_name, apply_workflow
+
+	if get_workflow_name(doctype):
+		apply_workflow(doc, action)
+	elif action == "Submit":
+		doc.check_permission("submit")
+		doc.submit()
+	else:
+		frappe.throw(frappe._("Action {0} is not available.").format(action))
+	return {"name": doc.name, "docstatus": doc.docstatus, "workflow_state": doc.get("workflow_state")}
+
+
 def has_app_permission() -> bool:
 	"""Who may open the /sales app: sales roles, accounts, or a manager."""
 	roles = set(frappe.get_roles())
