@@ -6,6 +6,13 @@ Minimum Order Qty (understocked → reorder) or above its Maximum Order Qty
 level needed). Shows Economy Stock (already on order, not yet received) and the
 reorder level for reference.
 
+Because Min/Max Order Qty is a COMPANY-level threshold, the Below/Above decision is
+made on the company's TOTAL stock of the item (summed across all its warehouses) —
+not each warehouse alone. So a near-empty warehouse is NOT flagged when the company
+holds enough of that item elsewhere. The tree still lists per warehouse (showing where
+the remaining stock sits); the new "Company Total" column shows the figure that drove
+the flag.
+
 Presented as a TREE grouped per warehouse: each warehouse is a parent node and
 the out-of-band items it holds are its children (so you never see a single
 lumped "All Warehouses" row). A Below-Minimum item drops off once a Purchase
@@ -77,6 +84,16 @@ def get_rows(filters):
 		as_dict=True,
 	)
 
+	# 2b) Company-wide total per (item, company). Min/Max Order Qty is a COMPANY-level
+	#     threshold, so the Below/Above decision is made on the company's total stock of
+	#     the item (summed across all its warehouses), NOT each warehouse in isolation —
+	#     otherwise a near-empty warehouse looks "below minimum" even when the company
+	#     holds plenty of that item in another warehouse.
+	company_total = {}
+	for b in bins:
+		key = (b.item_code, b.company)
+		company_total[key] = company_total.get(key, 0.0) + flt(b.q)
+
 	# 3) Economy stock per (item, warehouse) = on submitted, not-yet-received POs.
 	economy = {}
 	for e in frappe.db.sql(
@@ -129,11 +146,13 @@ def get_rows(filters):
 	for b in bins:
 		im = meta[b.item_code]
 		mn, mx = flt(im.min_order_qty), flt(im.max_order_qty)
-		actual = flt(b.q)
-		below = mn > 0 and actual < mn
-		above = mx > 0 and actual > mx
+		actual = flt(b.q)  # stock in THIS warehouse (shown so the team sees where it sits)
+		ctotal = flt(company_total.get((b.item_code, b.company), 0.0))  # company-wide total
+		# Judge below/above on the COMPANY total, not this one warehouse.
+		below = mn > 0 and ctotal < mn
+		above = mx > 0 and ctotal > mx
 		if not (below or above):
-			continue  # within the [min, max] band — fine
+			continue  # the company as a whole is within the [min, max] band — fine
 		if below and not above and b.item_code in reordered:
 			continue  # already reordered
 		grp = by_wh.setdefault(b.warehouse, {"company": b.company, "kids": []})
@@ -146,9 +165,11 @@ def get_rows(filters):
 				"max_order_qty": mx,
 				"reorder_level": reorder_level.get((b.item_code, b.warehouse), 0.0),
 				"actual_qty": actual,
+				"company_total": ctotal,
 				"economy_stock": economy.get((b.item_code, b.warehouse), 0.0),
 				"status": below_label if below else above_label,
-				"variance": (mn - actual) if below else (actual - mx),
+				# Variance is the COMPANY shortfall/excess (matches the company-level status).
+				"variance": (mn - ctotal) if below else (ctotal - mx),
 				"indent": 1,
 			}
 		)
@@ -190,6 +211,7 @@ def get_columns():
 		{"label": _("Max Order Qty"), "fieldname": "max_order_qty", "fieldtype": "Float", "width": 110},
 		{"label": _("Reorder Level"), "fieldname": "reorder_level", "fieldtype": "Float", "width": 110},
 		{"label": _("Actual Qty"), "fieldname": "actual_qty", "fieldtype": "Float", "width": 110},
+		{"label": _("Company Total"), "fieldname": "company_total", "fieldtype": "Float", "width": 120},
 		{"label": _("Economy Stock"), "fieldname": "economy_stock", "fieldtype": "Float", "width": 120},
 		{"label": _("Status"), "fieldname": "status", "fieldtype": "Data", "width": 150},
 		{"label": _("Variance"), "fieldname": "variance", "fieldtype": "Float", "width": 100},
