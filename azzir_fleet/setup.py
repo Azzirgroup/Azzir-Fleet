@@ -510,6 +510,16 @@ CUSTOM_FIELDS.setdefault("Branch", []).append(
 	}
 )
 
+# Company-level toggle: this company auto-purchases from a sister company.
+CUSTOM_FIELDS.setdefault("Company", []).append(
+	{
+		"fieldname": "azzir_auto_purchase_from_sister",
+		"label": "Is Auto Purchase From Sister Company",
+		"fieldtype": "Check",
+		"insert_after": "company_name",
+	}
+)
+
 # --- Sell sister-company stock (corporate company buys from a sister at a discount)
 # Flag a Cost Center as "Corporate": its assigned users can buy sister stock.
 CUSTOM_FIELDS.setdefault("Cost Center", []).append(
