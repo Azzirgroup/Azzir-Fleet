@@ -60,7 +60,7 @@
                   <td class="px-2 py-2"><input v-model.number="row.rate" type="number" class="w-20 rounded border px-2 py-1" /></td>
                   <td class="px-2 py-2">
                     <div class="flex items-center gap-1">
-                      <input v-model="row.warehouse" placeholder="—" class="w-28 rounded border px-2 py-1" />
+                      <div class="w-40"><Combo v-model="row.warehouse" doctype="Warehouse" display="name" placeholder="—" query-method="azzir_fleet.warehouse_cc.warehouse_search" :query-args="{ company }" /></div>
                       <button v-if="row.item_code" class="rounded border px-1.5 py-1 text-xs" title="See all warehouses" @click="stockRow = i">📦</button>
                     </div>
                   </td>
@@ -110,7 +110,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { insertDoc, submitSalesDoc, saveDoc, itemDetails, salesDefaults, userCanBuySister, fmt } from '@/utils/api.js'
+import { insertDoc, submitSalesDoc, saveDoc, itemDetails, salesDefaults, userCanBuySister, myAllowedWarehouses, fmt } from '@/utils/api.js'
 import Combo from '@/components/Combo.vue'
 import StockTree from '@/components/StockTree.vue'
 
@@ -131,6 +131,7 @@ const busy = ref(false)
 const msg = ref('')
 const err = ref(false)
 const stockRow = ref(null)
+const allowedWh = ref(null) // warehouses this user may pick; null = unrestricted
 const applyVat = ref(true) // Apply VAT (default on); untick to drop VAT from the doc
 const hidePartNo = ref(false) // Hide Part Numbers on the printout
 
@@ -146,14 +147,19 @@ const belowCost = computed(() =>
   rows.value.some((r) => r.item_code && Number(r.rate) > 0 && Number(r.buying_rate) > 0 && Number(r.rate) < Number(r.buying_rate)),
 )
 
-// Changing the company clears the picked customer (it may not belong to the new one).
-watch(company, (n, o) => { if (o) { customer.value = ''; customerName.value = '' } })
+// Changing the company clears the picked customer (it may not belong to the new one)
+// and refreshes which warehouses this user may pick.
+watch(company, async (n, o) => {
+  if (o) { customer.value = ''; customerName.value = '' }
+  allowedWh.value = await myAllowedWarehouses(n).catch(() => null)
+})
 // Picking a customer auto-fills the (editable) customer name.
 function onCustomerPicked(o) { customerName.value = o?.customer_name || o?.name || '' }
 
 onMounted(async () => {
   defaults.value = await salesDefaults().catch(() => ({}))
   company.value = props.edit?.company || props.initial?.company || defaults.value.company || ''
+  allowedWh.value = await myAllowedWarehouses(company.value).catch(() => null)
   if (sisterDoctype(props.doctype)) {
     canBuySister.value = await userCanBuySister().catch(() => false)
   }
@@ -181,7 +187,18 @@ function addRow() { rows.value.push({ item_code: '', qty: 1, rate: 0, price_list
 function onRowFromSister(row) {
   if (!row.from_sister) { row.supply_company = ''; row.supply_warehouse = '' }
 }
-function setWarehouse(wh) { if (stockRow.value !== null) rows.value[stockRow.value].warehouse = wh; stockRow.value = null }
+function setWarehouse(wh) {
+  if (stockRow.value !== null) {
+    // Respect cost-center scoping: don't let the "see all warehouses" picker set one
+    // the user isn't allowed to use (the server enforces this too).
+    if (allowedWh.value && wh && !allowedWh.value.includes(wh)) {
+      err.value = true; msg.value = `You can't use warehouse ${wh} — it's not in your cost centre.`
+      stockRow.value = null; return
+    }
+    rows.value[stockRow.value].warehouse = wh
+  }
+  stockRow.value = null
+}
 function close() { emit('close') }
 
 // Auto-fetch the price when an item is chosen (like ERPNext).

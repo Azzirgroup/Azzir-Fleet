@@ -41,6 +41,10 @@ export const submitSalesDoc = (doctype, name) =>
 
 // Workflow-aware actions for the view page: what the current user may do now
 // (Approve / Reject / Submit / Request Approval) and applying one.
+// Warehouses the current user may pick (cost-center scoped); null = unrestricted.
+export const myAllowedWarehouses = (company) =>
+  call('azzir_fleet.warehouse_cc.my_allowed_warehouses', { company })
+
 export const workflowActions = (doctype, name) =>
   call('azzir_fleet.sales_api.workflow_actions', { doctype, name })
 export const applyWorkflowAction = (doctype, name, action) =>

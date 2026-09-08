@@ -172,3 +172,110 @@ def warehouse_query(
 		+ " order by w.name limit %(start)s, %(page_len)s",
 		vals,
 	)
+
+
+def _grant_conditions(vals: dict) -> str | None:
+	"""SQL fragment for 'this warehouse is selectable by the current user', or None
+	when the user is unrestricted (so callers add no condition). Fills `vals`."""
+	allowed = allowed_cost_centers()
+	bounds = warehouse_permission_bounds()
+	if allowed is None and bounds is None:
+		return None  # unrestricted
+	grants = []
+	if allowed is not None:
+		grants.append("w.azzir_cost_center in %(cc)s")
+		vals["cc"] = tuple(allowed)
+	if bounds is not None:
+		ors = []
+		for i, (lo, hi) in enumerate(bounds):
+			ors.append("(w.lft >= %(lo{i})s and w.rgt <= %(hi{i})s)".format(i=i))
+			vals["lo%d" % i] = lo
+			vals["hi%d" % i] = hi
+		if ors:
+			grants.append("(" + " or ".join(ors) + ")")
+	return "(" + " or ".join(grants) + ")" if grants else "1=0"
+
+
+@frappe.whitelist()
+def warehouse_search(txt: str | None = None, company: str | None = None) -> list:
+	"""Portal (/sales) warehouse picker: only leaf warehouses the current user may
+	SELECT (cost-center / warehouse-permission scoped; all if unrestricted)."""
+	conds = ["w.disabled = 0", "w.is_group = 0", "(w.name like %(t)s or w.warehouse_name like %(t)s)"]
+	vals = {"t": "%%%s%%" % (txt or "")}
+	if company:
+		conds.append("w.company = %(co)s")
+		vals["co"] = company
+	grant = _grant_conditions(vals)
+	if grant:
+		conds.append(grant)
+	return frappe.db.sql(
+		"select w.name, w.warehouse_name from `tabWarehouse` w where "
+		+ " and ".join(conds) + " order by w.name limit 25",
+		vals, as_dict=True,
+	)
+
+
+@frappe.whitelist()
+def my_allowed_warehouses(company: str | None = None) -> list | None:
+	"""Leaf warehouse names the current user may SELECT (cost-center / warehouse scoped),
+	or None when the user is unrestricted (may pick any). Used by the /sales portal to
+	scope its warehouse pickers."""
+	vals: dict = {}
+	grant = _grant_conditions(vals)
+	if grant is None:
+		return None  # unrestricted — pick any
+	conds = ["w.disabled = 0", "w.is_group = 0", grant]
+	if company:
+		conds.append("w.company = %(co)s")
+		vals["co"] = company
+	return frappe.db.sql_list("select w.name from `tabWarehouse` w where " + " and ".join(conds), vals)
+
+
+def enforce_warehouse_selection(doc, method=None):
+	"""Server-side guarantee (desk, portal AND API): reject any row whose warehouse the
+	user is not allowed to SELECT. Unrestricted users (Admin/System Manager, or no cost
+	center / warehouse permission) pass. Sister-sourced rows are skipped (their warehouse
+	is system-managed). Only leaf warehouses are policed."""
+	if not _field_ready():
+		return
+	cc_allowed = allowed_cost_centers()
+	wh_bounds = warehouse_permission_bounds()
+	if cc_allowed is None and wh_bounds is None:
+		return  # unrestricted user — nothing to enforce
+
+	checked = {}
+
+	def ok(wh):
+		if not wh:
+			return True
+		if wh in checked:
+			return checked[wh]
+		info = frappe.db.get_value(
+			"Warehouse", wh, ["azzir_cost_center", "lft", "rgt", "is_group"], as_dict=True
+		)
+		# unknown or group node -> don't police (stock posts to leaves)
+		res = True if (not info or info.is_group) else warehouse_selectable(
+			info.azzir_cost_center, info.lft, info.rgt, cc_allowed, wh_bounds
+		)
+		checked[wh] = res
+		return res
+
+	bad = set()
+	for row in doc.get("items") or []:
+		if row.get("azzir_row_from_sister"):
+			continue  # sister/landing warehouse is system-managed
+		for f in ("warehouse", "s_warehouse", "t_warehouse"):
+			wh = row.get(f)
+			if wh and not ok(wh):
+				bad.add(wh)
+	for f in ("set_warehouse", "from_warehouse", "to_warehouse"):
+		wh = doc.get(f)
+		if wh and not ok(wh):
+			bad.add(wh)
+
+	if bad:
+		frappe.throw(
+			frappe._("You are not allowed to use warehouse(s): {0}. They are not in your cost centre.")
+			.format(", ".join(sorted(bad))),
+			title=frappe._("Warehouse not allowed"),
+		)

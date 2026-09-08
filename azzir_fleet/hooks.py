@@ -298,6 +298,7 @@ doc_events = {
 	},
 	# Maker-checker: the creator of a Stock Entry draft cannot submit it.
 	"Stock Entry": {
+		"validate": "azzir_fleet.warehouse_cc.enforce_warehouse_selection",
 		"before_submit": [
 			"azzir_fleet.stock_entry_approval.block_self_submit",
 			"azzir_fleet.stock_entry_approval.block_transit_self_receive",
@@ -325,6 +326,7 @@ doc_events = {
 	"Purchase Receipt": {
 		"before_validate": "azzir_fleet.intercompany.apply_intercompany_discount",
 		"validate": [
+			"azzir_fleet.warehouse_cc.enforce_warehouse_selection",
 			"azzir_fleet.qty_limits.validate_buying",
 			"azzir_fleet.purchase_cycle.default_target_rows",
 		],
@@ -335,6 +337,8 @@ doc_events = {
 	"Quotation": {
 		"before_validate": "azzir_fleet.customer_name.capture_override",
 		"validate": [
+			# Warehouse selection scoped to the user's cost centre (server guarantee).
+			"azzir_fleet.warehouse_cc.enforce_warehouse_selection",
 			# Buy-from-sister: default the row supply company/warehouse from the header
 			# and point each row at its sister's landing warehouse (same as Sales Invoice),
 			# so the Quotation shows the landing warehouse too.
@@ -363,6 +367,7 @@ doc_events = {
 	"Delivery Note": {
 		"before_validate": "azzir_fleet.customer_name.capture_override",
 		"validate": [
+			"azzir_fleet.warehouse_cc.enforce_warehouse_selection",
 			"azzir_fleet.qty_limits.validate_selling",
 			"azzir_fleet.vat.apply_vat_option",
 			"azzir_fleet.customer_name.restore_override",
@@ -372,6 +377,7 @@ doc_events = {
 	"Sales Invoice": {
 		"before_validate": "azzir_fleet.customer_name.capture_override",
 		"validate": [
+			"azzir_fleet.warehouse_cc.enforce_warehouse_selection",
 			# Auto buy-from-sister (only at submit): if a line's warehouse is short and
 			# the company opted in, flag the row from a branch-matched sister BEFORE the
 			# landing warehouse is assigned below.
