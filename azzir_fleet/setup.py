@@ -487,6 +487,29 @@ CUSTOM_FIELDS.setdefault("Sales Invoice Item", []).append(
 	}
 )
 
+# --- Branch on Warehouse + Is Group on Branch --------------------------------
+# A warehouse points at a Branch. The Branch link is filtered (client-side, see
+# public/js/warehouse.js) so a GROUP warehouse only offers GROUP branches and a
+# leaf warehouse only offers non-group branches.
+CUSTOM_FIELDS.setdefault("Warehouse", []).append(
+	{
+		"fieldname": "azzir_branch",
+		"label": "Branch",
+		"fieldtype": "Link",
+		"options": "Branch",
+		"insert_after": "company",
+	}
+)
+CUSTOM_FIELDS.setdefault("Branch", []).append(
+	{
+		"fieldname": "azzir_is_group",
+		"label": "Is Group",
+		"fieldtype": "Check",
+		"insert_after": "branch",
+		"description": "Group branches pair with group warehouses; leaf branches with leaf warehouses.",
+	}
+)
+
 # --- Sell sister-company stock (corporate company buys from a sister at a discount)
 # Flag a Cost Center as "Corporate": its assigned users can buy sister stock.
 CUSTOM_FIELDS.setdefault("Cost Center", []).append(
