@@ -67,6 +67,24 @@ def get_rows(filters):
 	meta = {i.name: i for i in items}
 	codes = list(meta)
 
+	# 1b) Selling price per item — the rate on the default Selling Price List, falling
+	#     back to the item's Standard Selling Rate. Shown as a reference column.
+	selling_price = {}
+	spl = frappe.db.get_single_value("Selling Settings", "selling_price_list")
+	if spl:
+		for p in frappe.get_all(
+			"Item Price",
+			filters={"price_list": spl, "item_code": ["in", codes]},
+			fields=["item_code", "price_list_rate"],
+		):
+			if flt(p.price_list_rate):
+				selling_price.setdefault(p.item_code, flt(p.price_list_rate))
+	missing = [c for c in codes if c not in selling_price]
+	if missing:
+		for it in frappe.get_all("Item", filters={"name": ["in", missing]}, fields=["name", "standard_rate"]):
+			if flt(it.standard_rate):
+				selling_price[it.name] = flt(it.standard_rate)
+
 	# 2) Stock per (item, warehouse), scoped by the company / warehouse filters.
 	conds = ["b.item_code in %(codes)s", "w.is_group = 0", "w.disabled = 0"]
 	vals = {"codes": tuple(codes)}
@@ -166,6 +184,7 @@ def get_rows(filters):
 				"reorder_level": reorder_level.get((b.item_code, b.warehouse), 0.0),
 				"actual_qty": actual,
 				"company_total": ctotal,
+				"selling_price": selling_price.get(b.item_code, 0.0),
 				"economy_stock": economy.get((b.item_code, b.warehouse), 0.0),
 				"status": below_label if below else above_label,
 				# Variance is the COMPANY shortfall/excess (matches the company-level status).
@@ -212,6 +231,7 @@ def get_columns():
 		{"label": _("Reorder Level"), "fieldname": "reorder_level", "fieldtype": "Float", "width": 110},
 		{"label": _("Actual Qty"), "fieldname": "actual_qty", "fieldtype": "Float", "width": 110},
 		{"label": _("Company Total"), "fieldname": "company_total", "fieldtype": "Float", "width": 120},
+		{"label": _("Selling Price"), "fieldname": "selling_price", "fieldtype": "Currency", "width": 120},
 		{"label": _("Economy Stock"), "fieldname": "economy_stock", "fieldtype": "Float", "width": 120},
 		{"label": _("Status"), "fieldname": "status", "fieldtype": "Data", "width": 150},
 		{"label": _("Variance"), "fieldname": "variance", "fieldtype": "Float", "width": 100},
