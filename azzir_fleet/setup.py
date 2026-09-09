@@ -180,6 +180,14 @@ CUSTOM_FIELDS = {
 			"no_copy": 1,
 			"description": "Auto-set when any item is ordered below its Minimum Order Qty (defined in Item). Needs manager approval.",
 		},
+		{
+			"fieldname": "azzir_remark",
+			"label": "Remark",
+			"fieldtype": "Small Text",
+			# Above the Taxes and Charges section (after the totals).
+			"insert_after": "net_total",
+			"description": "Free-text remark for this purchase order (only printed when filled).",
+		},
 	],
 	# (azzir_remark lives directly in the Expense Entry doctype JSON now — it's our
 	# own doctype, so a standard field syncs reliably with the doctype.)
@@ -1599,7 +1607,7 @@ _PROFORMA_TEMPLATE = """
 					{% if doc.get("payment_terms_template") %}<tr><td><b>Payment Terms:</b></td><td style="padding-left:10px;">{{ doc.payment_terms_template }}</td></tr>{% endif %}
 					<tr><td colspan="2" style="padding-top:25px;"><b>Prepared By:</b> {{ frappe.db.get_value("User", doc.owner, "full_name") or doc.owner }}</td></tr>
 					<tr><td colspan="2" style="padding-top:15px;"><b>Signature:</b> _____________________</td></tr>
-					{% if doc.get("azzir_remarks") %}<tr><td colspan="2" style="padding-top:15px;"><b>Remarks:</b> {{ doc.azzir_remarks }}</td></tr>{% endif %}
+					{% set _remark = doc.get("azzir_remarks") or doc.get("azzir_remark") %}{% if _remark %}<tr><td colspan="2" style="padding-top:15px;"><b>Remark:</b> {{ _remark }}</td></tr>{% endif %}
 				</table>
 			</td>
 			<td style="vertical-align:top;">
