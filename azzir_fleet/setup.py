@@ -166,6 +166,21 @@ CUSTOM_FIELDS = {
 			"description": "Auto-set when any item's rate is below its valuation/buying price.",
 		},
 	],
+	# Purchase Order raised below an item's Minimum Order Qty: the order is ALLOWED
+	# (ERPNext's hard block is switched off in overrides.AzzirPurchaseOrder) but
+	# flagged here, and the flag routes it through the "Purchase Below Minimum Qty
+	# Approval" workflow — same pattern as below-cost sales.
+	"Purchase Order": [
+		{
+			"fieldname": "azzir_below_min_qty",
+			"label": "Below Minimum Order Qty",
+			"fieldtype": "Check",
+			"insert_after": "supplier_name",
+			"read_only": 1,
+			"no_copy": 1,
+			"description": "Auto-set when any item is ordered below its Minimum Order Qty (defined in Item). Needs manager approval.",
+		},
+	],
 	# (azzir_remark lives directly in the Expense Entry doctype JSON now — it's our
 	# own doctype, so a standard field syncs reliably with the doctype.)
 	# Tax Inclusive/Exclusive helper on Expense Entry rows.
@@ -897,6 +912,12 @@ def _setup_below_cost_workflow():
 	# Same below-cost approval on both Sales Invoice and Quotation.
 	_make_below_cost_workflow("Sales Below Cost Approval", "Sales Invoice", "Accounts User", "Accounts Manager")
 	_make_below_cost_workflow("Quotation Below Cost Approval", "Quotation", "Sales User", "Sales Manager")
+	# Purchase Orders under an item's Minimum Order Qty: same approval shape, driven
+	# by the azzir_below_min_qty flag. Active from the start (the user asked for it).
+	_make_below_cost_workflow(
+		"Purchase Below Minimum Qty Approval", "Purchase Order", "Purchase User", "Purchase Manager",
+		flag="azzir_below_min_qty", active=1,
+	)
 
 
 def _show_item_code_only_in_links():
@@ -962,9 +983,11 @@ def _setup_material_issue_workflow():
 	).insert(ignore_permissions=True)
 
 
-def _make_below_cost_workflow(name, doctype, submit_role, approve_role):
-	"""Normal docs -> 'Submit' only; below-cost -> 'Request Approval' then a manager
-	'Approve'. Built OFF by default (a workflow appears on ALL docs once active)."""
+def _make_below_cost_workflow(name, doctype, submit_role, approve_role, flag="azzir_below_cost", active=0):
+	"""Normal docs -> 'Submit' only; flagged (below-cost / below-min-qty) ->
+	'Request Approval' then a manager 'Approve'. `flag` is the Check field that
+	decides the route. Built OFF by default (a workflow appears on ALL docs once
+	active) unless `active` is passed."""
 	if frappe.db.exists("Workflow", name):
 		return
 	frappe.get_doc(
@@ -972,7 +995,7 @@ def _make_below_cost_workflow(name, doctype, submit_role, approve_role):
 			"doctype": "Workflow",
 			"workflow_name": name,
 			"document_type": doctype,
-			"is_active": 0,
+			"is_active": active,
 			"send_email_alert": 0,
 			"workflow_state_field": "workflow_state",
 			"states": [
@@ -982,9 +1005,9 @@ def _make_below_cost_workflow(name, doctype, submit_role, approve_role):
 			],
 			"transitions": [
 				{"state": "Draft", "action": "Submit", "next_state": "Approved",
-				 "allowed": submit_role, "condition": "doc.azzir_below_cost == 0"},
+				 "allowed": submit_role, "condition": f"doc.{flag} == 0"},
 				{"state": "Draft", "action": "Request Approval", "next_state": "Pending Approval",
-				 "allowed": submit_role, "condition": "doc.azzir_below_cost == 1"},
+				 "allowed": submit_role, "condition": f"doc.{flag} == 1"},
 				# Separation of duties: whoever raised the below-cost doc cannot approve
 				# OR reject their own — allow_self_approval = 0 blocks the creator (except
 				# Administrator), so they just see "Awaiting approval" until a manager acts.
@@ -1001,7 +1024,11 @@ def _enforce_no_self_approval():
 	"""Below-cost workflows already live on a site were created before self-approval
 	was locked down. Set allow_self_approval = 0 on their 'Approve' transition so the
 	person who raised the doc can't approve it themselves. Idempotent."""
-	for name in ("Sales Below Cost Approval", "Quotation Below Cost Approval"):
+	for name in (
+		"Sales Below Cost Approval",
+		"Quotation Below Cost Approval",
+		"Purchase Below Minimum Qty Approval",
+	):
 		if not frappe.db.exists("Workflow", name):
 			continue
 		wf = frappe.get_doc("Workflow", name)

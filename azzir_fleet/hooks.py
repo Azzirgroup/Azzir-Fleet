@@ -310,6 +310,8 @@ doc_events = {
 		"validate": [
 			"azzir_fleet.qty_limits.validate_buying",
 			"azzir_fleet.purchase_cycle.default_target_rows",
+			# Below Minimum Order Qty -> flag (drives the approval workflow).
+			"azzir_fleet.qty_limits.flag_below_min_qty",
 		]
 	},
 	"Purchase Invoice": {
@@ -446,6 +448,8 @@ doc_events = {
 # Keep Product Bundle components on the Sales Invoice even when Update Stock is OFF.
 override_doctype_class = {
 	"Sales Invoice": "azzir_fleet.overrides.AzzirSalesInvoice",
+	# Allow ordering below Minimum Order Qty (flagged + approval workflow instead).
+	"Purchase Order": "azzir_fleet.overrides.AzzirPurchaseOrder",
 }
 
 # Overriding Methods

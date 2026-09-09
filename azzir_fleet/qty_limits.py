@@ -82,3 +82,28 @@ def _enforce(doc, field, action):
 					row.idx, frappe.bold(code), action, flt(row.get("qty")), limit
 				)
 			)
+
+
+def flag_below_min_qty(doc, method=None):
+	"""Purchase Order validate: mark the order when any item's TOTAL ordered qty
+	(stock UOM, across rows) is under the item's Minimum Order Qty. The order is
+	still allowed — ERPNext's own hard block is disabled in
+	overrides.AzzirPurchaseOrder — but the flag routes it through the
+	"Purchase Below Minimum Qty Approval" workflow instead of a plain Submit."""
+	if not doc.meta.has_field("azzir_below_min_qty"):
+		return
+	ordered = {}
+	for row in doc.get("items") or []:
+		code = row.get("item_code")
+		if not code:
+			continue
+		qty = flt(row.get("stock_qty")) or flt(row.get("qty")) * flt(row.get("conversion_factor") or 1)
+		ordered[code] = ordered.get(code, 0) + qty
+	below = False
+	for code, qty in ordered.items():
+		minimum = flt(frappe.get_cached_value("Item", code, "min_order_qty"))
+		if minimum and qty < minimum:
+			below = True
+			break
+	doc.azzir_below_min_qty = 1 if below else 0
+
