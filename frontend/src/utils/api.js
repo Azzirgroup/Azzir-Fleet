@@ -45,6 +45,11 @@ export const submitSalesDoc = (doctype, name) =>
 export const myAllowedWarehouses = (company) =>
   call('azzir_fleet.warehouse_cc.my_allowed_warehouses', { company })
 
+// The warehouse to auto-fill for an item (the user's cost-centre warehouse that holds
+// it); null when the user is unrestricted or has none.
+export const userWarehouseForItem = (item_code, company) =>
+  call('azzir_fleet.warehouse_cc.user_warehouse_for_item', { item_code, company })
+
 export const workflowActions = (doctype, name) =>
   call('azzir_fleet.sales_api.workflow_actions', { doctype, name })
 export const applyWorkflowAction = (doctype, name, action) =>

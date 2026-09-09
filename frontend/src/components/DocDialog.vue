@@ -110,7 +110,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { insertDoc, submitSalesDoc, saveDoc, itemDetails, salesDefaults, userCanBuySister, myAllowedWarehouses, fmt } from '@/utils/api.js'
+import { insertDoc, submitSalesDoc, saveDoc, itemDetails, salesDefaults, userCanBuySister, myAllowedWarehouses, userWarehouseForItem, fmt } from '@/utils/api.js'
 import Combo from '@/components/Combo.vue'
 import StockTree from '@/components/StockTree.vue'
 
@@ -209,6 +209,12 @@ async function onItem(i, item_code) {
   if (d && d.buying_rate) rows.value[i].buying_rate = d.buying_rate
   if (d && d.description && !rows.value[i].description) rows.value[i].description = d.description
   if (d && d.rate && !rows.value[i].rate) rows.value[i].rate = d.rate
+  // Auto-fill the user's allowed (cost-centre) warehouse that holds this item — only
+  // when the row has none yet, so a manual pick is never overridden. Same as the desk.
+  if (!rows.value[i].warehouse) {
+    const wh = await userWarehouseForItem(item_code, company.value).catch(() => null)
+    if (wh && !rows.value[i].warehouse) rows.value[i].warehouse = wh
+  }
 }
 
 // Fill in buying rates for prefilled rows (edit / next-doc) so the submit button
