@@ -1,7 +1,7 @@
 <template>
   <div class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4" @click.self="close">
-    <div class="my-6 w-full max-w-3xl rounded-xl bg-white shadow-xl">
-      <div class="flex items-center gap-2 border-b px-4 py-3">
+    <div class="my-4 w-full max-w-3xl rounded-xl bg-white shadow-xl md:my-6">
+      <div class="flex flex-wrap items-center gap-2 border-b px-4 py-3">
         <h3 class="font-semibold">{{ edit ? `Edit ${doctype} ${edit.name}` : `New ${doctype}` }}</h3>
         <div class="ml-auto flex gap-2">
           <button :disabled="busy" class="rounded-md border px-3 py-1.5 text-sm" @click="save(false)">Save Draft</button>
@@ -48,6 +48,7 @@
             <div class="text-sm font-medium text-gray-600">Items</div>
             <button class="ml-auto rounded-md border px-2 py-1 text-xs" @click="addRow">+ Add item</button>
           </div>
+          <div class="overflow-x-auto">
           <table class="min-w-full text-sm">
             <thead class="bg-gray-50 text-left text-gray-500">
               <tr><th class="px-3 py-2">Item</th><th class="px-2 py-2 w-16">Qty</th><th class="px-2 py-2 w-24">Rate</th><th class="px-2 py-2 w-44">Warehouse</th><th class="px-2 py-2 w-24 text-right">Amount</th><th></th></tr>
@@ -93,6 +94,7 @@
             </tbody>
             <tfoot><tr class="border-t"><td colspan="4"></td><td class="px-3 py-2 text-right font-semibold">Total</td><td class="px-3 py-2 text-right font-semibold">{{ fmt(total) }}</td></tr></tfoot>
           </table>
+          </div>
         </div>
       </div>
     </div>

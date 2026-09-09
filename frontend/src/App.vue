@@ -1,9 +1,11 @@
 <template>
   <div class="flex h-screen w-screen overflow-hidden bg-gray-50 text-gray-900">
-    <!-- Sidebar -->
+    <!-- Mobile backdrop shown when the drawer is open -->
+    <div v-if="sidebar" class="fixed inset-0 z-30 bg-black/40 md:hidden" @click="sidebar = false"></div>
+    <!-- Sidebar: static column on desktop, a slide-in drawer on mobile -->
     <aside
-      class="azzir-brand flex w-56 shrink-0 flex-col text-white transition-all"
-      :class="{ '-ml-56': !sidebar }"
+      class="azzir-brand fixed inset-y-0 left-0 z-40 flex w-56 shrink-0 flex-col text-white transition-transform md:static md:z-auto md:translate-x-0"
+      :class="sidebar ? 'translate-x-0' : '-translate-x-full'"
     >
       <div class="flex items-center gap-2 px-4 py-4">
         <img :src="logo" class="h-8 w-8 rounded" />
@@ -16,6 +18,7 @@
           :to="l.to"
           class="flex items-center gap-2 rounded-md px-3 py-2 hover:bg-white/10"
           :class="{ 'bg-white/15 font-medium': isActive(l.to) }"
+          @click="closeOnMobile"
         >
           <span>{{ l.icon }}</span><span>{{ l.label }}</span>
         </router-link>
@@ -51,7 +54,10 @@ import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
-const sidebar = ref(true)
+// Open by default on desktop; closed on phones (it's an overlay drawer there).
+const sidebar = ref(typeof window !== 'undefined' ? window.innerWidth >= 768 : true)
+// Tapping a link on a phone closes the drawer so you land on the page.
+function closeOnMobile() { if (typeof window !== 'undefined' && window.innerWidth < 768) sidebar.value = false }
 const logo = '/assets/azzir_fleet/frontend/logo.svg'
 // www/sales.py's boot dict is emitted by the sales.html template as TOP-LEVEL
 // globals (window.user, window.portal_only, …), not as window.frappe.boot — the
