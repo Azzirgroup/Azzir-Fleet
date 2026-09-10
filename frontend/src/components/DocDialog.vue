@@ -48,7 +48,7 @@
             <div class="text-sm font-medium text-gray-600">Items</div>
             <button class="ml-auto rounded-md border px-2 py-1 text-xs" @click="addRow">+ Add item</button>
           </div>
-          <div class="overflow-x-auto">
+          <div class="hidden overflow-x-auto md:block">
           <table class="min-w-full text-sm">
             <thead class="bg-gray-50 text-left text-gray-500">
               <tr><th class="px-3 py-2">Item</th><th class="px-2 py-2 w-16">Qty</th><th class="px-2 py-2 w-24">Rate</th><th class="px-2 py-2 w-44">Warehouse</th><th class="px-2 py-2 w-24 text-right">Amount</th><th></th></tr>
@@ -94,6 +94,45 @@
             </tbody>
             <tfoot><tr class="border-t"><td colspan="4"></td><td class="px-3 py-2 text-right font-semibold">Total</td><td class="px-3 py-2 text-right font-semibold">{{ fmt(total) }}</td></tr></tfoot>
           </table>
+          </div>
+
+          <!-- MOBILE: each item as a stacked card (no horizontal scrolling) -->
+          <div class="divide-y md:hidden">
+            <div v-for="(row, i) in rows" :key="'m' + i" class="space-y-2 p-3">
+              <div>
+                <label class="mb-1 block text-xs text-gray-500">Item</label>
+                <Combo v-model="row.item_code" doctype="Item" display="item_name" placeholder="Select item / part no." query-method="azzir_fleet.alias.item_search_for_spa" @update:model-value="(v) => onItem(i, v)" />
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div><label class="mb-1 block text-xs text-gray-500">Qty</label><input v-model.number="row.qty" type="number" class="w-full rounded border px-2 py-1" /></div>
+                <div><label class="mb-1 block text-xs text-gray-500">Rate</label><input v-model.number="row.rate" type="number" class="w-full rounded border px-2 py-1" /></div>
+              </div>
+              <div>
+                <label class="mb-1 block text-xs text-gray-500">Warehouse</label>
+                <div class="flex items-center gap-1">
+                  <div class="flex-1"><Combo v-model="row.warehouse" doctype="Warehouse" display="name" placeholder="—" query-method="azzir_fleet.warehouse_cc.warehouse_search" :query-args="{ company }" /></div>
+                  <button v-if="row.item_code" class="rounded border px-2 py-1 text-xs" title="See all warehouses" @click="stockRow = i">📦</button>
+                </div>
+              </div>
+              <div v-if="row.item_code">
+                <input v-model="row.description" placeholder="Description (editable)" class="w-full rounded border px-2 py-1 text-xs text-gray-600" />
+              </div>
+              <div v-if="sisterEligible" class="rounded bg-amber-50 px-2 py-2 text-xs">
+                <label class="flex items-center gap-1"><input type="checkbox" v-model="row.from_sister" @change="onRowFromSister(row)" /> From sister</label>
+                <template v-if="row.from_sister">
+                  <div class="mt-2"><Combo v-model="row.supply_company" doctype="Company" display="name" placeholder="Sister company" /></div>
+                  <div class="mt-2"><Combo v-model="row.supply_warehouse" doctype="Warehouse" display="label" placeholder="Warehouse (in stock)"
+                    query-method="azzir_fleet.intercompany_sale.supply_warehouses"
+                    :query-args="{ company: row.supply_company, item_codes: row.item_code ? [row.item_code] : [] }" /></div>
+                </template>
+              </div>
+              <div class="flex items-center justify-between pt-1">
+                <span class="text-sm font-medium">Amount: {{ fmt((row.qty || 0) * (row.rate || 0)) }}</span>
+                <button class="text-sm text-red-500 hover:text-red-700" @click="rows.splice(i, 1)">Remove</button>
+              </div>
+            </div>
+            <div v-if="!rows.length" class="p-4 text-center text-sm text-gray-400">No items.</div>
+            <div class="flex items-center justify-between p-3 font-semibold"><span>Total</span><span>{{ fmt(total) }}</span></div>
           </div>
         </div>
       </div>
