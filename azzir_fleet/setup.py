@@ -189,6 +189,24 @@ CUSTOM_FIELDS = {
 			"description": "Free-text remark for this purchase order (only printed when filled).",
 		},
 	],
+	"Purchase Receipt": [
+		{
+			"fieldname": "azzir_remark",
+			"label": "Remark",
+			"fieldtype": "Small Text",
+			"insert_after": "net_total",
+			"description": "Free-text remark for this purchase receipt (only printed when filled).",
+		},
+	],
+	"Purchase Invoice": [
+		{
+			"fieldname": "azzir_remark",
+			"label": "Remark",
+			"fieldtype": "Small Text",
+			"insert_after": "net_total",
+			"description": "Free-text remark for this purchase invoice (only printed when filled).",
+		},
+	],
 	# (azzir_remark lives directly in the Expense Entry doctype JSON now — it's our
 	# own doctype, so a standard field syncs reliably with the doctype.)
 	# Tax Inclusive/Exclusive helper on Expense Entry rows.

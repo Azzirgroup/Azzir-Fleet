@@ -166,6 +166,10 @@ fixtures = [
 					"Purchase Invoice Item-azzir_row_to_target",
 					"Purchase Invoice Item-azzir_target_company",
 					"Purchase Invoice Item-azzir_target_warehouse",
+					# Remark on the purchase docs (shipped as JSON so it deploys reliably).
+					"Purchase Order-azzir_remark",
+					"Purchase Receipt-azzir_remark",
+					"Purchase Invoice-azzir_remark",
 				],
 			]
 		],
