@@ -775,6 +775,7 @@ def after_migrate():
 		("below_cost_no_self_approval", _enforce_no_self_approval),
 		("item_link_code_only", _show_item_code_only_in_links),
 		("warehouse_mandatory", _make_warehouse_mandatory),
+		("cost_center_user_perm_exempt", _exempt_cost_center_from_user_permissions),
 		("editable_customer_name", _make_customer_name_editable),
 		("material_issue_workflow", _setup_material_issue_workflow),
 		("session_limit", _enforce_session_limit),
@@ -962,6 +963,25 @@ def _make_warehouse_mandatory():
 	for dt in ("Quotation Item", "Sales Invoice Item", "Delivery Note Item"):
 		make_property_setter(
 			dt, "warehouse", "mandatory_depends_on", "eval:doc.azzir_is_stock_item", "Data",
+			validate_fields_for_doctype=False,
+		)
+
+
+def _exempt_cost_center_from_user_permissions():
+	"""A sales user is scoped by a Cost Center *User Permission* (that same
+	permission gates who may manually buy 'from sister'). But ERPNext auto-fills
+	each sales LINE's cost_center from the company/item default (e.g. 'ARUSHA -
+	HPL'), and if that value isn't in the user's allowed cost centres, Frappe's
+	has_user_permission blocks the save with
+	'You are not allowed to access this Sales Invoice Item record because it is
+	linked to Cost Center ... row 1, field Cost Center'.
+
+	The line cost_center is a system default the salesperson doesn't choose, so
+	exempt it from user-permission enforcement. The header/report-level scoping is
+	unaffected — this only stops the auto-filled child value from blocking saves."""
+	for dt in ("Quotation Item", "Sales Invoice Item", "Delivery Note Item"):
+		make_property_setter(
+			dt, "cost_center", "ignore_user_permissions", 1, "Check",
 			validate_fields_for_doctype=False,
 		)
 

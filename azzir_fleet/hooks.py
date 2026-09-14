@@ -175,6 +175,25 @@ fixtures = [
 		],
 	},
 	{
+		# Exempt the auto-filled line cost_center from User Permission enforcement,
+		# shipped as data so it deploys on every migrate (the after_migrate step can
+		# be skipped on Frappe Cloud). Without this, a cost-centre-scoped sales user
+		# can't submit an invoice whose line cost_center (e.g. 'ARUSHA - HPL') falls
+		# outside their allowed set.
+		"dt": "Property Setter",
+		"filters": [
+			[
+				"name",
+				"in",
+				[
+					"Quotation Item-cost_center-ignore_user_permissions",
+					"Sales Invoice Item-cost_center-ignore_user_permissions",
+					"Delivery Note Item-cost_center-ignore_user_permissions",
+				],
+			]
+		],
+	},
+	{
 		# Pickup Slip print format shipped as data so it always deploys — the code
 		# path (setup_print_formats on migrate) can abort on an earlier format and
 		# skip it. Fixtures import before after_migrate, so the new HTML lands

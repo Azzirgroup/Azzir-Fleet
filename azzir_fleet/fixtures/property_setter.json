@@ -1,0 +1,50 @@
+[
+ {
+  "default_value": null,
+  "doc_type": "Quotation Item",
+  "docstatus": 0,
+  "doctype": "Property Setter",
+  "doctype_or_field": "DocField",
+  "field_name": "cost_center",
+  "is_system_generated": 1,
+  "modified": "2026-09-14 20:05:31.584720",
+  "module": null,
+  "name": "Quotation Item-cost_center-ignore_user_permissions",
+  "property": "ignore_user_permissions",
+  "property_type": "Check",
+  "row_name": null,
+  "value": "1"
+ },
+ {
+  "default_value": null,
+  "doc_type": "Sales Invoice Item",
+  "docstatus": 0,
+  "doctype": "Property Setter",
+  "doctype_or_field": "DocField",
+  "field_name": "cost_center",
+  "is_system_generated": 1,
+  "modified": "2026-09-14 20:06:11.528256",
+  "module": null,
+  "name": "Sales Invoice Item-cost_center-ignore_user_permissions",
+  "property": "ignore_user_permissions",
+  "property_type": "Check",
+  "row_name": null,
+  "value": "1"
+ },
+ {
+  "default_value": null,
+  "doc_type": "Delivery Note Item",
+  "docstatus": 0,
+  "doctype": "Property Setter",
+  "doctype_or_field": "DocField",
+  "field_name": "cost_center",
+  "is_system_generated": 1,
+  "modified": "2026-09-14 20:05:32.069600",
+  "module": null,
+  "name": "Delivery Note Item-cost_center-ignore_user_permissions",
+  "property": "ignore_user_permissions",
+  "property_type": "Check",
+  "row_name": null,
+  "value": "1"
+ }
+]
