@@ -54,6 +54,10 @@ export const userWarehouseForItem = (item_code, company) =>
 export const itemMultiSearch = (txt) =>
   call('azzir_fleet.alias.item_multi_search', { txt })
 
+// Customer edit (sales officers completing incomplete customers).
+export const getCustomer = (name) => call('azzir_fleet.sales_api.get_customer', { name })
+export const saveCustomer = (name, data) => call('azzir_fleet.sales_api.save_customer', { name, data })
+
 export const workflowActions = (doctype, name) =>
   call('azzir_fleet.sales_api.workflow_actions', { doctype, name })
 export const applyWorkflowAction = (doctype, name, action) =>

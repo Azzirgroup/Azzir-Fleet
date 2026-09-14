@@ -67,7 +67,9 @@ const props = defineProps({
   newRoute: String,
   viewBase: String,
   searchField: { type: String, default: 'name' },
+  editable: { type: Boolean, default: false },
 })
+const emit = defineEmits(['edit'])
 
 const router = useRouter()
 const route = useRoute()
@@ -102,9 +104,11 @@ async function load() {
 }
 function open(r) {
   if (props.viewBase) router.push(`${props.viewBase}/${encodeURIComponent(r.name)}`)
+  else if (props.editable) emit('edit', r)
 }
 onMounted(() => {
   if (route.query.new && canCreate.value) showDialog.value = true
   load()
 })
+defineExpose({ load })
 </script>

@@ -82,6 +82,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { call } from 'frappe-ui'
 
 const route = useRoute()
 
@@ -124,9 +125,10 @@ const title = computed(() => route.name || 'Sales')
 
 const isActive = (to) => route.path.startsWith(to)
 
-// Logout
-function logout() {
-  window.location.href = '/api/method/logout'
+// Logout: POST the logout method (clears the session cookie via frappe-ui, which
+// adds the CSRF token), then land on the login page.
+async function logout() {
+  try { await call('logout') } catch (e) { /* ignore — still send them to login */ }
+  window.location.href = '/login'
 }
 </script>
-```

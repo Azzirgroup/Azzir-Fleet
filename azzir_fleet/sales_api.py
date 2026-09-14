@@ -128,6 +128,83 @@ def list_customers(company: str | None = None, txt: str | None = None) -> list:
 
 
 @frappe.whitelist()
+def get_customer(name: str) -> dict:
+	"""A customer's editable details for the /sales portal edit form."""
+	if not has_app_permission():
+		frappe.throw(frappe._("Not allowed."))
+	c = frappe.get_doc("Customer", name)
+	return {
+		"name": c.name,
+		"customer_name": c.customer_name,
+		"customer_type": c.customer_type,
+		"customer_group": c.customer_group,
+		"territory": c.territory,
+		"tax_id": c.get("tax_id"),
+		"mobile_no": c.get("mobile_no"),
+		"email_id": c.get("email_id"),
+	}
+
+
+@frappe.whitelist()
+def save_customer(name: str, data) -> dict:
+	"""Update a customer's basic details (and its primary contact's phone/email) from
+	the /sales portal, so a sales officer can complete incomplete customers."""
+	if not has_app_permission():
+		frappe.throw(frappe._("Not allowed."))
+	data = frappe.parse_json(data) if isinstance(data, str) else (data or {})
+	c = frappe.get_doc("Customer", name)
+	for f in ("customer_name", "customer_type", "customer_group", "territory", "tax_id"):
+		if data.get(f) is not None:
+			c.set(f, data.get(f))
+	c.flags.ignore_permissions = True
+	c.save()
+
+	mobile = (data.get("mobile_no") or "").strip()
+	email = (data.get("email_id") or "").strip()
+	if mobile or email:
+		_save_primary_contact(c, mobile, email)
+
+	frappe.db.commit()
+	return {"name": c.name}
+
+
+def _save_primary_contact(customer, mobile: str, email: str) -> None:
+	"""Set the phone/email on the customer's primary Contact (creating one if none)."""
+	cname = customer.get("customer_primary_contact")
+	if cname and frappe.db.exists("Contact", cname):
+		contact = frappe.get_doc("Contact", cname)
+	else:
+		contact = frappe.new_doc("Contact")
+		contact.first_name = customer.customer_name or customer.name
+		contact.append("links", {"link_doctype": "Customer", "link_name": customer.name})
+
+	if mobile:
+		if not any((r.phone or "") == mobile for r in contact.get("phone_nos") or []):
+			contact.append("phone_nos", {"phone": mobile})
+		for r in contact.phone_nos:
+			r.is_primary_mobile_no = 1 if (r.phone or "") == mobile else 0
+	if email:
+		if not any((r.email_id or "") == email for r in contact.get("email_ids") or []):
+			contact.append("email_ids", {"email_id": email})
+		for r in contact.email_ids:
+			r.is_primary = 1 if (r.email_id or "") == email else 0
+
+	contact.flags.ignore_permissions = True
+	contact.save()
+	# Reflect on the Customer immediately (mobile_no/email_id are read-only fetches that
+	# otherwise only refresh on the next customer save).
+	updates: dict = {}
+	if not customer.get("customer_primary_contact"):
+		updates["customer_primary_contact"] = contact.name
+	if mobile:
+		updates["mobile_no"] = mobile
+	if email:
+		updates["email_id"] = email
+	if updates:
+		frappe.db.set_value("Customer", customer.name, updates)
+
+
+@frappe.whitelist()
 def item_details(item_code: str, customer: str | None = None, company: str | None = None,
                  price_list: str | None = None, qty: float = 1) -> dict:
 	"""Rate + description for an item, the same way ERPNext auto-fills a sales row

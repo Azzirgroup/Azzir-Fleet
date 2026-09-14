@@ -10,6 +10,7 @@ declare module 'vue' {
   export interface GlobalComponents {
     AddItemsDialog: typeof import('./src/components/AddItemsDialog.vue')['default']
     Combo: typeof import('./src/components/Combo.vue')['default']
+    CustomerDialog: typeof import('./src/components/CustomerDialog.vue')['default']
     DocDialog: typeof import('./src/components/DocDialog.vue')['default']
     RecordList: typeof import('./src/components/RecordList.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
