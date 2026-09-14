@@ -44,9 +44,10 @@
              Only Corporate-cost-center users see those columns. -->
 
         <div class="rounded-lg border">
-          <div class="flex items-center border-b px-3 py-2">
+          <div class="flex items-center gap-2 border-b px-3 py-2">
             <div class="text-sm font-medium text-gray-600">Items</div>
-            <button class="ml-auto rounded-md border px-2 py-1 text-xs" @click="addRow">+ Add item</button>
+            <button class="ml-auto rounded-md border px-2 py-1 text-xs" @click="showAddMultiple = true">Add multiple</button>
+            <button class="rounded-md border px-2 py-1 text-xs" @click="addRow">+ Add item</button>
           </div>
           <div class="hidden overflow-x-auto md:block">
           <table class="min-w-full text-sm">
@@ -146,6 +147,9 @@
         <StockTree :item-code="rows[stockRow]?.item_code" selectable @select="setWarehouse" />
       </div>
     </div>
+
+    <!-- Add-multiple items picker -->
+    <AddItemsDialog v-if="showAddMultiple" @close="showAddMultiple = false" @add="onAddMultiple" />
   </div>
 </template>
 
@@ -154,6 +158,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { insertDoc, submitSalesDoc, saveDoc, itemDetails, salesDefaults, userCanBuySister, myAllowedWarehouses, userWarehouseForItem, fmt } from '@/utils/api.js'
 import Combo from '@/components/Combo.vue'
 import StockTree from '@/components/StockTree.vue'
+import AddItemsDialog from '@/components/AddItemsDialog.vue'
 
 const props = defineProps({
   doctype: String,
@@ -172,6 +177,7 @@ const busy = ref(false)
 const msg = ref('')
 const err = ref(false)
 const stockRow = ref(null)
+const showAddMultiple = ref(false) // the "Add multiple" item picker
 const allowedWh = ref(null) // warehouses this user may pick; null = unrestricted
 const applyVat = ref(true) // Apply VAT (default on); untick to drop VAT from the doc
 const hidePartNo = ref(false) // Hide Part Numbers on the printout
@@ -224,6 +230,18 @@ onMounted(async () => {
   }
 })
 function addRow() { rows.value.push({ item_code: '', qty: 1, rate: 0, price_list_rate: 0, buying_rate: 0, description: '', warehouse: '', from_sister: false, supply_company: '', supply_warehouse: '' }) }
+// "Add multiple": one row per chosen item (skip ones already added), each auto-filled
+// like a normal pick. Reuses a trailing empty row so we don't leave a blank line.
+async function onAddMultiple(codes) {
+  showAddMultiple.value = false
+  for (const code of codes || []) {
+    if (rows.value.some((r) => r.item_code === code)) continue
+    if (!rows.value.length || rows.value[rows.value.length - 1].item_code) addRow()
+    const idx = rows.value.length - 1
+    rows.value[idx].item_code = code
+    await onItem(idx, code)
+  }
+}
 // A row was un-ticked "From sister": clear its supply picks so stale values aren't sent.
 function onRowFromSister(row) {
   if (!row.from_sister) { row.supply_company = ''; row.supply_warehouse = '' }

@@ -50,6 +50,10 @@ export const myAllowedWarehouses = (company) =>
 export const userWarehouseForItem = (item_code, company) =>
   call('azzir_fleet.warehouse_cc.user_warehouse_for_item', { item_code, company })
 
+// Broad item search for the "Add multiple" picker (code / name / description / old code).
+export const itemMultiSearch = (txt) =>
+  call('azzir_fleet.alias.item_multi_search', { txt })
+
 export const workflowActions = (doctype, name) =>
   call('azzir_fleet.sales_api.workflow_actions', { doctype, name })
 export const applyWorkflowAction = (doctype, name, action) =>

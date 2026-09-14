@@ -265,6 +265,39 @@ def item_search_for_spa(txt: str | None = None) -> list:
 
 
 @frappe.whitelist()
+def item_multi_search(txt: str | None = None) -> list:
+	"""Broader item search for the /sales 'Add multiple' picker: matches by item code,
+	name, DESCRIPTION, or an alternative/old part number. Returns
+	[{item_code, item_name, description}] (description as plain text)."""
+	txt = (txt or "").strip()
+	seen: dict = {}
+	base = "select name, item_name, description from `tabItem` where disabled = 0 "
+	if not txt:
+		rows = frappe.db.sql(base + "order by modified desc limit 30", as_dict=True)
+	else:
+		like = "%%%s%%" % txt
+		rows = frappe.db.sql(
+			base + "and (name like %(t)s or item_name like %(t)s or description like %(t)s) "
+			"order by name limit 30",
+			{"t": like}, as_dict=True,
+		)
+	for r in rows:
+		seen[r.name] = {
+			"item_code": r.name, "item_name": r.item_name,
+			"description": frappe.utils.strip_html(r.description or "").strip(),
+		}
+	if txt:
+		for m in fuzzy_item_matches(txt, limit=15):
+			if m["item"] not in seen:
+				seen[m["item"]] = {
+					"item_code": m["item"],
+					"item_name": frappe.db.get_value("Item", m["item"], "item_name") or m["item"],
+					"description": "", "alt": m.get("old_code"),
+				}
+	return list(seen.values())[:40]
+
+
+@frappe.whitelist()
 def resolve_code(code: str):
 	"""Return the current item for any code (current or old). None if unknown."""
 	if not code:
