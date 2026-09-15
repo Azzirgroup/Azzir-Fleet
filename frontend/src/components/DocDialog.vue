@@ -320,8 +320,18 @@ async function save(submit) {
   try {
     // The user-chosen document date. For posting_date doctypes set set_posting_time
     // so ERPNext honours a back-/post-dated value instead of resetting it to today.
-    const dateFields = { [dateField.value]: docDate.value || today() }
-    if (dateField.value === 'posting_date') dateFields.set_posting_time = 1
+    const chosenDate = docDate.value || today()
+    const dateFields = { [dateField.value]: chosenDate }
+    if (dateField.value === 'posting_date') {
+      dateFields.set_posting_time = 1
+      // Keep the due date valid: ERPNext rejects a due date before the posting date.
+      // If moving the posting date forward leaves an earlier due date, push it up.
+      const curDue = base.value?.due_date
+      if (!curDue || curDue < chosenDate) {
+        dateFields.due_date = chosenDate
+        if (base.value?.payment_schedule?.length) dateFields.payment_schedule = []
+      }
+    }
     let saved
     if (base.value) {
       const d = { ...base.value, company: company.value, customer_name: customerName.value || undefined, items, azzir_apply_vat: applyVat.value ? 1 : 0, azzir_hide_part_no: hidePartNo.value ? 1 : 0, ...dateFields }
