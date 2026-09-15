@@ -1549,12 +1549,15 @@ _PROFORMA_TEMPLATE = """
 				{%- set _cust = doc.get("customer") or (doc.get("party_name") if doc.get("quotation_to") == "Customer" else None) -%}
 				{%- set cust_logo = frappe.db.get_value("Customer", _cust, "azzir_customer_logo") if _cust else None -%}
 				{#- Branch = the cost center, shown by name (not the raw cost-center id).
-				    Try the doc, then the first item, then its warehouse, then the
-				    creator's assigned cost center (their branch). -#}
-				{%- set _cc = doc.get("cost_center") -%}
+				    Prefer the cost center the CREATOR (doc.owner) is assigned to — if they
+				    have more than one, the first — otherwise fall back to the item's own
+				    (default) cost center, then the doc, then the warehouse. -#}
+				{%- set _cc = None -%}
+				{%- set _ucc = frappe.get_all("User Permission", filters={"user": doc.owner, "allow": "Cost Center"}, pluck="for_value") -%}
+				{%- if _ucc -%}{%- set _cc = _ucc[0] -%}{%- endif -%}
 				{%- if not _cc and doc.get("items") and doc.get("items")[0].get("cost_center") -%}{%- set _cc = doc.get("items")[0].get("cost_center") -%}{%- endif -%}
+				{%- if not _cc -%}{%- set _cc = doc.get("cost_center") -%}{%- endif -%}
 				{%- if not _cc and doc.get("items") and doc.get("items")[0].get("warehouse") -%}{%- set _cc = frappe.db.get_value("Warehouse", doc.get("items")[0].get("warehouse"), "azzir_cost_center") -%}{%- endif -%}
-				{%- if not _cc -%}{%- set _ucc = frappe.get_all("User Permission", filters={"user": doc.owner, "allow": "Cost Center"}, pluck="for_value") -%}{%- if _ucc -%}{%- set _cc = _ucc[0] -%}{%- endif -%}{%- endif -%}
 				{%- set _branch = frappe.db.get_value("Cost Center", _cc, "cost_center_name") if _cc else None -%}
 				{% if _branch and doc.doctype == "Sales Invoice" %}<div style="font-size:18px; font-weight:bold; margin-bottom:5px;">Branch: {{ _branch }}</div>{% endif %}
 				<b>__PARTY_LABEL__:</b> __PARTY_VALUE__
