@@ -53,13 +53,21 @@ def check_stock_reservation(doc, method=None):
 		reserved = _reserved_by_others(code, wh, doc.name)
 		available = max(0.0, actual - reserved)
 		if flt(qty) > available + 1e-9:
+			if flt(reserved) > 0:
+				# Genuinely short because OTHER open invoices are holding stock.
+				frappe.throw(
+					_(
+						"Item {0} in {1}: {2} in stock, {3} already reserved by other open "
+						"invoices, so only {4} is free — but this invoice needs {5}."
+					).format(frappe.bold(code), wh, _n(actual), _n(reserved), _n(available), _n(qty)),
+					title=_("Stock Already Reserved"),
+				)
+			# Nothing reserved — it's simply not enough stock on hand.
 			frappe.throw(
 				_(
-					"Item {0} in {1}: {2} in stock, {3} already reserved by other open invoices, "
-					"so only {4} is free — but this invoice needs {5}. The stock has already been "
-					"reserved and is not enough to submit."
-				).format(frappe.bold(code), wh, _n(actual), _n(reserved), _n(available), _n(qty)),
-				title=_("Stock Already Reserved"),
+					"Item {0} in {1}: only {2} in stock, but this invoice needs {3}."
+				).format(frappe.bold(code), wh, _n(actual), _n(qty)),
+				title=_("Not Enough Stock"),
 			)
 
 
