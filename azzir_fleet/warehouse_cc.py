@@ -105,8 +105,10 @@ def is_selectable(warehouse_cost_center: str | None, allowed: set | None) -> boo
 def user_warehouse_for_item(item_code: str | None = None, company: str | None = None) -> str | None:
 	"""A warehouse the user is allowed to select (attached to one of their assigned
 	cost centers), used to auto-fill the row warehouse instead of the item's default.
-	Prefers a warehouse that actually holds this item; else any of the user's. Returns
-	None if the user is unrestricted (keep ERPNext's own default) or has none."""
+	When an item is given, returns one that actually HOLDS it (in stock); if none of
+	the user's warehouses have stock, returns None so the row is left blank for a
+	manual pick. Returns None too if the user is unrestricted (keep ERPNext's own
+	default) or has no cost-centre warehouses."""
 	allowed = allowed_cost_centers()
 	if not allowed:  # None (unrestricted) or empty -> don't override
 		return None
@@ -121,9 +123,14 @@ def user_warehouse_for_item(item_code: str | None = None, company: str | None = 
 	if not warehouses:
 		return None
 	if item_code:
+		# Only auto-fill a warehouse that actually HOLDS this item. If none of the
+		# user's warehouses have stock, return None so the row is left blank and the
+		# user consciously picks one from the dropdown (which still lists every
+		# allowed warehouse, zero-stock included).
 		for w in warehouses:
 			if flt(frappe.db.get_value("Bin", {"item_code": item_code, "warehouse": w}, "actual_qty")) > 0:
 				return w
+		return None
 	return warehouses[0]
 
 
