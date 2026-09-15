@@ -170,6 +170,8 @@ fixtures = [
 					"Purchase Order-azzir_remark",
 					"Purchase Receipt-azzir_remark",
 					"Purchase Invoice-azzir_remark",
+					# Hide-a-company-everywhere checkbox.
+					"Company-azzir_hidden",
 				],
 			]
 		],
@@ -274,6 +276,9 @@ permission_query_conditions.update(
 		for dt in ("Quotation", "Sales Invoice", "Delivery Note")
 	}
 )
+# A Company ticked `azzir_hidden` is removed from every Company list / link field /
+# report filter (System Managers still see it, to un-hide it).
+permission_query_conditions["Company"] = "azzir_fleet.company_visibility.get_permission_query_conditions"
 
 has_permission = {
 	dt: "azzir_fleet.procurement.has_permission"

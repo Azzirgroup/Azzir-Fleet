@@ -234,6 +234,15 @@ CUSTOM_FIELDS = {
 	# Dynamic intercompany discount — configured PER company (no hardcoding).
 	"Company": [
 		{
+			"fieldname": "azzir_hidden",
+			"label": "Hide company everywhere",
+			"fieldtype": "Check",
+			"insert_after": "company_name",
+			"description": "When ticked, this company is removed from every Company list, "
+			"link-field dropdown and report filter for all users. System Managers still see "
+			"it (so they can un-hide it), and existing documents are unaffected.",
+		},
+		{
 			"fieldname": "azzir_intercompany_discount",
 			"label": "Intercompany Receipt Discount (%)",
 			"fieldtype": "Percent",
