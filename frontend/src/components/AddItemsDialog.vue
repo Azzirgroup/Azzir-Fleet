@@ -16,7 +16,7 @@
           <div v-else-if="!results.length" class="px-3 py-4 text-center text-sm text-gray-400">No items.</div>
           <label
             v-for="r in results" :key="r.item_code"
-            class="flex cursor-pointer items-start gap-2 border-b px-3 py-2 last:border-0 hover:bg-blue-50"
+            class="flex cursor-pointer items-start gap-2 border-b px-3 py-2 hover:bg-blue-50"
           >
             <input type="checkbox" class="mt-1" :checked="picked.has(r.item_code)" @change="toggle(r.item_code)" />
             <div class="min-w-0">
@@ -26,6 +26,14 @@
               </div>
             </div>
           </label>
+          <button
+            v-if="hasMore"
+            :disabled="loadingMore"
+            class="w-full px-3 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50 disabled:opacity-50"
+            @click="loadMore"
+          >
+            {{ loadingMore ? 'Loading…' : 'Load more results' }}
+          </button>
         </div>
       </div>
       <div class="flex items-center gap-2 border-t px-4 py-3">
@@ -44,17 +52,36 @@ import { ref, onMounted } from 'vue'
 import { itemMultiSearch } from '@/utils/api.js'
 
 const emit = defineEmits(['close', 'add'])
+const PAGE = 50
 const q = ref('')
 const results = ref([])
 const loading = ref(false)
-const picked = ref(new Set()) // item codes ticked
+const loadingMore = ref(false)
+const hasMore = ref(false) // another page is available ("Load more")
+const start = ref(0)
+const picked = ref(new Set()) // item codes ticked (kept across pages)
 const box = ref(null)
 let timer = null
 
 async function search() {
   loading.value = true
-  try { results.value = await itemMultiSearch(q.value).catch(() => []) }
-  finally { loading.value = false }
+  start.value = 0
+  try {
+    const r = await itemMultiSearch(q.value, 0, PAGE).catch(() => [])
+    results.value = r
+    hasMore.value = r.length === PAGE // a full page likely means more exist
+  } finally { loading.value = false }
+}
+async function loadMore() {
+  loadingMore.value = true
+  try {
+    const next = start.value + PAGE
+    const r = await itemMultiSearch(q.value, next, PAGE).catch(() => [])
+    const seen = new Set(results.value.map((x) => x.item_code))
+    results.value = results.value.concat(r.filter((x) => !seen.has(x.item_code)))
+    start.value = next
+    hasMore.value = r.length === PAGE
+  } finally { loadingMore.value = false }
 }
 function onInput() { clearTimeout(timer); timer = setTimeout(search, 250) }
 // Replace the Set so Vue re-renders the checkboxes.

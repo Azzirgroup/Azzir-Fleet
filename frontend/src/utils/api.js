@@ -52,8 +52,8 @@ export const userWarehouseForItem = (item_code, company) =>
   call('azzir_fleet.warehouse_cc.user_warehouse_for_item', { item_code, company })
 
 // Broad item search for the "Add multiple" picker (code / name / description / old code).
-export const itemMultiSearch = (txt) =>
-  call('azzir_fleet.alias.item_multi_search', { txt })
+export const itemMultiSearch = (txt, start = 0, page_len = 50) =>
+  call('azzir_fleet.alias.item_multi_search', { txt, start, page_len })
 
 // Customer edit (sales officers completing incomplete customers).
 export const getCustomer = (name) => call('azzir_fleet.sales_api.get_customer', { name })
