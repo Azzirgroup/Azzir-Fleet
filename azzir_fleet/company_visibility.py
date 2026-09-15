@@ -15,8 +15,10 @@ import frappe
 
 def get_permission_query_conditions(user: str | None = None) -> str:
 	user = user or frappe.session.user
-	# Admins keep seeing hidden companies so they can un-hide them.
-	if user == "Administrator" or "System Manager" in frappe.get_roles(user):
+	# ONLY the Administrator keeps seeing hidden companies — the recovery account
+	# used to un-hide them. Everyone else (System Managers included) can't see them
+	# in any list / link field / report filter.
+	if user == "Administrator":
 		return ""
 	try:
 		if not frappe.get_meta("Company").has_field("azzir_hidden"):
