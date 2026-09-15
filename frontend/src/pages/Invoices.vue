@@ -1,5 +1,5 @@
 <template>
-  <RecordList title="Sales Invoices" doctype="Sales Invoice" :columns="cols" new-route="/invoices/new" view-base="/invoices" search-field="customer_name" />
+  <RecordList title="Sales Invoices" doctype="Sales Invoice" :columns="cols" new-route="/invoices/new" view-base="/invoices" search-field="customer_name" part-number />
 </template>
 <script setup>
 import RecordList from '@/components/RecordList.vue'

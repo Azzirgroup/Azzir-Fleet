@@ -1,5 +1,5 @@
 <template>
-  <RecordList title="Quotations" doctype="Quotation" :columns="cols" new-route="/quotations/new" view-base="/quotations" search-field="party_name" />
+  <RecordList title="Quotations" doctype="Quotation" :columns="cols" new-route="/quotations/new" view-base="/quotations" search-field="party_name" part-number />
 </template>
 <script setup>
 import RecordList from '@/components/RecordList.vue'

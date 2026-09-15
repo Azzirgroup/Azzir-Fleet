@@ -8,6 +8,14 @@
         class="ml-2 w-56 rounded-md border px-3 py-1.5 text-sm"
         @keyup.enter="load"
       />
+      <input
+        v-if="partNumber"
+        v-model="pn"
+        placeholder="Part number…"
+        title="Find documents containing an item by part number, item code or old code"
+        class="w-48 rounded-md border px-3 py-1.5 text-sm"
+        @keyup.enter="load"
+      />
       <button class="rounded-md border px-3 py-1.5 text-sm" @click="load">Refresh</button>
       <button
         v-if="canCreate"
@@ -68,6 +76,7 @@ const props = defineProps({
   viewBase: String,
   searchField: { type: String, default: 'name' },
   editable: { type: Boolean, default: false },
+  partNumber: { type: Boolean, default: false },
 })
 const emit = defineEmits(['edit'])
 
@@ -76,6 +85,7 @@ const route = useRoute()
 const rows = ref([])
 const loading = ref(false)
 const q = ref('')
+const pn = ref('')
 const showDialog = ref(false)
 const canCreate = computed(() =>
   ['Quotation', 'Sales Invoice', 'Delivery Note'].includes(props.doctype),
@@ -93,11 +103,10 @@ async function load() {
     const filters = { ...props.filters }
     if (q.value) filters[props.searchField] = ['like', `%${q.value}%`]
     const fetchList = canCreate.value ? salesList : getList
-    rows.value = await fetchList(props.doctype, {
-      fields: props.columns.map((c) => c.field),
-      filters,
-      limit: 100,
-    })
+    const opts = { fields: props.columns.map((c) => c.field), filters, limit: 100 }
+    // Part-number narrowing is server-side and only on the sales-list path.
+    if (canCreate.value && props.partNumber && pn.value) opts.part_number = pn.value
+    rows.value = await fetchList(props.doctype, opts)
   } finally {
     loading.value = false
   }

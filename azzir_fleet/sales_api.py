@@ -63,18 +63,56 @@ def get_defaults() -> dict:
 	}
 
 
+def _part_number_parents(doctype: str, txt: str) -> list:
+	"""Names of sales docs whose line items carry a part number matching `txt` —
+	resolved the same way the backend item search does: current code, an old/alias
+	code, or a separator-insensitive partial ('1003402' finds '100-3402'). Powers
+	the frontend 'Part Number' list filter."""
+	from azzir_fleet.alias import _norm, _norm_sql, fuzzy_item_matches
+
+	txt = (txt or "").strip()
+	if not txt:
+		return []
+	child_dt = doctype + " Item"
+	parents: set = set()
+	# 1) resolve the text to current item codes (handles old codes too), then the
+	#    lines that use them.
+	codes = {m["item"] for m in fuzzy_item_matches(txt, limit=500) if m.get("item")}
+	if codes:
+		parents |= set(
+			frappe.get_all(child_dt, filters={"item_code": ["in", list(codes)]}, pluck="parent")
+		)
+	# 2) direct separator-insensitive partial match on the code stored on the line.
+	n = _norm(txt)
+	if n:
+		parents |= set(
+			frappe.db.sql_list(
+				f"select distinct parent from `tab{child_dt}` where {_norm_sql('item_code')} like %(n)s",
+				{"n": f"%{n}%"},
+			)
+		)
+	return list(parents)
+
+
 @frappe.whitelist()
 def sales_list(doctype: str, fields: list | str | None = None, filters: dict | str | None = None,
-               order_by: str = "modified desc", limit_page_length: int = 100, limit_start: int = 0) -> list:
+               order_by: str = "modified desc", limit_page_length: int = 100, limit_start: int = 0,
+               part_number: str | None = None) -> list:
 	"""List sales documents. A 'Document Creator' only sees the ones THEY created;
 	everyone else sees all they have permission to. Enforced on the server, not
-	just hidden in the UI."""
+	just hidden in the UI. When `part_number` is given, the list is narrowed to
+	documents that contain a matching line item (by code / old code / partial)."""
 	if doctype not in SALES_DOCTYPES:
 		frappe.throw(frappe._("Not allowed."))
 	filters = frappe.parse_json(filters) if isinstance(filters, str) else (filters or {})
 	fields = frappe.parse_json(fields) if isinstance(fields, str) else (fields or ["name"])
 	if _own_only():
 		filters["owner"] = frappe.session.user
+	if part_number and part_number.strip():
+		parents = _part_number_parents(doctype, part_number)
+		if not parents:
+			return []
+		filters["name"] = ["in", parents]
 	return frappe.get_list(
 		doctype, fields=fields, filters=filters, order_by=order_by,
 		limit_page_length=limit_page_length, limit_start=limit_start,

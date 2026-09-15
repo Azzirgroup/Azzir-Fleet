@@ -23,6 +23,7 @@ export const salesList = (doctype, opts = {}) =>
     order_by: opts.order_by || 'modified desc',
     limit_page_length: opts.limit || 100,
     limit_start: opts.start || 0,
+    part_number: opts.part_number || undefined,
   })
 
 export const getDoc = (doctype, name) =>
