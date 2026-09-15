@@ -26,6 +26,10 @@
             <label class="mb-1 block text-xs text-gray-500">Customer Name <span class="text-gray-400">(editable)</span></label>
             <input v-model="customerName" placeholder="Auto-fills from customer" class="w-full rounded-md border px-3 py-2 text-sm" />
           </div>
+          <div>
+            <label class="mb-1 block text-xs text-gray-500">{{ dateLabel }} <span class="text-gray-400">(editable)</span></label>
+            <input v-model="docDate" type="date" class="w-full rounded-md border px-3 py-2 text-sm" />
+          </div>
         </div>
 
         <div class="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-gray-700">
@@ -182,6 +186,13 @@ const allowedWh = ref(null) // warehouses this user may pick; null = unrestricte
 const applyVat = ref(true) // Apply VAT (default on); untick to drop VAT from the doc
 const hidePartNo = ref(false) // Hide Part Numbers on the printout
 
+// Editable document date. Sales Invoice / Delivery Note use posting_date; Quotation
+// uses transaction_date. Defaults to today; the user can back- or post-date the doc.
+const today = () => new Date().toISOString().slice(0, 10)
+const docDate = ref(today())
+const dateField = computed(() => (props.doctype === 'Quotation' ? 'transaction_date' : 'posting_date'))
+const dateLabel = computed(() => (props.doctype === 'Quotation' ? 'Quotation Date' : 'Posting Date'))
+
 // Buy-from-sister is per item row now (corporate-cost-center users). No header field.
 const canBuySister = ref(false)
 const sisterDoctype = (dt) => dt === 'Sales Invoice' || dt === 'Quotation'
@@ -214,6 +225,7 @@ onMounted(async () => {
     base.value = props.edit
     applyVat.value = props.edit.azzir_apply_vat === 0 ? false : true
     hidePartNo.value = !!props.edit.azzir_hide_part_no
+    docDate.value = props.edit[dateField.value] || today()
     customer.value = props.edit.party_name || props.edit.customer || ''
     customerName.value = props.edit.customer_name || ''
     rows.value = (props.edit.items || []).map((r) => ({ item_code: r.item_code, qty: r.qty, rate: r.rate, price_list_rate: r.price_list_rate || 0, buying_rate: 0, description: r.description || '', warehouse: r.warehouse || '', from_sister: !!r.azzir_row_from_sister, supply_company: r.azzir_supply_company || '', supply_warehouse: r.azzir_supply_warehouse || '' }))
@@ -306,12 +318,16 @@ async function save(submit) {
   }
   busy.value = true
   try {
+    // The user-chosen document date. For posting_date doctypes set set_posting_time
+    // so ERPNext honours a back-/post-dated value instead of resetting it to today.
+    const dateFields = { [dateField.value]: docDate.value || today() }
+    if (dateField.value === 'posting_date') dateFields.set_posting_time = 1
     let saved
     if (base.value) {
-      const d = { ...base.value, company: company.value, customer_name: customerName.value || undefined, items, azzir_apply_vat: applyVat.value ? 1 : 0, azzir_hide_part_no: hidePartNo.value ? 1 : 0 }
+      const d = { ...base.value, company: company.value, customer_name: customerName.value || undefined, items, azzir_apply_vat: applyVat.value ? 1 : 0, azzir_hide_part_no: hidePartNo.value ? 1 : 0, ...dateFields }
       saved = await saveDoc(d)
     } else {
-      const d = { doctype: props.doctype, company: company.value, customer_name: customerName.value || undefined, items, azzir_apply_vat: applyVat.value ? 1 : 0, azzir_hide_part_no: hidePartNo.value ? 1 : 0 }
+      const d = { doctype: props.doctype, company: company.value, customer_name: customerName.value || undefined, items, azzir_apply_vat: applyVat.value ? 1 : 0, azzir_hide_part_no: hidePartNo.value ? 1 : 0, ...dateFields }
       if (props.doctype === 'Quotation') { d.quotation_to = 'Customer'; d.party_name = customer.value }
       else d.customer = customer.value
       saved = await insertDoc(d)
