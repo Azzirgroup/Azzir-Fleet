@@ -15,6 +15,7 @@ declare module 'vue' {
     RecordList: typeof import('./src/components/RecordList.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    SearchBox: typeof import('./src/components/SearchBox.vue')['default']
     StockTree: typeof import('./src/components/StockTree.vue')['default']
   }
 }

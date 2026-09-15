@@ -2,19 +2,14 @@
   <div>
     <div class="mb-3 flex items-center gap-2">
       <h2 class="text-lg font-semibold">{{ title }}</h2>
-      <input
-        v-model="q"
-        placeholder="Search…"
-        class="ml-2 w-56 rounded-md border px-3 py-1.5 text-sm"
-        @keyup.enter="load"
-      />
-      <input
+      <SearchBox v-model="q" placeholder="Search…" :fetcher="suggestMain" class="ml-2 w-56" @search="load" />
+      <SearchBox
         v-if="partNumber"
         v-model="pn"
         placeholder="Part number…"
-        title="Find documents containing an item by part number, item code or old code"
-        class="w-48 rounded-md border px-3 py-1.5 text-sm"
-        @keyup.enter="load"
+        :fetcher="suggestPart"
+        class="w-52"
+        @search="load"
       />
       <button class="rounded-md border px-3 py-1.5 text-sm" @click="load">Refresh</button>
       <button
@@ -64,8 +59,9 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { getList, salesList, fmt } from '@/utils/api.js'
+import { getList, salesList, itemMultiSearch, fmt } from '@/utils/api.js'
 import DocDialog from '@/components/DocDialog.vue'
+import SearchBox from '@/components/SearchBox.vue'
 
 const props = defineProps({
   title: String,
@@ -114,6 +110,38 @@ async function load() {
 function open(r) {
   if (props.viewBase) router.push(`${props.viewBase}/${encodeURIComponent(r.name)}`)
   else if (props.editable) emit('edit', r)
+}
+
+// Suggestions for the main search box: distinct values of the searched field
+// (e.g. customer names) among the records this user can see.
+async function suggestMain(txt) {
+  const val = (txt || '').trim()
+  const filters = { ...props.filters }
+  if (val) filters[props.searchField] = ['like', `%${val}%`]
+  const fetchList = canCreate.value ? salesList : getList
+  const rows = await fetchList(props.doctype, {
+    fields: ['name', props.searchField],
+    filters,
+    limit: 8,
+  }).catch(() => [])
+  const seen = new Set()
+  const out = []
+  for (const r of rows) {
+    const v = r[props.searchField]
+    if (v && !seen.has(v)) { seen.add(v); out.push({ value: v, label: v, sub: r.name }) }
+  }
+  return out
+}
+
+// Suggestions for the part-number box: matching items (code / name / description
+// / old code), same resolver the list filter uses.
+async function suggestPart(txt) {
+  const rows = await itemMultiSearch(txt, 0, 8).catch(() => [])
+  return rows.map((r) => ({
+    value: r.item_code,
+    label: r.item_code,
+    sub: [r.item_name, r.description].filter(Boolean).join(' — '),
+  }))
 }
 onMounted(() => {
   if (route.query.new && canCreate.value) showDialog.value = true
