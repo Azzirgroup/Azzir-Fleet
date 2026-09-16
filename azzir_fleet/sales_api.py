@@ -307,6 +307,9 @@ def make_next(source_doctype: str, source_name: str, target: str) -> dict:
 		"doctype": target,
 		"data": {
 			"customer": doc.get("customer") or doc.get("party_name"),
+			# Carry the (possibly edited) customer name forward so the next document
+			# keeps it instead of resetting to the customer master's name.
+			"customer_name": doc.get("customer_name"),
 			"azzir_apply_vat": doc.get("azzir_apply_vat"),
 			"items": [
 				{
@@ -420,3 +423,11 @@ def has_app_permission() -> bool:
 	roles = set(frappe.get_roles())
 	allowed = {"Sales User", "Sales Manager", "Accounts User", "Accounts Manager", "System Manager", "Sales Portal"}
 	return bool(roles & allowed)
+
+
+@frappe.whitelist()
+def can_create(doctype: str) -> bool:
+	"""Whether the current user may CREATE `doctype`. Drives the /sales frontend so
+	the 'New' / 'create next' buttons only show when the user actually has the
+	permission (e.g. Delivery Note is gated for users without stock/delivery rights)."""
+	return bool(frappe.has_permission(doctype, "create"))

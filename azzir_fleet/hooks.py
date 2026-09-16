@@ -191,6 +191,14 @@ fixtures = [
 					"Quotation Item-cost_center-ignore_user_permissions",
 					"Sales Invoice Item-cost_center-ignore_user_permissions",
 					"Delivery Note Item-cost_center-ignore_user_permissions",
+					# Editable, sticky Customer Name (drop fetch_from so a manual edit
+					# survives; make it writable).
+					"Quotation-customer_name-read_only",
+					"Quotation-customer_name-fetch_from",
+					"Sales Invoice-customer_name-read_only",
+					"Sales Invoice-customer_name-fetch_from",
+					"Delivery Note-customer_name-read_only",
+					"Delivery Note-customer_name-fetch_from",
 				],
 			]
 		],

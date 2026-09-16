@@ -998,9 +998,16 @@ def _exempt_cost_center_from_user_permissions():
 def _make_customer_name_editable():
 	"""Let users override the fetched Customer Name on sales documents. It still
 	auto-fills from the customer, but becomes editable and carries downstream
-	(Quotation -> Sales Invoice -> Delivery Note)."""
+	(Quotation -> Sales Invoice -> Delivery Note).
+
+	We also CLEAR the field's fetch_from: otherwise Frappe re-fetches customer_name
+	from the Customer master before our before_validate capture runs, wiping a manual
+	edit (a fresh walk-in name saved back as the master name). With fetch_from gone,
+	the edited value survives to capture_override; a blank name is still filled from
+	the master by ERPNext's set_missing_values on validate."""
 	for dt in ("Quotation", "Sales Invoice", "Delivery Note"):
 		make_property_setter(dt, "customer_name", "read_only", 0, "Check", validate_fields_for_doctype=False)
+		make_property_setter(dt, "customer_name", "fetch_from", "", "Data", validate_fields_for_doctype=False)
 
 
 def _setup_material_issue_workflow():
