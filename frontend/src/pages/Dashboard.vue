@@ -10,9 +10,9 @@
 
     <h3 class="mb-2 mt-6 text-sm font-semibold text-gray-600">Quick actions</h3>
     <div class="flex flex-wrap gap-2">
-      <router-link to="/quotations?new=1" class="azzir-brand rounded-md px-3 py-2 text-sm text-white">+ Quotation</router-link>
-      <router-link to="/invoices?new=1" class="azzir-brand rounded-md px-3 py-2 text-sm text-white">+ Sales Invoice</router-link>
-      <router-link to="/delivery-notes?new=1" class="azzir-brand rounded-md px-3 py-2 text-sm text-white">+ Delivery Note</router-link>
+      <router-link v-if="perms['Quotation']" to="/quotations?new=1" class="azzir-brand rounded-md px-3 py-2 text-sm text-white">+ Quotation</router-link>
+      <router-link v-if="perms['Sales Invoice']" to="/invoices?new=1" class="azzir-brand rounded-md px-3 py-2 text-sm text-white">+ Sales Invoice</router-link>
+      <router-link v-if="perms['Delivery Note']" to="/delivery-notes?new=1" class="azzir-brand rounded-md px-3 py-2 text-sm text-white">+ Delivery Note</router-link>
       <router-link to="/stock" class="rounded-md border px-3 py-2 text-sm">See All Warehouses</router-link>
     </div>
 
@@ -38,12 +38,19 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { dashboardStats, getList, fmt } from '@/utils/api.js'
+import { dashboardStats, getList, canCreateDoc, fmt } from '@/utils/api.js'
 
 const kpis = ref([])
 const recent = ref([])
+// Per-doctype create permission — hides the quick-action buttons the user can't use.
+const perms = ref({})
 
 onMounted(async () => {
+  try {
+    const targets = ['Quotation', 'Sales Invoice', 'Delivery Note']
+    const entries = await Promise.all(targets.map(async (t) => [t, await canCreateDoc(t).catch(() => false)]))
+    perms.value = Object.fromEntries(entries)
+  } catch (e) { perms.value = {} }
   try {
     const s = await dashboardStats()
     kpis.value = [
