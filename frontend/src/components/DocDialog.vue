@@ -347,6 +347,9 @@ async function save(submit) {
       const d = { doctype: props.doctype, company: company.value, customer_name: customerName.value || undefined, items, azzir_apply_vat: applyVat.value ? 1 : 0, azzir_hide_part_no: hidePartNo.value ? 1 : 0, ...dateFields }
       if (props.doctype === 'Quotation') { d.quotation_to = 'Customer'; d.party_name = customer.value }
       else d.customer = customer.value
+      // Keep the link to the source quotation so the invoice inherits its approval
+      // requirement (a below-price quotation -> the invoice also needs approval).
+      if (props.initial?.azzir_source_quotation) d.azzir_source_quotation = props.initial.azzir_source_quotation
       saved = await insertDoc(d)
     }
     if (submit) {

@@ -16,7 +16,19 @@ from frappe.utils import flt
 
 
 def flag_below_cost(doc, method=None):
-	below = False
+	below = _any_line_below(doc)
+	# Carry the approval requirement forward: a Sales Invoice made from a quotation
+	# that itself needed approval (sold below price) must ALSO be approved, even if
+	# its own line prices no longer look below (e.g. price edited up, or an item with
+	# no selling price on record).
+	if not below and doc.doctype == "Sales Invoice" and doc.get("azzir_source_quotation"):
+		below = bool(frappe.db.get_value("Quotation", doc.azzir_source_quotation, "azzir_below_cost"))
+	doc.azzir_below_cost = 1 if below else 0
+
+
+def _any_line_below(doc):
+	"""True when any line's rate is below the item's selling (list) price — or below
+	its buying/cost price when the item has no selling price on record."""
 	for row in doc.get("items") or []:
 		code = row.get("item_code")
 		if not code:
@@ -24,15 +36,12 @@ def flag_below_cost(doc, method=None):
 		selling = _selling_rate(row, doc)
 		if selling:
 			if flt(row.rate) < selling:
-				below = True
-				break
+				return True
 		else:
-			# No selling price on record — fall back to the buying/cost price.
 			buying = _buying_rate(code, row.get("warehouse"))
 			if buying and flt(row.rate) < buying:
-				below = True
-				break
-	doc.azzir_below_cost = 1 if below else 0
+				return True
+	return False
 
 
 def _selling_rate(row, doc):

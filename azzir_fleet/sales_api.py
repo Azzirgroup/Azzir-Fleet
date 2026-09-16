@@ -310,6 +310,11 @@ def make_next(source_doctype: str, source_name: str, target: str) -> dict:
 			# Carry the (possibly edited) customer name forward so the next document
 			# keeps it instead of resetting to the customer master's name.
 			"customer_name": doc.get("customer_name"),
+			# Link back to the source Quotation (Sales Invoice only) so the invoice
+			# inherits its approval requirement (below_cost.flag_below_cost).
+			"azzir_source_quotation": (
+				source_name if source_doctype == "Quotation" and target == "Sales Invoice" else None
+			),
 			"azzir_apply_vat": doc.get("azzir_apply_vat"),
 			"items": [
 				{
