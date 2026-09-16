@@ -199,10 +199,17 @@ const sisterDoctype = (dt) => dt === 'Sales Invoice' || dt === 'Quotation'
 const sisterEligible = computed(() => canBuySister.value && sisterDoctype(props.doctype))
 
 const total = computed(() => rows.value.reduce((s, r) => s + (Number(r.qty) || 0) * (Number(r.rate) || 0), 0))
-// True when any line is priced BELOW its buying price — the submit then routes to
+// True when any line is priced BELOW its selling (list) price — or below its
+// buying price when the item has no selling price. The submit then routes to
 // approval, so the button reads "Send for Approval" instead of "Save & Submit".
 const belowCost = computed(() =>
-  rows.value.some((r) => r.item_code && Number(r.rate) > 0 && Number(r.buying_rate) > 0 && Number(r.rate) < Number(r.buying_rate)),
+  rows.value.some((r) => {
+    if (!r.item_code || !(Number(r.rate) > 0)) return false
+    const selling = Number(r.price_list_rate) || 0
+    if (selling > 0) return Number(r.rate) < selling
+    const buying = Number(r.buying_rate) || 0
+    return buying > 0 && Number(r.rate) < buying
+  }),
 )
 
 // Changing the company clears the picked customer (it may not belong to the new one)
