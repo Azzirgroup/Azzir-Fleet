@@ -26,6 +26,11 @@ export const salesList = (doctype, opts = {}) =>
     part_number: opts.part_number || undefined,
   })
 
+// Whether the current user may create a doctype (gates the frontend's New /
+// create-next buttons, e.g. Delivery Note is permission-based).
+export const canCreateDoc = (doctype) =>
+  call('azzir_fleet.sales_api.can_create', { doctype })
+
 export const getDoc = (doctype, name) =>
   call('frappe.client.get', { doctype, name })
 

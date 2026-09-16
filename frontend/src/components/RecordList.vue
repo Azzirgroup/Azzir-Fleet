@@ -13,12 +13,18 @@
       />
       <button class="rounded-md border px-3 py-1.5 text-sm" @click="load">Refresh</button>
       <button
-        v-if="canCreate"
+        v-if="isSalesDoctype && mayCreate"
         class="azzir-brand ml-auto rounded-md px-3 py-1.5 text-sm text-white"
         @click="showDialog = true"
       >
         + New
       </button>
+    </div>
+    <div
+      v-if="isSalesDoctype && mayCreate === false"
+      class="mb-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-700"
+    >
+      You don't have permission to create {{ title }}. Please ask your manager for access.
     </div>
 
     <DocDialog
@@ -59,7 +65,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { getList, salesList, itemMultiSearch, fmt } from '@/utils/api.js'
+import { getList, salesList, itemMultiSearch, canCreateDoc, fmt } from '@/utils/api.js'
 import DocDialog from '@/components/DocDialog.vue'
 import SearchBox from '@/components/SearchBox.vue'
 
@@ -83,9 +89,13 @@ const loading = ref(false)
 const q = ref('')
 const pn = ref('')
 const showDialog = ref(false)
-const canCreate = computed(() =>
+// This list is one of the creatable sales doctypes (drives salesList vs getList).
+const isSalesDoctype = computed(() =>
   ['Quotation', 'Sales Invoice', 'Delivery Note'].includes(props.doctype),
 )
+// Whether THIS user may create it — null until checked, then true/false. Gates the
+// New button; false shows a "ask your manager" note (e.g. Delivery Note).
+const mayCreate = ref(null)
 
 function onSaved(doc) {
   showDialog.value = false
@@ -98,10 +108,10 @@ async function load() {
   try {
     const filters = { ...props.filters }
     if (q.value) filters[props.searchField] = ['like', `%${q.value}%`]
-    const fetchList = canCreate.value ? salesList : getList
+    const fetchList = isSalesDoctype.value ? salesList : getList
     const opts = { fields: props.columns.map((c) => c.field), filters, limit: 100 }
     // Part-number narrowing is server-side and only on the sales-list path.
-    if (canCreate.value && props.partNumber && pn.value) opts.part_number = pn.value
+    if (isSalesDoctype.value && props.partNumber && pn.value) opts.part_number = pn.value
     rows.value = await fetchList(props.doctype, opts)
   } finally {
     loading.value = false
@@ -118,7 +128,7 @@ async function suggestMain(txt) {
   const val = (txt || '').trim()
   const filters = { ...props.filters }
   if (val) filters[props.searchField] = ['like', `%${val}%`]
-  const fetchList = canCreate.value ? salesList : getList
+  const fetchList = isSalesDoctype.value ? salesList : getList
   const rows = await fetchList(props.doctype, {
     fields: ['name', props.searchField],
     filters,
@@ -143,8 +153,11 @@ async function suggestPart(txt) {
     sub: [r.item_name, r.description].filter(Boolean).join(' — '),
   }))
 }
-onMounted(() => {
-  if (route.query.new && canCreate.value) showDialog.value = true
+onMounted(async () => {
+  if (isSalesDoctype.value) {
+    mayCreate.value = await canCreateDoc(props.doctype).catch(() => false)
+    if (route.query.new && mayCreate.value) showDialog.value = true
+  }
   load()
 })
 defineExpose({ load })

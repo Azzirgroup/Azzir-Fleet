@@ -18,9 +18,9 @@
             @click="doAction(a.action)">{{ a.action }}</button>
           <span v-if="!actions.length" class="self-center text-xs text-gray-500">Awaiting approval</span>
         </template>
-        <!-- Submitted: create next in the flow -->
+        <!-- Submitted: create next in the flow (only the ones this user may create) -->
         <template v-else-if="doc.docstatus === 1">
-          <button v-for="a in nextActions" :key="a.target" :disabled="busy" class="azzir-brand rounded-md px-3 py-1.5 text-sm text-white" @click="createNext(a.target)">
+          <button v-for="a in nextActions" :key="a.target" v-show="creatable[a.target] !== false" :disabled="busy" class="azzir-brand rounded-md px-3 py-1.5 text-sm text-white" @click="createNext(a.target)">
             + {{ a.label }}
           </button>
         </template>
@@ -28,6 +28,9 @@
     </div>
 
     <div v-if="msg" class="mb-3 rounded-md px-3 py-2 text-sm" :class="err ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'">{{ msg }}</div>
+    <div v-if="doc.docstatus === 1 && blockedNext.length" class="mb-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-700">
+      You don't have permission to create {{ blockedNext.map((a) => a.label).join(', ') }}. Please ask your manager for access.
+    </div>
 
     <div v-if="loading" class="py-10 text-center text-gray-400">Loading…</div>
     <template v-else>
@@ -66,7 +69,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { getDoc, workflowActions, applyWorkflowAction, makeNext, fmt } from '@/utils/api.js'
+import { getDoc, workflowActions, applyWorkflowAction, makeNext, canCreateDoc, fmt } from '@/utils/api.js'
 import DocDialog from '@/components/DocDialog.vue'
 
 const props = defineProps({ doctype: String, name: String })
@@ -95,6 +98,16 @@ const nextActions = computed(() => {
   if (props.doctype === 'Sales Invoice') return [{ target: 'Delivery Note', label: 'Delivery Note' }, { target: 'Payment Entry', label: 'Payment Entry' }]
   return []
 })
+// Per-target create permission (false = not allowed) — gates the buttons and drives
+// the "ask your manager" note. Loaded once the submitted doc is shown.
+const creatable = ref({})
+const blockedNext = computed(() => nextActions.value.filter((a) => creatable.value[a.target] === false))
+async function loadCreatePerms() {
+  const entries = await Promise.all(
+    nextActions.value.map(async (a) => [a.target, await canCreateDoc(a.target).catch(() => false)]),
+  )
+  creatable.value = Object.fromEntries(entries)
+}
 
 async function load() {
   loading.value = true
@@ -103,6 +116,7 @@ async function load() {
     actions.value = doc.value.docstatus === 0
       ? ((await workflowActions(props.doctype, props.name).catch(() => ({}))).actions || [])
       : []
+    if (doc.value.docstatus === 1) await loadCreatePerms()
   } finally { loading.value = false }
 }
 onMounted(load)
@@ -122,6 +136,11 @@ async function doAction(action) {
 function onEdited() { editing.value = false; load() }
 
 async function createNext(target) {
+  if (creatable.value[target] === false) {
+    err.value = true
+    msg.value = `You don't have permission to create a ${target}. Please ask your manager for access.`
+    return
+  }
   busy.value = true; msg.value = ''
   try {
     const r = await makeNext(props.doctype, props.name, target)
