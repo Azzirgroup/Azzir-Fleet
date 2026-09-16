@@ -948,12 +948,58 @@ def _setup_below_cost_workflow():
 	# Same below-cost approval on both Sales Invoice and Quotation.
 	_make_below_cost_workflow("Sales Below Cost Approval", "Sales Invoice", "Accounts User", "Accounts Manager")
 	_make_below_cost_workflow("Quotation Below Cost Approval", "Quotation", "Sales User", "Sales Manager")
-	# Purchase Orders under an item's Minimum Order Qty: same approval shape, driven
-	# by the azzir_below_min_qty flag. Active from the start (the user asked for it).
-	_make_below_cost_workflow(
-		"Purchase Below Minimum Qty Approval", "Purchase Order", "Purchase User", "Purchase Manager",
-		flag="azzir_below_min_qty", active=1,
-	)
+	# EVERY Purchase Order goes through approval (see _require_po_approval).
+	_require_po_approval()
+
+
+PO_WORKFLOW = "Purchase Order Approval"
+_OLD_PO_WORKFLOW = "Purchase Below Minimum Qty Approval"
+
+
+def _require_po_approval():
+	"""EVERY Purchase Order must be approved: Draft -> Request Approval -> Pending
+	Approval -> Approve (Purchase Manager). No direct Submit, regardless of quantity.
+	Idempotent — rewrites the workflow to this shape on each migrate, and retires the
+	older below-min-qty-only PO workflow so there's a single active PO workflow."""
+	_ensure_workflow_states_actions()
+	submit_role, approve_role = "Purchase User", "Purchase Manager"
+	states = [
+		{"state": "Draft", "doc_status": "0", "allow_edit": submit_role},
+		{"state": "Pending Approval", "doc_status": "0", "allow_edit": approve_role},
+		{"state": "Approved", "doc_status": "1", "allow_edit": approve_role},
+	]
+	transitions = [
+		# Only path out of Draft is Request Approval — no unconditional Submit.
+		{"state": "Draft", "action": "Request Approval", "next_state": "Pending Approval",
+		 "allowed": submit_role},
+		# Separation of duties: the creator can't approve/reject their own PO.
+		{"state": "Pending Approval", "action": "Approve", "next_state": "Approved",
+		 "allowed": approve_role, "allow_self_approval": 0},
+		{"state": "Pending Approval", "action": "Reject", "next_state": "Draft",
+		 "allowed": approve_role, "allow_self_approval": 0},
+	]
+	# Retire the old min-qty-only workflow (only one active workflow per doctype).
+	if frappe.db.exists("Workflow", _OLD_PO_WORKFLOW):
+		old = frappe.get_doc("Workflow", _OLD_PO_WORKFLOW)
+		if old.is_active:
+			old.is_active = 0
+			old.save(ignore_permissions=True)
+	if frappe.db.exists("Workflow", PO_WORKFLOW):
+		wf = frappe.get_doc("Workflow", PO_WORKFLOW)
+		wf.is_active = 1
+		wf.workflow_state_field = "workflow_state"
+		wf.set("states", states)
+		wf.set("transitions", transitions)
+		wf.save(ignore_permissions=True)
+	else:
+		frappe.get_doc(
+			{
+				"doctype": "Workflow", "workflow_name": PO_WORKFLOW,
+				"document_type": "Purchase Order", "is_active": 1,
+				"send_email_alert": 0, "workflow_state_field": "workflow_state",
+				"states": states, "transitions": transitions,
+			}
+		).insert(ignore_permissions=True)
 
 
 def _show_item_code_only_in_links():
@@ -1090,6 +1136,7 @@ def _enforce_no_self_approval():
 		"Sales Below Cost Approval",
 		"Quotation Below Cost Approval",
 		"Purchase Below Minimum Qty Approval",
+		"Purchase Order Approval",
 	):
 		if not frappe.db.exists("Workflow", name):
 			continue
