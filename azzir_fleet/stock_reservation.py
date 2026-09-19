@@ -2,11 +2,11 @@
 # For license information, please see license.txt
 """Soft stock reservation for Sales Invoices.
 
-Other OPEN invoices hold ("reserve") their stock so it can't be sold twice:
-  - draft invoices (docstatus 0)                      -> full qty
+Only SUBMITTED, undelivered invoices hold ("reserve") their stock so it can't be
+sold twice:
   - submitted, no stock update, not yet delivered     -> qty - delivered_qty
-  (submitted invoices that already moved stock via update_stock reduced the Bin
-  qty, so they're not counted again.)
+  (Drafts do NOT reserve. Submitted invoices that already moved stock via
+  update_stock reduced the Bin qty, so they're not counted again either.)
 
 On submit, an invoice is blocked if on-hand minus everyone else's reservation is
 less than it needs. This is a HARD block — NO ONE bypasses it, not even
@@ -80,22 +80,17 @@ def reserved_by_warehouse(item_code: str, exclude_invoice: str | None = None) ->
 		"""
 		select wh, sum(q) from (
 			select sii.warehouse wh,
-				case when si.docstatus = 0 then sii.qty
-					when si.docstatus = 1 and si.update_stock = 0
-						then greatest(sii.qty - ifnull(sii.delivered_qty, 0), 0)
-					else 0 end q
+				greatest(sii.qty - ifnull(sii.delivered_qty, 0), 0) q
 			from `tabSales Invoice Item` sii
 			join `tabSales Invoice` si on si.name = sii.parent
-			where sii.item_code = %(it)s and si.name != %(ex)s and si.docstatus in (0, 1)
+			where sii.item_code = %(it)s and si.name != %(ex)s
+			  and si.docstatus = 1 and si.update_stock = 0
 			union all
-			select pi.warehouse wh,
-				case when si.docstatus = 0 then pi.qty
-					when si.docstatus = 1 and si.update_stock = 0 then pi.qty
-					else 0 end q
+			select pi.warehouse wh, pi.qty q
 			from `tabPacked Item` pi
 			join `tabSales Invoice` si on si.name = pi.parent
 			where pi.parenttype = 'Sales Invoice' and pi.item_code = %(it)s
-			  and si.name != %(ex)s and si.docstatus in (0, 1)
+			  and si.name != %(ex)s and si.docstatus = 1 and si.update_stock = 0
 		) t
 		where t.wh is not null and t.wh != '' group by t.wh
 		""",
@@ -107,34 +102,27 @@ def reserved_by_warehouse(item_code: str, exclude_invoice: str | None = None) ->
 def _reserved_by_others(code: str, wh: str, current_name: str) -> float:
 	vals = {"code": code, "wh": wh, "cur": current_name or ""}
 
-	# Plain Sales Invoice lines (undelivered qty on submitted, no-stock-update ones).
+	# Plain Sales Invoice lines: only SUBMITTED, no-stock-update, undelivered qty.
 	from_items = frappe.db.sql(
 		"""
-		select sum(case
-			when si.docstatus = 0 then sii.qty
-			when si.docstatus = 1 and si.update_stock = 0
-				then greatest(sii.qty - ifnull(sii.delivered_qty, 0), 0)
-			else 0 end)
+		select sum(greatest(sii.qty - ifnull(sii.delivered_qty, 0), 0))
 		from `tabSales Invoice Item` sii
 		join `tabSales Invoice` si on si.name = sii.parent
 		where sii.item_code = %(code)s and sii.warehouse = %(wh)s
-		  and si.name != %(cur)s and si.docstatus in (0, 1)
+		  and si.name != %(cur)s and si.docstatus = 1 and si.update_stock = 0
 		""",
 		vals,
 	)
 
-	# Bundle components (Packed Items) on other Sales Invoices. Packed Item has no
-	# delivered_qty, so submitted-no-update-stock rows reserve their full qty.
+	# Bundle components (Packed Items) on other SUBMITTED, no-stock-update invoices.
 	from_components = frappe.db.sql(
 		"""
-		select sum(case
-			when si.docstatus = 0 then pi.qty
-			when si.docstatus = 1 and si.update_stock = 0 then pi.qty
-			else 0 end)
+		select sum(pi.qty)
 		from `tabPacked Item` pi
 		join `tabSales Invoice` si on si.name = pi.parent
 		where pi.parenttype = 'Sales Invoice' and pi.item_code = %(code)s
-		  and pi.warehouse = %(wh)s and si.name != %(cur)s and si.docstatus in (0, 1)
+		  and pi.warehouse = %(wh)s and si.name != %(cur)s
+		  and si.docstatus = 1 and si.update_stock = 0
 		""",
 		vals,
 	)
