@@ -1,0 +1,55 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-09-21 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "sister_defaults_section",
+  "azzir_default_company",
+  "azzir_default_warehouse"
+ ],
+ "fields": [
+  {
+   "fieldname": "sister_defaults_section",
+   "fieldtype": "Section Break",
+   "label": "Buy-From-Sister Defaults"
+  },
+  {
+   "fieldname": "azzir_default_company",
+   "fieldtype": "Link",
+   "label": "Default Company",
+   "options": "Company",
+   "description": "The default sister company to buy from when a line is marked 'From sister'."
+  },
+  {
+   "fieldname": "azzir_default_warehouse",
+   "fieldtype": "Link",
+   "label": "Default Warehouse (group)",
+   "options": "Warehouse",
+   "description": "Pick a GROUP warehouse. When a user ticks 'From sister', the child warehouse under this group (nested groups included) with the MOST stock of the item is auto-filled as the supply warehouse."
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-09-21 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Azzir Fleet",
+ "name": "Azzir Fleet Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

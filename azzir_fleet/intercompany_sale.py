@@ -94,6 +94,39 @@ def supply_warehouse_link_query(doctype: str, txt: str, searchfield: str, start:
 
 
 @frappe.whitelist()
+def sister_default_for_item(item_code: str | None = None) -> dict:
+	"""Default sister source for a line when 'From sister' is ticked, from Azzir Fleet
+	Settings: the Default Company, and the leaf warehouse UNDER the Default (group)
+	Warehouse — nested groups included — that holds the MOST stock of the item.
+	Returns {supply_company, supply_warehouse, qty}; supply_warehouse is None when no
+	child warehouse under the group has any stock. {} when nothing is configured."""
+	if not item_code:
+		return {}
+	company = frappe.db.get_single_value("Azzir Fleet Settings", "azzir_default_company")
+	group_wh = frappe.db.get_single_value("Azzir Fleet Settings", "azzir_default_warehouse")
+	if not company or not group_wh:
+		return {}
+	bounds = frappe.db.get_value("Warehouse", group_wh, ["lft", "rgt"])
+	if not bounds or bounds[0] is None:
+		return {}
+	lft, rgt = bounds
+	# Best (most stock) LEAF warehouse anywhere under the group, in the default company.
+	row = frappe.db.sql(
+		"""select b.warehouse, sum(b.actual_qty) qty
+		   from `tabBin` b join `tabWarehouse` w on w.name = b.warehouse
+		   where b.item_code = %(item)s and b.actual_qty > 0
+		     and w.company = %(co)s and w.is_group = 0 and w.disabled = 0
+		     and w.lft >= %(lft)s and w.rgt <= %(rgt)s
+		   group by b.warehouse having qty > 0 order by qty desc limit 1""",
+		{"item": item_code, "co": company, "lft": lft, "rgt": rgt},
+		as_dict=True,
+	)
+	if not row:
+		return {"supply_company": company, "supply_warehouse": None, "qty": 0}
+	return {"supply_company": company, "supply_warehouse": row[0].warehouse, "qty": flt(row[0].qty)}
+
+
+@frappe.whitelist()
 def user_can_buy_from_sister() -> bool:
 	"""Whether the current user may use the sister-company purchase feature
 	(they hold at least one Corporate cost center). Administrator / System Manager

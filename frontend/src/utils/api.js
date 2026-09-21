@@ -75,6 +75,10 @@ export const stockTree = (item_code, groups_only = 0) =>
 
 export const salesDefaults = () => call('azzir_fleet.sales_api.get_defaults')
 export const userCanBuySister = () => call('azzir_fleet.intercompany_sale.user_can_buy_from_sister')
+// Default sister source for a 'From sister' line: the configured default company +
+// the child warehouse (under the configured group) with the most stock of the item.
+export const sisterDefaultForItem = (item_code) =>
+  call('azzir_fleet.intercompany_sale.sister_default_for_item', { item_code })
 export const dashboardStats = () => call('azzir_fleet.sales_api.dashboard_stats')
 export const itemDetails = (item_code, customer, company, price_list, qty = 1) =>
   call('azzir_fleet.sales_api.item_details', { item_code, customer, company, price_list, qty })

@@ -159,7 +159,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { insertDoc, submitSalesDoc, saveDoc, itemDetails, salesDefaults, userCanBuySister, myAllowedWarehouses, userWarehouseForItem, fmt } from '@/utils/api.js'
+import { insertDoc, submitSalesDoc, saveDoc, itemDetails, salesDefaults, userCanBuySister, sisterDefaultForItem, myAllowedWarehouses, userWarehouseForItem, fmt } from '@/utils/api.js'
 import Combo from '@/components/Combo.vue'
 import StockTree from '@/components/StockTree.vue'
 import AddItemsDialog from '@/components/AddItemsDialog.vue'
@@ -261,9 +261,20 @@ async function onAddMultiple(codes) {
     await onItem(idx, code)
   }
 }
-// A row was un-ticked "From sister": clear its supply picks so stale values aren't sent.
-function onRowFromSister(row) {
-  if (!row.from_sister) { row.supply_company = ''; row.supply_warehouse = '' }
+// "From sister" toggled: un-ticked -> clear supply picks; ticked -> auto-fill the
+// default sister company + the in-group warehouse with the most stock of the item.
+async function onRowFromSister(row) {
+  if (!row.from_sister) { row.supply_company = ''; row.supply_warehouse = ''; return }
+  await fillSisterDefault(row)
+}
+// Auto-fill a row's sister source from Azzir Fleet Settings (default company + the
+// child warehouse under the default group holding the most stock of the item).
+async function fillSisterDefault(row) {
+  if (!row.from_sister || !row.item_code) return
+  const d = await sisterDefaultForItem(row.item_code).catch(() => null)
+  if (!d) return
+  if (d.supply_company) row.supply_company = d.supply_company
+  if (d.supply_warehouse) row.supply_warehouse = d.supply_warehouse
 }
 function setWarehouse(wh) {
   if (stockRow.value !== null) {
@@ -293,6 +304,8 @@ async function onItem(i, item_code) {
     const wh = await userWarehouseForItem(item_code, company.value).catch(() => null)
     if (wh && !rows.value[i].warehouse) rows.value[i].warehouse = wh
   }
+  // If this line is sourced from a sister, refresh its sister supply for the new item.
+  if (rows.value[i].from_sister) fillSisterDefault(rows.value[i])
 }
 
 // Fill in buying rates for prefilled rows (edit / next-doc) so the submit button
