@@ -172,6 +172,9 @@ fixtures = [
 					"Purchase Invoice-azzir_remark",
 					# Hide-a-company-everywhere checkbox.
 					"Company-azzir_hidden",
+					# Sales Invoice delivery progress (top of form + list view).
+					"Sales Invoice-azzir_delivery_status",
+					"Sales Invoice-azzir_per_delivered",
 				],
 			]
 		],
@@ -411,6 +414,9 @@ doc_events = {
 			"azzir_fleet.customer_name.restore_override",
 			"azzir_fleet.warehouse.require_warehouse_for_stock",
 		],
+		# Refresh the linked Sales Invoice's delivery % / status after a delivery.
+		"on_submit": "azzir_fleet.delivery_status.refresh_from_delivery_note",
+		"on_cancel": "azzir_fleet.delivery_status.refresh_from_delivery_note",
 	},
 	"Sales Invoice": {
 		"before_validate": "azzir_fleet.customer_name.capture_override",
@@ -428,6 +434,7 @@ doc_events = {
 			"azzir_fleet.below_cost.flag_below_cost",
 			"azzir_fleet.below_cost.set_previous_price",
 			"azzir_fleet.customer_name.restore_override",
+			"azzir_fleet.delivery_status.apply",
 		],
 		"before_submit": [
 			"azzir_fleet.intercompany_sale.process_sister_purchase",

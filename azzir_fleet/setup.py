@@ -165,6 +165,31 @@ CUSTOM_FIELDS = {
 			"no_copy": 1,
 			"description": "Auto-set when any item's rate is below its valuation/buying price.",
 		},
+		# Delivery progress — shown near the top of the form and in the list view.
+		{
+			"fieldname": "azzir_delivery_status",
+			"label": "Delivery Status",
+			"fieldtype": "Select",
+			"options": "Not Delivered\nPartly Delivered\nFully Delivered",
+			"insert_after": "customer_name",
+			"read_only": 1,
+			"no_copy": 1,
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"allow_on_submit": 1,
+			"description": "Auto-set from how much of the stock items has been delivered.",
+		},
+		{
+			"fieldname": "azzir_per_delivered",
+			"label": "% Delivered",
+			"fieldtype": "Percent",
+			"insert_after": "azzir_delivery_status",
+			"read_only": 1,
+			"no_copy": 1,
+			"in_list_view": 1,
+			"allow_on_submit": 1,
+			"description": "Percentage of the invoice's stock items that has been delivered.",
+		},
 	],
 	# Purchase Order raised below an item's Minimum Order Qty: the order is ALLOWED
 	# (ERPNext's hard block is switched off in overrides.AzzirPurchaseOrder) but
