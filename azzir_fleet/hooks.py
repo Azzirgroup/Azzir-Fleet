@@ -202,6 +202,9 @@ fixtures = [
 					"Sales Invoice-customer_name-fetch_from",
 					"Delivery Note-customer_name-read_only",
 					"Delivery Note-customer_name-fetch_from",
+					# Per-row Source/Target Warehouse locked on Stock Entry items.
+					"Stock Entry Detail-s_warehouse-read_only",
+					"Stock Entry Detail-t_warehouse-read_only",
 				],
 			]
 		],

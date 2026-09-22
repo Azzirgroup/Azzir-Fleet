@@ -809,6 +809,7 @@ def after_migrate():
 		("below_cost_no_self_approval", _enforce_no_self_approval),
 		("item_link_code_only", _show_item_code_only_in_links),
 		("warehouse_mandatory", _make_warehouse_mandatory),
+		("stock_entry_row_wh_readonly", _stock_entry_row_warehouses_readonly),
 		("cost_center_user_perm_exempt", _exempt_cost_center_from_user_permissions),
 		("editable_customer_name", _make_customer_name_editable),
 		# Backfill delivery %/status on invoices missing it (custom fields already
@@ -1077,6 +1078,16 @@ def _backfill_delivery_status():
 	from azzir_fleet.delivery_status import backfill
 
 	backfill(only_empty=True)
+
+
+def _stock_entry_row_warehouses_readonly():
+	"""Lock the per-ROW Source/Target Warehouse on Stock Entry items: users set them
+	via the header 'Set Source Warehouse' / 'Set Target Warehouse' (which propagate to
+	the rows) and can't edit them line by line. Header fields stay editable."""
+	for field in ("s_warehouse", "t_warehouse"):
+		make_property_setter(
+			"Stock Entry Detail", field, "read_only", 1, "Check", validate_fields_for_doctype=False
+		)
 
 
 def _make_customer_name_editable():
