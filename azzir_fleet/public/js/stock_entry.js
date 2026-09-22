@@ -5,10 +5,19 @@
 frappe.provide("azzir_fleet");
 
 function set_stock_item_query(frm) {
-	// Item Code is intentionally NOT filtered by stock — ANY item can be picked
-	// (old codes still resolve via the standard alias-aware item search). Whether the
-	// source warehouse actually has enough stock is checked at submit, not here — so
-	// selecting an item never silently clears just because that source is empty.
+	// Only show items that have stock in the source warehouse (row's source, else
+	// the document's default source). No source set -> all items.
+	frm.set_query("item_code", "items", function (doc, cdt, cdn) {
+		const row = locals[cdt][cdn];
+		const wh = (row && row.s_warehouse) || doc.from_warehouse;
+		if (wh) {
+			return {
+				query: "azzir_fleet.stock_info.items_with_stock",
+				filters: { warehouse: wh },
+			};
+		}
+		return {};
+	});
 
 	// Reverse: once the item is chosen, the row's Source Warehouse lists only the
 	// warehouses that actually hold that item — no hunting for where the stock is.
