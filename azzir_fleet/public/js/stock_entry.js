@@ -31,6 +31,17 @@ function set_stock_item_query(frm) {
 		}
 		return {};
 	});
+
+	// Header Set Source / Set Target Warehouse: cost-centre scoped like the sales
+	// docs (only warehouses the user may select; groups allowed).
+	["from_warehouse", "to_warehouse"].forEach((field) => {
+		frm.set_query(field, function (doc) {
+			return {
+				query: "azzir_fleet.warehouse_cc.warehouse_query",
+				filters: { company: doc.company },
+			};
+		});
+	});
 }
 
 frappe.ui.form.on("Stock Entry", {
