@@ -139,15 +139,14 @@ def user_warehouse_for_item(item_code: str | None = None, company: str | None = 
 	the user's warehouses have stock, returns None so the row is left blank for a
 	manual pick. Returns None too if the user is unrestricted (keep ERPNext's own
 	default) or has no cost-centre warehouses."""
-	allowed = allowed_cost_centers()
-	if not allowed:  # None (unrestricted) or empty -> don't override
+	# Warehouses the user may select (Warehouse permission wins over cost centre).
+	bounds = _effective_bounds()
+	if not bounds:  # None (unrestricted -> keep ERPNext default) or [] (nothing)
 		return None
-	# Cost centres granted to the user, expanded to warehouse tree ranges so a cost
-	# centre on a GROUP warehouse also offers its child warehouses for auto-fill.
-	cc = _bounds_sql(cost_center_bounds(allowed), (vals := {}), "cc")
-	if not cc:
+	frag = _bounds_sql(bounds, (vals := {}), "g")
+	if not frag:
 		return None
-	conds = ["w.disabled = 0", "w.is_group = 0", cc]
+	conds = ["w.disabled = 0", "w.is_group = 0", frag]
 	if company:
 		conds.append("w.company = %(co)s")
 		vals["co"] = company
@@ -200,18 +199,29 @@ def warehouse_query(
 	)
 
 
+def _effective_bounds() -> list | None:
+	"""Warehouse tree ranges the current user may SELECT, or None when unrestricted.
+
+	Priority: an explicit Warehouse User Permission WINS. When the user holds one,
+	ONLY those ranges apply — so the /sales picker matches the desk, which also honours
+	the Warehouse permission and ignores the cost centre. A user with NO Warehouse
+	permission falls back to their cost-centre ranges (a cost centre on a group still
+	cascades to its children). Either dimension set on a GROUP warehouse covers every
+	child beneath it (lft/rgt)."""
+	wh_bounds = warehouse_permission_bounds()  # None = no Warehouse user permission
+	if wh_bounds is not None:
+		return wh_bounds  # explicit warehouse permission -> use it alone
+	return cost_center_bounds(allowed_cost_centers())  # None / [] / [ranges]
+
+
 def _grant_conditions(vals: dict) -> str | None:
 	"""SQL fragment for 'this warehouse is selectable by the current user', or None
-	when the user is unrestricted (so callers add no condition). Fills `vals`.
-
-	Both granting dimensions are now tree ranges, so a cost centre OR a Warehouse
-	User Permission set on a GROUP warehouse opens every child beneath it."""
-	cc_bounds = cost_center_bounds(allowed_cost_centers())   # None=unrestricted, []=nothing
-	wh_bounds = warehouse_permission_bounds()                # None=unrestricted
-	if cc_bounds is None and wh_bounds is None:
+	when the user is unrestricted (so callers add no condition). Fills `vals`."""
+	bounds = _effective_bounds()
+	if bounds is None:
 		return None  # unrestricted
-	grants = [f for f in (_bounds_sql(cc_bounds, vals, "cc"), _bounds_sql(wh_bounds, vals, "wp")) if f]
-	return "(" + " or ".join(grants) + ")" if grants else "1=0"
+	frag = _bounds_sql(bounds, vals, "g")
+	return frag if frag else "1=0"  # [] -> nothing is selectable
 
 
 @frappe.whitelist()
@@ -256,13 +266,9 @@ def enforce_warehouse_selection(doc, method=None):
 	is system-managed). Only leaf warehouses are policed."""
 	if not _field_ready():
 		return
-	cc_bounds = cost_center_bounds(allowed_cost_centers())  # None=unrestricted, []=nothing
-	wh_bounds = warehouse_permission_bounds()               # None=unrestricted
-	if cc_bounds is None and wh_bounds is None:
+	all_bounds = _effective_bounds()  # Warehouse permission wins over cost centre
+	if all_bounds is None:
 		return  # unrestricted user — nothing to enforce
-	# Union of both granting dimensions as tree ranges: a cost centre or warehouse
-	# permission on a GROUP warehouse covers every child beneath it.
-	all_bounds = (cc_bounds or []) + (wh_bounds or [])
 
 	checked = {}
 
