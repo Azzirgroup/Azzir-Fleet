@@ -24,21 +24,42 @@ def items_with_stock(
 	like = f"%{txt or ''}%"
 
 	if not warehouse:
-		return frappe.db.sql(
-			"""select name, item_name from `tabItem`
+		rows = frappe.db.sql(
+			"""select name, item_name, '' from `tabItem`
 			   where disabled = 0 and (name like %(t)s or item_name like %(t)s)
 			   order by name limit %(s)s, %(p)s""",
 			{"t": like, "s": start, "p": page_len},
 		)
+	else:
+		rows = frappe.db.sql(
+			"""select distinct it.name, it.item_name, '' from `tabItem` it
+			   join `tabBin` b on b.item_code = it.name
+			   where b.warehouse = %(wh)s and b.actual_qty > 0 and it.disabled = 0
+			     and (it.name like %(t)s or it.item_name like %(t)s)
+			   order by it.name limit %(s)s, %(p)s""",
+			{"wh": warehouse, "t": like, "s": start, "p": page_len},
+		)
 
-	return frappe.db.sql(
-		"""select distinct it.name, it.item_name from `tabItem` it
-		   join `tabBin` b on b.item_code = it.name
-		   where b.warehouse = %(wh)s and b.actual_qty > 0 and it.disabled = 0
-		     and (it.name like %(t)s or it.item_name like %(t)s)
-		   order by it.name limit %(s)s, %(p)s""",
-		{"wh": warehouse, "t": like, "s": start, "p": page_len},
-	)
+	# Resolve OLD codes too (separator-insensitive), so typing a retired part number
+	# finds the current item — same as every other item field. Keep the in-stock rule:
+	# an aliased item is only offered if it has stock in the source warehouse.
+	if txt:
+		from azzir_fleet.alias import fuzzy_item_matches
+
+		rows = [list(r) for r in rows]
+		existing = {r[0] for r in rows}
+		for m in fuzzy_item_matches(txt, limit=15):
+			item = m.get("item")
+			if not item or item in existing:
+				continue
+			if warehouse and not flt(
+				frappe.db.get_value("Bin", {"item_code": item, "warehouse": warehouse}, "actual_qty")
+			) > 0:
+				continue
+			existing.add(item)
+			note = "↺ old code: %s" % m["old_code"] if m.get("old_code") else ""
+			rows.insert(0, [item, frappe.db.get_value("Item", item, "item_name") or item, note])
+	return rows
 
 
 @frappe.whitelist()
