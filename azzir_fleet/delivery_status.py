@@ -49,6 +49,42 @@ def apply(doc, method=None):
 	doc.azzir_delivery_status = _status(per)
 
 
+def backfill(only_empty: bool = False):
+	"""Populate azzir_delivery_status / azzir_per_delivered on existing invoices, in
+	one aggregate query (delivered vs total qty of STOCK items). `only_empty` skips
+	invoices that already have a status — cheap to run on every migrate."""
+	if not frappe.db.has_column("Sales Invoice", "azzir_per_delivered"):
+		return
+	where = "si.docstatus < 2"
+	if only_empty:
+		where += " and (si.azzir_delivery_status is null or si.azzir_delivery_status = '')"
+	rows = frappe.db.sql(
+		f"""
+		select si.name, si.update_stock,
+			sum(case when it.is_stock_item = 1 then sii.qty else 0 end) as total,
+			sum(case when it.is_stock_item = 1
+				then least(ifnull(sii.delivered_qty, 0), sii.qty) else 0 end) as delivered
+		from `tabSales Invoice` si
+		join `tabSales Invoice Item` sii on sii.parent = si.name
+		join `tabItem` it on it.name = sii.item_code
+		where {where}
+		group by si.name
+		""",
+		as_dict=True,
+	)
+	for i, r in enumerate(rows):
+		total = flt(r.total)
+		per = 100.0 if (r.update_stock or total <= 0) else min(100.0, flt(r.delivered) / total * 100.0)
+		frappe.db.set_value(
+			"Sales Invoice", r.name,
+			{"azzir_per_delivered": per, "azzir_delivery_status": _status(per)},
+			update_modified=False,
+		)
+		if i % 500 == 0:
+			frappe.db.commit()
+	frappe.db.commit()
+
+
 def refresh_from_delivery_note(dn, method=None):
 	"""Delivery Note on_submit / on_cancel: recompute the linked Sales Invoices, since
 	their line delivered_qty just changed (ERPNext updates it before this hook)."""

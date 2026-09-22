@@ -1,44 +1,26 @@
 # Copyright (c) 2026, Azzir and contributors
 # For license information, please see license.txt
-"""Backfill azzir_delivery_status / azzir_per_delivered on existing Sales Invoices
-so the new fields are populated the moment the app is deployed."""
+"""Backfill azzir_delivery_status / azzir_per_delivered on existing Sales Invoices.
+
+Post-model-sync patches run BEFORE fixtures create the custom-field columns, so we
+ensure the fields exist first, then backfill. (after_migrate also backfills, covering
+sites where this patch was already logged as run before the fix.)"""
 
 import frappe
-from frappe.utils import flt
 
 
 def execute():
+	from azzir_fleet.delivery_status import backfill
+	from azzir_fleet.setup import CUSTOM_FIELDS
+
 	if not frappe.db.has_column("Sales Invoice", "azzir_per_delivered"):
-		return
+		from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
-	# One aggregate query: delivered vs total qty of STOCK items per submitted invoice.
-	rows = frappe.db.sql(
-		"""
-		select si.name, si.update_stock,
-			sum(case when it.is_stock_item = 1 then sii.qty else 0 end) as total,
-			sum(case when it.is_stock_item = 1
-				then least(ifnull(sii.delivered_qty, 0), sii.qty) else 0 end) as delivered
-		from `tabSales Invoice` si
-		join `tabSales Invoice Item` sii on sii.parent = si.name
-		join `tabItem` it on it.name = sii.item_code
-		where si.docstatus < 2
-		group by si.name
-		""",
-		as_dict=True,
-	)
+		flds = [
+			f for f in CUSTOM_FIELDS.get("Sales Invoice", [])
+			if f["fieldname"] in ("azzir_delivery_status", "azzir_per_delivered")
+		]
+		if flds:
+			create_custom_fields({"Sales Invoice": flds}, ignore_validate=True)
 
-	for i, r in enumerate(rows):
-		total = flt(r.total)
-		if r.update_stock or total <= 0:
-			per = 100.0
-		else:
-			per = min(100.0, flt(r.delivered) / total * 100.0)
-		status = "Fully Delivered" if per >= 100 else ("Partly Delivered" if per > 0 else "Not Delivered")
-		frappe.db.set_value(
-			"Sales Invoice", r.name,
-			{"azzir_per_delivered": per, "azzir_delivery_status": status},
-			update_modified=False,
-		)
-		if i % 500 == 0:
-			frappe.db.commit()
-	frappe.db.commit()
+	backfill()

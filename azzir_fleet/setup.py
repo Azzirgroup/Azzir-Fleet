@@ -811,6 +811,10 @@ def after_migrate():
 		("warehouse_mandatory", _make_warehouse_mandatory),
 		("cost_center_user_perm_exempt", _exempt_cost_center_from_user_permissions),
 		("editable_customer_name", _make_customer_name_editable),
+		# Backfill delivery %/status on invoices missing it (custom fields already
+		# created by the 'custom_fields' step above). Runs after fields exist, unlike
+		# the post_model_sync patch which fires before fixtures create the columns.
+		("delivery_status_backfill", _backfill_delivery_status),
 		("material_issue_workflow", _setup_material_issue_workflow),
 		("session_limit", _enforce_session_limit),
 		("multicurrency", _enable_multicurrency),
@@ -1064,6 +1068,15 @@ def _exempt_cost_center_from_user_permissions():
 			dt, "cost_center", "ignore_user_permissions", 1, "Check",
 			validate_fields_for_doctype=False,
 		)
+
+
+def _backfill_delivery_status():
+	"""Fill azzir_delivery_status / azzir_per_delivered on invoices that don't have it
+	yet — so a deploy populates existing invoices even though the post_model_sync patch
+	fired before the custom-field columns existed."""
+	from azzir_fleet.delivery_status import backfill
+
+	backfill(only_empty=True)
 
 
 def _make_customer_name_editable():
