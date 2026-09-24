@@ -436,3 +436,61 @@ def can_create(doctype: str) -> bool:
 	the 'New' / 'create next' buttons only show when the user actually has the
 	permission (e.g. Delivery Note is gated for users without stock/delivery rights)."""
 	return bool(frappe.has_permission(doctype, "create"))
+
+
+@frappe.whitelist()
+def action_perms(doctype: str, name: str) -> dict:
+	"""What the current user may do to this sales document RIGHT NOW, using ERPNext's
+	own role permissions — drives the Edit / Cancel / Amend buttons on the view page."""
+	if doctype not in SALES_DOCTYPES:
+		frappe.throw(frappe._("Not allowed."))
+	doc = frappe.get_doc(doctype, name)
+	ds = doc.docstatus
+	return {
+		"docstatus": ds,
+		"can_write": ds == 0 and bool(frappe.has_permission(doctype, "write", doc=doc)),
+		"can_submit": ds == 0 and bool(frappe.has_permission(doctype, "submit", doc=doc)),
+		"can_cancel": ds == 1 and bool(frappe.has_permission(doctype, "cancel", doc=doc)),
+		"can_amend": ds == 2 and bool(frappe.has_permission(doctype, "amend", doc=doc)),
+	}
+
+
+@frappe.whitelist()
+def cancel_sales_doc(doctype: str, name: str) -> dict:
+	"""Cancel a submitted sales document. ERPNext's cancel-permission check runs
+	inside doc.cancel()."""
+	if doctype not in SALES_DOCTYPES:
+		frappe.throw(frappe._("Not allowed."))
+	doc = frappe.get_doc(doctype, name)
+	doc.cancel()
+	return {"name": doc.name, "docstatus": doc.docstatus, "message": frappe._("Cancelled.")}
+
+
+@frappe.whitelist()
+def amend_sales_doc(doctype: str, name: str) -> dict:
+	"""Amend a cancelled sales document: create a fresh DRAFT copy linked to it
+	(amended_from), which the user can then edit and re-submit. Permission is enforced
+	by has_permission('amend') + the insert's create check."""
+	if doctype not in SALES_DOCTYPES:
+		frappe.throw(frappe._("Not allowed."))
+	src = frappe.get_doc(doctype, name)
+	if src.docstatus != 2:
+		frappe.throw(frappe._("Only a cancelled document can be amended."))
+	if not frappe.has_permission(doctype, "amend", doc=src):
+		frappe.throw(frappe._("You are not allowed to amend this {0}.").format(doctype), frappe.PermissionError)
+	amended = frappe.copy_doc(src)
+	amended.amended_from = name
+	amended.docstatus = 0
+	# Reset the workflow state so the amended DRAFT starts at the workflow's first
+	# (draft) state, not the cancelled doc's 'Approved' state (which would be an
+	# invalid Draft->Approved transition on insert).
+	from frappe.model.workflow import get_workflow_name
+
+	wf = get_workflow_name(doctype)
+	if wf:
+		wfd = frappe.get_cached_doc("Workflow", wf)
+		draft_state = next((s.state for s in wfd.states if str(s.doc_status) == "0"), None)
+		if wfd.workflow_state_field and draft_state:
+			amended.set(wfd.workflow_state_field, draft_state)
+	amended.insert()
+	return {"name": amended.name, "message": frappe._("Draft amendment created.")}

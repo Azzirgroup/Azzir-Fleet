@@ -11,18 +11,23 @@
              available action (e.g. the creator of a below-cost doc awaiting approval)
              sees only a note. -->
         <template v-if="doc.docstatus === 0">
-          <button v-if="editable" class="rounded-md border px-3 py-1.5 text-sm" @click="editing = true">Edit</button>
+          <button v-if="editable && perms.can_write" class="rounded-md border px-3 py-1.5 text-sm" @click="editing = true">Edit</button>
           <button v-for="a in actions" :key="a.action" :disabled="busy"
             class="rounded-md px-3 py-1.5 text-sm text-white"
             :class="a.action === 'Reject' ? 'bg-red-500 hover:bg-red-600' : 'azzir-brand'"
             @click="doAction(a.action)">{{ a.action }}</button>
           <span v-if="!actions.length" class="self-center text-xs text-gray-500">Awaiting approval</span>
         </template>
-        <!-- Submitted: create next in the flow (only the ones this user may create) -->
+        <!-- Submitted: create next in the flow (only the ones this user may create) + Cancel -->
         <template v-else-if="doc.docstatus === 1">
           <button v-for="a in nextActions" :key="a.target" v-show="creatable[a.target] !== false" :disabled="busy" class="azzir-brand rounded-md px-3 py-1.5 text-sm text-white" @click="createNext(a.target)">
             + {{ a.label }}
           </button>
+          <button v-if="perms.can_cancel" :disabled="busy" class="rounded-md border border-red-300 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50" @click="cancelDoc">Cancel</button>
+        </template>
+        <!-- Cancelled: amend (create a new editable draft) -->
+        <template v-else-if="doc.docstatus === 2">
+          <button v-if="perms.can_amend" :disabled="busy" class="azzir-brand rounded-md px-3 py-1.5 text-sm text-white" @click="amendDoc">Amend</button>
         </template>
       </div>
     </div>
@@ -69,7 +74,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { getDoc, workflowActions, applyWorkflowAction, makeNext, canCreateDoc, fmt } from '@/utils/api.js'
+import { getDoc, workflowActions, applyWorkflowAction, makeNext, canCreateDoc, actionPerms, cancelSalesDoc, amendSalesDoc, fmt } from '@/utils/api.js'
 import DocDialog from '@/components/DocDialog.vue'
 
 const props = defineProps({ doctype: String, name: String })
@@ -84,6 +89,8 @@ const createInitial = ref(null)
 const msg = ref('')
 const err = ref(false)
 const actions = ref([]) // workflow actions available to THIS user on this doc
+// Edit / Cancel / Amend permissions on this doc (ERPNext role permissions).
+const perms = ref({})
 
 // A doc awaiting approval isn't editable by the creator (the workflow's Pending state
 // only allows the approver to edit), so hide Edit then.
@@ -116,10 +123,35 @@ async function load() {
     actions.value = doc.value.docstatus === 0
       ? ((await workflowActions(props.doctype, props.name).catch(() => ({}))).actions || [])
       : []
+    perms.value = await actionPerms(props.doctype, props.name).catch(() => ({}))
     if (doc.value.docstatus === 1) await loadCreatePerms()
   } finally { loading.value = false }
 }
 onMounted(load)
+
+// Cancel a submitted document (permission enforced server-side).
+async function cancelDoc() {
+  if (!window.confirm(`Cancel ${props.doctype} ${props.name}? This cannot be undone.`)) return
+  busy.value = true; msg.value = ''
+  try {
+    await cancelSalesDoc(props.doctype, props.name)
+    err.value = false; msg.value = 'Cancelled.'
+    await load()
+  } catch (e) { err.value = true; msg.value = e?.messages?.join(', ') || e?.message || 'Could not cancel.' }
+  finally { busy.value = false }
+}
+
+// Amend a cancelled document: create a new draft and open it.
+async function amendDoc() {
+  busy.value = true; msg.value = ''
+  try {
+    const r = await amendSalesDoc(props.doctype, props.name)
+    err.value = false
+    const route = SPA_ROUTE[props.doctype]
+    if (route && r?.name) router.push(`${route}/${encodeURIComponent(r.name)}`)
+  } catch (e) { err.value = true; msg.value = e?.messages?.join(', ') || e?.message || 'Could not amend.' }
+  finally { busy.value = false }
+}
 
 // Apply the chosen workflow action (Submit / Request Approval / Approve / Reject).
 // Role + self-approval are enforced server-side by the workflow engine.

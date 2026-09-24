@@ -31,6 +31,14 @@ export const salesList = (doctype, opts = {}) =>
 export const canCreateDoc = (doctype) =>
   call('azzir_fleet.sales_api.can_create', { doctype })
 
+// Edit/Cancel/Amend permissions on a specific document (ERPNext role permissions).
+export const actionPerms = (doctype, name) =>
+  call('azzir_fleet.sales_api.action_perms', { doctype, name })
+export const cancelSalesDoc = (doctype, name) =>
+  call('azzir_fleet.sales_api.cancel_sales_doc', { doctype, name })
+export const amendSalesDoc = (doctype, name) =>
+  call('azzir_fleet.sales_api.amend_sales_doc', { doctype, name })
+
 export const getDoc = (doctype, name) =>
   call('frappe.client.get', { doctype, name })
 
