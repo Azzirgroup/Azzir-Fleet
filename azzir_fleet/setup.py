@@ -1112,19 +1112,25 @@ def _backfill_delivery_status():
 
 
 def _stock_entry_row_warehouses_readonly():
-	"""Lock the per-ROW Source/Target Warehouse on Stock Entry items: users set them
-	via the header 'Set Source Warehouse' / 'Set Target Warehouse' (which propagate to
-	the rows) and can't edit them line by line. Header fields stay editable."""
-	for field in ("s_warehouse", "t_warehouse"):
-		make_property_setter(
-			"Stock Entry Detail", field, "read_only", 1, "Check", validate_fields_for_doctype=False
-		)
-		# ERPNext ships a read_only_depends_on on these that UN-locks them for most
-		# purposes and overrides the static read_only — clear it so they stay locked.
-		make_property_setter(
-			"Stock Entry Detail", field, "read_only_depends_on", "", "Data",
-			validate_fields_for_doctype=False,
-		)
+	"""Lock the per-ROW Source Warehouse ONLY when the Stock Entry was created FROM a
+	Purchase Receipt (so the receipt's warehouse can't be changed). A normal Stock
+	Entry keeps both Source and Target Warehouse editable."""
+	# Source: read-only only when the entry comes from a Purchase Receipt.
+	make_property_setter(
+		"Stock Entry Detail", "s_warehouse", "read_only", 0, "Check", validate_fields_for_doctype=False
+	)
+	make_property_setter(
+		"Stock Entry Detail", "s_warehouse", "read_only_depends_on",
+		"eval:parent.purchase_receipt_no", "Data", validate_fields_for_doctype=False,
+	)
+	# Target: always editable (clear ERPNext's own conditional lock too).
+	make_property_setter(
+		"Stock Entry Detail", "t_warehouse", "read_only", 0, "Check", validate_fields_for_doctype=False
+	)
+	make_property_setter(
+		"Stock Entry Detail", "t_warehouse", "read_only_depends_on", "", "Data",
+		validate_fields_for_doctype=False,
+	)
 
 
 def _hide_stock_entry_default_warehouses():
