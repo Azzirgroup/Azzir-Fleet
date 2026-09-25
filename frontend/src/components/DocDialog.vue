@@ -411,7 +411,11 @@ async function save(submit) {
     }
     emit('saved', saved)
   } catch (e) {
-    err.value = true; msg.value = e?.messages?.join(', ') || e?.message || 'Could not save.'
+    // Server messages can carry HTML (frappe.bold -> <strong>). The SPA shows plain
+    // text, so strip tags and decode the few common entities for a clean message.
+    const clean = (s) => (s || '').replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim()
+    err.value = true
+    msg.value = clean(e?.messages?.map(clean).join(', ')) || clean(e?.message) || 'Could not save.'
   } finally { busy.value = false }
 }
 </script>

@@ -304,7 +304,14 @@ def set_landing_warehouse(doc, method=None):
 	"""Validate: for each item row marked 'Buy From Sister Company', point the row at
 	the landing warehouse for ITS sister company (rows can be sourced from different
 	sisters). Stock is transferred in at submit. Driven entirely per row — there is
-	no header toggle."""
+	no header toggle.
+
+	A Quotation posts no stock and creates no sister transfer, so it needs no landing
+	warehouse — skip it entirely (the row keeps whatever warehouse was chosen, e.g. the
+	'All Warehouses' pick). The landing requirement only applies where stock moves
+	(Sales Invoice)."""
+	if doc.doctype == "Quotation":
+		return
 	landing_cache = {}
 	for r in doc.get("items") or []:
 		if not r.get("azzir_row_from_sister"):
