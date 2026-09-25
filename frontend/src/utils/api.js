@@ -87,6 +87,10 @@ export const userCanBuySister = () => call('azzir_fleet.intercompany_sale.user_c
 // the child warehouse (under the configured group) with the most stock of the item.
 export const sisterDefaultForItem = (item_code) =>
   call('azzir_fleet.intercompany_sale.sister_default_for_item', { item_code })
+// "All Warehouses" picker: pick one of our own company's GROUP warehouses; the backend
+// resolves it to our concrete leaf (using a branch-matched sister that holds the stock).
+export const resolveAllWarehouses = (item_code, group, company) =>
+  call('azzir_fleet.intercompany_sale.resolve_all_warehouses', { item_code, group, company })
 export const dashboardStats = () => call('azzir_fleet.sales_api.dashboard_stats')
 export const itemDetails = (item_code, customer, company, price_list, qty = 1) =>
   call('azzir_fleet.sales_api.item_details', { item_code, customer, company, price_list, qty })

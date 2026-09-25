@@ -69,6 +69,13 @@
                       <div class="w-40"><Combo v-model="row.warehouse" doctype="Warehouse" display="name" placeholder="—" query-method="azzir_fleet.warehouse_cc.warehouse_search" :query-args="{ company }" /></div>
                       <button v-if="row.item_code" class="rounded border px-1.5 py-1 text-xs" title="See all warehouses" @click="stockRow = i">📦</button>
                     </div>
+                    <!-- All Warehouses: pick one of our groups; backend fills the concrete
+                         leaf (ours, or a branch-matched sister that has the stock). -->
+                    <div v-if="sisterEligible && row.item_code" class="mt-1 w-40">
+                      <Combo v-model="row.all_warehouses" doctype="Warehouse" display="name" placeholder="All Warehouses"
+                        query-method="azzir_fleet.intercompany_sale.company_group_warehouses" :query-args="{ company }"
+                        @update:model-value="() => onPickAllWarehouses(row)" />
+                    </div>
                   </td>
                   <td class="px-2 py-2 text-right">{{ fmt((row.qty || 0) * (row.rate || 0)) }}</td>
                   <td class="px-2 py-2"><button class="text-gray-400 hover:text-red-500" @click="rows.splice(i, 1)">✕</button></td>
@@ -118,6 +125,11 @@
                   <div class="flex-1"><Combo v-model="row.warehouse" doctype="Warehouse" display="name" placeholder="—" query-method="azzir_fleet.warehouse_cc.warehouse_search" :query-args="{ company }" /></div>
                   <button v-if="row.item_code" class="rounded border px-2 py-1 text-xs" title="See all warehouses" @click="stockRow = i">📦</button>
                 </div>
+                <div v-if="sisterEligible && row.item_code" class="mt-1">
+                  <Combo v-model="row.all_warehouses" doctype="Warehouse" display="name" placeholder="All Warehouses"
+                    query-method="azzir_fleet.intercompany_sale.company_group_warehouses" :query-args="{ company }"
+                    @update:model-value="() => onPickAllWarehouses(row)" />
+                </div>
               </div>
               <div v-if="row.item_code">
                 <input v-model="row.description" placeholder="Description (editable)" class="w-full rounded border px-2 py-1 text-xs text-gray-600" />
@@ -165,7 +177,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { insertDoc, submitSalesDoc, saveDoc, itemDetails, salesDefaults, userCanBuySister, sisterDefaultForItem, myAllowedWarehouses, userWarehouseForItem, fmt } from '@/utils/api.js'
+import { insertDoc, submitSalesDoc, saveDoc, itemDetails, salesDefaults, userCanBuySister, sisterDefaultForItem, resolveAllWarehouses, myAllowedWarehouses, userWarehouseForItem, fmt } from '@/utils/api.js'
 import Combo from '@/components/Combo.vue'
 import StockTree from '@/components/StockTree.vue'
 import AddItemsDialog from '@/components/AddItemsDialog.vue'
@@ -243,21 +255,21 @@ onMounted(async () => {
     docDate.value = props.edit[dateField.value] || today()
     customer.value = props.edit.party_name || props.edit.customer || ''
     customerName.value = props.edit.customer_name || ''
-    rows.value = (props.edit.items || []).map((r) => ({ item_code: r.item_code, qty: r.qty, rate: r.rate, price_list_rate: r.price_list_rate || 0, buying_rate: 0, description: r.description || '', warehouse: r.warehouse || '', from_sister: !!r.azzir_row_from_sister, supply_company: r.azzir_supply_company || '', supply_warehouse: r.azzir_supply_warehouse || '' }))
+    rows.value = (props.edit.items || []).map((r) => ({ item_code: r.item_code, qty: r.qty, rate: r.rate, price_list_rate: r.price_list_rate || 0, buying_rate: 0, description: r.description || '', warehouse: r.warehouse || '', all_warehouses: '', from_sister: !!r.azzir_row_from_sister, supply_company: r.azzir_supply_company || '', supply_warehouse: r.azzir_supply_warehouse || '' }))
     if (!rows.value.length) addRow()
     fetchBuyingRates()
   } else if (props.initial) {
     customer.value = props.initial.customer || ''
     customerName.value = props.initial.customer_name || ''
     comments.value = props.initial.azzir_comments || ''
-    rows.value = (props.initial.items || []).map((r) => ({ item_code: r.item_code, qty: r.qty || 1, rate: r.rate || 0, price_list_rate: r.price_list_rate || 0, buying_rate: 0, description: r.description || '', warehouse: r.warehouse || '', from_sister: !!r.azzir_row_from_sister, supply_company: r.azzir_supply_company || '', supply_warehouse: r.azzir_supply_warehouse || '' }))
+    rows.value = (props.initial.items || []).map((r) => ({ item_code: r.item_code, qty: r.qty || 1, rate: r.rate || 0, price_list_rate: r.price_list_rate || 0, buying_rate: 0, description: r.description || '', warehouse: r.warehouse || '', all_warehouses: '', from_sister: !!r.azzir_row_from_sister, supply_company: r.azzir_supply_company || '', supply_warehouse: r.azzir_supply_warehouse || '' }))
     if (!rows.value.length) addRow()
     fetchBuyingRates()
   } else {
     addRow()
   }
 })
-function addRow() { rows.value.push({ item_code: '', qty: 1, rate: 0, price_list_rate: 0, buying_rate: 0, description: '', warehouse: '', from_sister: false, supply_company: '', supply_warehouse: '' }) }
+function addRow() { rows.value.push({ item_code: '', qty: 1, rate: 0, price_list_rate: 0, buying_rate: 0, description: '', warehouse: '', all_warehouses: '', from_sister: false, supply_company: '', supply_warehouse: '' }) }
 // "Add multiple": one row per chosen item (skip ones already added), each auto-filled
 // like a normal pick. Reuses a trailing empty row so we don't leave a blank line.
 async function onAddMultiple(codes) {
@@ -284,6 +296,23 @@ async function fillSisterDefault(row) {
   if (!d) return
   if (d.supply_company) row.supply_company = d.supply_company
   if (d.supply_warehouse) row.supply_warehouse = d.supply_warehouse
+}
+// "All Warehouses" picker: the user chose one of OUR company's group warehouses. Resolve
+// it to a concrete leaf — our own if we hold stock, otherwise a branch-matched sister
+// supplies and our matching leaf goes on the row. Fills warehouse + sister source.
+async function onPickAllWarehouses(row) {
+  if (!row.all_warehouses || !row.item_code) return
+  const r = await resolveAllWarehouses(row.item_code, row.all_warehouses, company.value).catch(() => null)
+  if (!r || !r.warehouse) {
+    err.value = true; msg.value = `No warehouse (ours or a sister on that branch) has stock of ${row.item_code}.`
+    return
+  }
+  row.warehouse = r.warehouse
+  if (r.from_sister && r.supply_company && r.supply_warehouse) {
+    row.from_sister = true
+    row.supply_company = r.supply_company
+    row.supply_warehouse = r.supply_warehouse
+  }
 }
 function setWarehouse(wh) {
   if (stockRow.value !== null) {

@@ -127,6 +127,121 @@ def sister_default_for_item(item_code: str | None = None) -> dict:
 
 
 @frappe.whitelist()
+def company_group_warehouses(txt: str | None = None, company: str | None = None) -> list:
+	"""GROUP warehouses of `company` — the choices for the sales "All Warehouses" picker.
+	The user picks one of their own company's groups; resolve_all_warehouses() then finds
+	the concrete leaf (ours, or a branch-matched sister that holds the stock)."""
+	if not company:
+		return []
+	conds = ["w.is_group = 1", "w.disabled = 0", "w.company = %(co)s"]
+	vals = {"co": company}
+	if txt:
+		conds.append("(w.name like %(t)s or w.warehouse_name like %(t)s)")
+		vals["t"] = "%%%s%%" % txt
+	rows = frappe.db.sql(
+		"select w.name, w.warehouse_name from `tabWarehouse` w where "
+		+ " and ".join(conds) + " order by w.name limit 25",
+		vals,
+		as_dict=True,
+	)
+	return [{"name": r.name, "warehouse_name": r.warehouse_name} for r in rows]
+
+
+def _best_leaf_with_stock(item, *, company=None, lft=None, rgt=None, branch=None, exclude_company=None):
+	"""Leaf warehouse (most stock of `item`) under the given filters. Returns a row with
+	warehouse/company/azzir_branch/warehouse_name/qty, or None."""
+	conds = ["b.item_code = %(it)s", "b.actual_qty > 0", "w.is_group = 0", "w.disabled = 0"]
+	vals = {"it": item}
+	if company:
+		conds.append("w.company = %(co)s"); vals["co"] = company
+	if exclude_company:
+		conds.append("w.company != %(xco)s"); vals["xco"] = exclude_company
+	if lft is not None:
+		conds.append("w.lft >= %(l)s and w.rgt <= %(r)s"); vals["l"], vals["r"] = lft, rgt
+	if branch:
+		conds.append("w.azzir_branch = %(br)s"); vals["br"] = branch
+	rows = frappe.db.sql(
+		"""select b.warehouse, w.company, w.azzir_branch, w.warehouse_name, sum(b.actual_qty) qty
+		   from `tabBin` b join `tabWarehouse` w on w.name = b.warehouse
+		   where """ + " and ".join(conds) +
+		" group by b.warehouse having qty > 0 order by qty desc limit 1",
+		vals, as_dict=True,
+	)
+	return rows[0] if rows else None
+
+
+@frappe.whitelist()
+def resolve_all_warehouses(item_code: str | None = None, group: str | None = None,
+                           company: str | None = None) -> dict:
+	"""Resolve a sales row's warehouse from the chosen "All Warehouses" group, following:
+	  our group  ->  our own leaf with stock (use it, no sister)
+	             ->  else sister GROUP with the SAME branch  ->  its child leaf with the
+	                 most stock (the sister supply)  ->  back to OUR leaf: match the sister
+	                 leaf's branch, else its name, else any leaf under our group.
+	The returned `warehouse` is ALWAYS our own company's leaf (never the sister's — you
+	can't put another company's warehouse on our document); the sister only supplies.
+	Returns {warehouse, from_sister, supply_company, supply_warehouse} (empty if unusable)."""
+	from azzir_fleet.item_codes import code_owner
+
+	if not group or not company:
+		return {}
+	item = code_owner(item_code) or item_code
+	grp = frappe.db.get_value(
+		"Warehouse", group, ["lft", "rgt", "azzir_branch", "is_group"], as_dict=True
+	)
+	if not grp or grp.lft is None:
+		return {}
+
+	# Our own leaves under the picked group (for the map-back step).
+	our_leaves = frappe.db.sql(
+		"""select name, azzir_branch, warehouse_name from `tabWarehouse`
+		   where company = %(co)s and is_group = 0 and disabled = 0
+		     and lft >= %(l)s and rgt <= %(r)s order by name""",
+		{"co": company, "l": grp.lft, "r": grp.rgt}, as_dict=True,
+	)
+
+	# 1) Prefer our OWN stock under this group — no sister needed.
+	if item:
+		own = _best_leaf_with_stock(item, company=company, lft=grp.lft, rgt=grp.rgt)
+		if own:
+			return {"warehouse": own.warehouse, "from_sister": 0}
+
+	# 2) Sister GROUP(s) with the same branch as our group -> their child with most stock.
+	sister_leaf = None
+	if item and grp.azzir_branch:
+		best_qty = -1.0
+		for sg in frappe.get_all(
+			"Warehouse",
+			filters={"is_group": 1, "disabled": 0, "company": ["!=", company],
+			         "azzir_branch": grp.azzir_branch},
+			fields=["name", "lft", "rgt"],
+		):
+			cand = _best_leaf_with_stock(item, lft=sg.lft, rgt=sg.rgt, exclude_company=company)
+			if cand and flt(cand.qty) > best_qty:
+				best_qty, sister_leaf = flt(cand.qty), cand
+
+	# 3) Map the sister leaf back to OUR leaf: by branch, else by name, else any of ours.
+	our = None
+	if sister_leaf and our_leaves:
+		if sister_leaf.azzir_branch:
+			our = next((l for l in our_leaves if l.azzir_branch == sister_leaf.azzir_branch), None)
+		if not our:
+			sn = (sister_leaf.warehouse_name or "").strip().lower()
+			our = next((l for l in our_leaves if (l.warehouse_name or "").strip().lower() == sn), None)
+	if not our and our_leaves:
+		our = our_leaves[0]
+	if not our:
+		return {}
+
+	if sister_leaf:
+		return {
+			"warehouse": our.name, "from_sister": 1,
+			"supply_company": sister_leaf.company, "supply_warehouse": sister_leaf.warehouse,
+		}
+	return {"warehouse": our.name, "from_sister": 0}
+
+
+@frappe.whitelist()
 def user_can_buy_from_sister() -> bool:
 	"""Whether the current user may use the sister-company purchase feature
 	(they hold at least one Corporate cost center). Administrator / System Manager
