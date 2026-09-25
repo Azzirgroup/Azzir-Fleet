@@ -309,7 +309,11 @@ def set_landing_warehouse(doc, method=None):
 	A Quotation posts no stock and creates no sister transfer, so it needs no landing
 	warehouse — skip it entirely (the row keeps whatever warehouse was chosen, e.g. the
 	'All Warehouses' pick). The landing requirement only applies where stock moves
-	(Sales Invoice)."""
+	(Sales Invoice).
+
+	Zero-config: if no warehouse in the selling company is tagged to receive this sister's
+	stock, we DON'T block — the row keeps its own resolved warehouse (the 'All Warehouses'
+	pick), and the transfer lands there. A tagged landing warehouse still wins when set."""
 	if doc.doctype == "Quotation":
 		return
 	landing_cache = {}
@@ -322,17 +326,11 @@ def set_landing_warehouse(doc, method=None):
 		if not sister:
 			continue  # process_sister_purchase throws for this at submit
 		if sister not in landing_cache:
-			lw = _landing_warehouse(doc.company, sister)
-			if not lw:
-				frappe.throw(
-					_(
-						"Configure a landing warehouse in {0} for sister company {1}: on a {0} "
-						"warehouse tick 'Receives Sister Company Stock' and set its Sister Company to {1}."
-					).format(frappe.bold(doc.company), frappe.bold(sister))
-				)
-			landing_cache[sister] = lw
-		# The corporate row sells from the landing warehouse for its sister.
-		r.warehouse = landing_cache[sister]
+			landing_cache[sister] = _landing_warehouse(doc.company, sister)
+		# A tagged landing warehouse wins; otherwise keep the row's own warehouse
+		# (zero-config fallback — the sister stock lands in the row's resolved warehouse).
+		if landing_cache[sister]:
+			r.warehouse = landing_cache[sister]
 
 
 def _company_cost_center(company: str) -> str | None:
@@ -503,14 +501,20 @@ def process_sister_purchase(doc, method=None):
 def _build_one_transfer(doc, corporate, sister, rows, ic_price_list, factor, corporate_cc):
 	"""Create the DN + sister SI + corporate PI for one sister company. `rows` is a
 	list of (corporate item row, sister supply warehouse). Returns (dn, si, pi)."""
+	# Tagged landing warehouse (controlled); when none is set we fall back per row to the
+	# corporate row's OWN warehouse (the 'All Warehouses' pick) — zero-config.
 	landing = _landing_warehouse(corporate, sister)
-	if not landing:
-		frappe.throw(
-			_(
-				"No warehouse in {0} is set to receive {1} stock. On a {0} warehouse tick "
-				"'Receives Sister Company Stock' and set its Sister Company to {1}."
-			).format(frappe.bold(corporate), frappe.bold(sister))
-		)
+	receiving = []  # per-row corporate warehouse the transferred stock lands in
+	for r, _wh in rows:
+		wh = landing or r.get("warehouse")
+		if not wh:
+			frappe.throw(
+				_(
+					"No receiving warehouse for {1} stock in {0}: either set a warehouse on the "
+					"line, or on a {0} warehouse tick 'Receives Sister Company Stock' for {1}."
+				).format(frappe.bold(corporate), frappe.bold(sister))
+			)
+		receiving.append(wh)
 	internal_customer = _internal_customer(corporate, sister)
 	if not internal_customer:
 		frappe.throw(
@@ -573,9 +577,10 @@ def _build_one_transfer(doc, corporate, sister, rows, ic_price_list, factor, cor
 
 	pi = make_inter_company_purchase_invoice(sister_si.name)
 	pi.update_stock = 1
-	pi.set_warehouse = landing
-	for r in pi.get("items") or []:
-		r.warehouse = landing
+	pi.set_warehouse = landing or receiving[0]
+	pi_items = pi.get("items") or []
+	for idx, pir in enumerate(pi_items):
+		pir.warehouse = landing or (receiving[idx] if idx < len(receiving) else receiving[-1])
 	_force_cost_center(pi, corporate_cc)
 	pi.flags.azzir_intercompany_priced = True
 	pi.flags.ignore_permissions = True
