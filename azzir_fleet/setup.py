@@ -731,6 +731,20 @@ CUSTOM_FIELDS.setdefault("Stock Entry", []).extend(
 )
 
 
+# A free-text Comments field under the items on Quotation / Sales Invoice / Delivery
+# Note — editable on the /sales frontend and shown on the desk.
+for _dt in ("Quotation", "Sales Invoice", "Delivery Note"):
+	CUSTOM_FIELDS.setdefault(_dt, []).append(
+		{
+			"fieldname": "azzir_comments",
+			"label": "Comments",
+			"fieldtype": "Small Text",
+			"insert_after": "items",
+			"description": "Free-text notes for this document (visible on the /sales portal).",
+		}
+	)
+
+
 _ROW_TARGET_FIELDS = [
 	{
 		# Per-row toggle: this line is bought FOR another internal company. Sole

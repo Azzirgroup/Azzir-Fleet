@@ -173,6 +173,10 @@ fixtures = [
 					# Stock Entry group-warehouse defaults.
 					"Stock Entry-azzir_group_source_warehouse",
 					"Stock Entry-azzir_group_target_warehouse",
+					# Free-text Comments on the sales docs.
+					"Quotation-azzir_comments",
+					"Sales Invoice-azzir_comments",
+					"Delivery Note-azzir_comments",
 					# Hide-a-company-everywhere checkbox.
 					"Company-azzir_hidden",
 					# Sales Invoice delivery progress (top of form + list view).

@@ -140,6 +140,12 @@
             <div class="flex items-center justify-between p-3 font-semibold"><span>Total</span><span>{{ fmt(total) }}</span></div>
           </div>
         </div>
+
+        <!-- Comments (free text, saved on the document). -->
+        <div class="mt-4">
+          <label class="mb-1 block text-xs text-gray-500">Comments</label>
+          <textarea v-model="comments" rows="2" placeholder="Notes for this document…" class="w-full rounded-md border px-3 py-2 text-sm"></textarea>
+        </div>
       </div>
     </div>
 
@@ -185,6 +191,7 @@ const showAddMultiple = ref(false) // the "Add multiple" item picker
 const allowedWh = ref(null) // warehouses this user may pick; null = unrestricted
 const applyVat = ref(true) // Apply VAT (default on); untick to drop VAT from the doc
 const hidePartNo = ref(false) // Hide Part Numbers on the printout
+const comments = ref('') // free-text document comments (azzir_comments)
 
 // Editable document date. Sales Invoice / Delivery Note use posting_date; Quotation
 // uses transaction_date. Defaults to today; the user can back- or post-date the doc.
@@ -232,6 +239,7 @@ onMounted(async () => {
     base.value = props.edit
     applyVat.value = props.edit.azzir_apply_vat === 0 ? false : true
     hidePartNo.value = !!props.edit.azzir_hide_part_no
+    comments.value = props.edit.azzir_comments || ''
     docDate.value = props.edit[dateField.value] || today()
     customer.value = props.edit.party_name || props.edit.customer || ''
     customerName.value = props.edit.customer_name || ''
@@ -241,6 +249,7 @@ onMounted(async () => {
   } else if (props.initial) {
     customer.value = props.initial.customer || ''
     customerName.value = props.initial.customer_name || ''
+    comments.value = props.initial.azzir_comments || ''
     rows.value = (props.initial.items || []).map((r) => ({ item_code: r.item_code, qty: r.qty || 1, rate: r.rate || 0, price_list_rate: r.price_list_rate || 0, buying_rate: 0, description: r.description || '', warehouse: r.warehouse || '', from_sister: !!r.azzir_row_from_sister, supply_company: r.azzir_supply_company || '', supply_warehouse: r.azzir_supply_warehouse || '' }))
     if (!rows.value.length) addRow()
     fetchBuyingRates()
@@ -354,10 +363,10 @@ async function save(submit) {
     }
     let saved
     if (base.value) {
-      const d = { ...base.value, company: company.value, customer_name: customerName.value || undefined, items, azzir_apply_vat: applyVat.value ? 1 : 0, azzir_hide_part_no: hidePartNo.value ? 1 : 0, ...dateFields }
+      const d = { ...base.value, company: company.value, customer_name: customerName.value || undefined, items, azzir_apply_vat: applyVat.value ? 1 : 0, azzir_hide_part_no: hidePartNo.value ? 1 : 0, azzir_comments: comments.value || undefined, ...dateFields }
       saved = await saveDoc(d)
     } else {
-      const d = { doctype: props.doctype, company: company.value, customer_name: customerName.value || undefined, items, azzir_apply_vat: applyVat.value ? 1 : 0, azzir_hide_part_no: hidePartNo.value ? 1 : 0, ...dateFields }
+      const d = { doctype: props.doctype, company: company.value, customer_name: customerName.value || undefined, items, azzir_apply_vat: applyVat.value ? 1 : 0, azzir_hide_part_no: hidePartNo.value ? 1 : 0, azzir_comments: comments.value || undefined, ...dateFields }
       if (props.doctype === 'Quotation') { d.quotation_to = 'Customer'; d.party_name = customer.value }
       else d.customer = customer.value
       // Keep the link to the source quotation so the invoice inherits its approval
