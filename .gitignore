@@ -5,3 +5,6 @@ __pycache__/
 *.pyc
 frontend/dist/
 azzir_fleet/public/node_modules/
+
+# Redis test-run dump (local only, never commit)
+dump.rdb
