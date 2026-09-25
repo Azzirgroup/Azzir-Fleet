@@ -306,6 +306,10 @@ def make_next(source_doctype: str, source_name: str, target: str) -> dict:
 		"mode": "form",
 		"doctype": target,
 		"data": {
+			# Carry the source company forward — otherwise the next document falls back to
+			# the user's default company, which breaks buy-from-sister (the selling company
+			# would wrongly become the sister, e.g. a Petrol invoice sourcing from Petrol).
+			"company": doc.get("company"),
 			"customer": doc.get("customer") or doc.get("party_name"),
 			# Carry the (possibly edited) customer name forward so the next document
 			# keeps it instead of resetting to the customer master's name.
