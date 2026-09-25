@@ -64,13 +64,21 @@ function set_stock_item_query(frm) {
 		}
 		return {};
 	});
+
+	// When the Stock Entry was created FROM a Purchase Receipt, the source comes from
+	// the receipt — lock the Group Source Warehouse so it can't override it.
+	if (frm.fields_dict.azzir_group_source_warehouse) {
+		frm.set_df_property("azzir_group_source_warehouse", "read_only", frm.doc.purchase_receipt_no ? 1 : 0);
+	}
 }
 
 // When a Group Source is set and an item is chosen, auto-fill the row's Source
-// Warehouse with the child warehouse holding the most of that item.
+// Warehouse with the child warehouse holding the most of that item — but never
+// override a warehouse already set (e.g. one that came from a Purchase Receipt).
 function autofill_group_source(frm, cdt, cdn) {
 	const row = locals[cdt] && locals[cdt][cdn];
 	if (!row || !row.item_code || !frm.doc.azzir_group_source_warehouse) return;
+	if (row.s_warehouse || frm.doc.purchase_receipt_no) return;
 	frappe.call({
 		method: "azzir_fleet.stock_info.best_warehouse_in_group",
 		args: { item_code: row.item_code, warehouse: frm.doc.azzir_group_source_warehouse },
