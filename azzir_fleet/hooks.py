@@ -208,6 +208,8 @@ fixtures = [
 					# Per-row Source/Target Warehouse locked on Stock Entry items.
 					"Stock Entry Detail-s_warehouse-read_only",
 					"Stock Entry Detail-t_warehouse-read_only",
+					"Stock Entry Detail-s_warehouse-read_only_depends_on",
+					"Stock Entry Detail-t_warehouse-read_only_depends_on",
 					# Group-warehouse Stock Entry: hide the default source/target, Item first.
 					"Stock Entry-from_warehouse-hidden",
 					"Stock Entry-to_warehouse-hidden",

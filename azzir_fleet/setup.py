@@ -1119,6 +1119,12 @@ def _stock_entry_row_warehouses_readonly():
 		make_property_setter(
 			"Stock Entry Detail", field, "read_only", 1, "Check", validate_fields_for_doctype=False
 		)
+		# ERPNext ships a read_only_depends_on on these that UN-locks them for most
+		# purposes and overrides the static read_only — clear it so they stay locked.
+		make_property_setter(
+			"Stock Entry Detail", field, "read_only_depends_on", "", "Data",
+			validate_fields_for_doctype=False,
+		)
 
 
 def _hide_stock_entry_default_warehouses():
