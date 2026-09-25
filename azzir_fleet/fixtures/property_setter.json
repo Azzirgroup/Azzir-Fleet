@@ -237,7 +237,7 @@
   "property": "read_only_depends_on",
   "property_type": "Data",
   "row_name": null,
-  "value": "eval:parent.purchase_receipt_no"
+  "value": "eval:doc.reference_purchase_receipt"
  },
  {
   "default_value": null,

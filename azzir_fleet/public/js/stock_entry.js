@@ -78,7 +78,7 @@ function set_stock_item_query(frm) {
 function autofill_group_source(frm, cdt, cdn) {
 	const row = locals[cdt] && locals[cdt][cdn];
 	if (!row || !row.item_code || !frm.doc.azzir_group_source_warehouse) return;
-	if (row.s_warehouse || frm.doc.purchase_receipt_no) return;
+	if (row.s_warehouse || row.reference_purchase_receipt || frm.doc.purchase_receipt_no) return;
 	frappe.call({
 		method: "azzir_fleet.stock_info.best_warehouse_in_group",
 		args: { item_code: row.item_code, warehouse: frm.doc.azzir_group_source_warehouse },

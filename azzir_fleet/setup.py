@@ -1119,9 +1119,12 @@ def _stock_entry_row_warehouses_readonly():
 	make_property_setter(
 		"Stock Entry Detail", "s_warehouse", "read_only", 0, "Check", validate_fields_for_doctype=False
 	)
+	# Use the ROW's own reference_purchase_receipt (set by ERPNext's PR -> Stock Entry
+	# mapper) — a grid read_only_depends_on evaluates against the row, so `parent.` is
+	# unreliable here.
 	make_property_setter(
 		"Stock Entry Detail", "s_warehouse", "read_only_depends_on",
-		"eval:parent.purchase_receipt_no", "Data", validate_fields_for_doctype=False,
+		"eval:doc.reference_purchase_receipt", "Data", validate_fields_for_doctype=False,
 	)
 	# Target: always editable (clear ERPNext's own conditional lock too).
 	make_property_setter(
