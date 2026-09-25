@@ -170,75 +170,85 @@ def _best_leaf_with_stock(item, *, company=None, lft=None, rgt=None, branch=None
 	return rows[0] if rows else None
 
 
+def _sister_landings(company: str) -> dict:
+	"""Sisters of `company` as {sister_company: landing_leaf}, derived from the landing
+	warehouses configured IN `company` (a leaf tagged 'Receives Sister Company Stock' with
+	its Sister Company). This is the reliable source of the sister relationship — it does
+	not depend on branches being aligned across companies."""
+	out = {}
+	for w in frappe.get_all(
+		"Warehouse",
+		filters={"company": company, "azzir_is_sister_landing": 1, "is_group": 0, "disabled": 0},
+		fields=["name", "azzir_sister_company"],
+	):
+		if w.azzir_sister_company and w.azzir_sister_company not in out:
+			out[w.azzir_sister_company] = w.name
+	return out
+
+
 @frappe.whitelist()
 def resolve_all_warehouses(item_code: str | None = None, group: str | None = None,
                            company: str | None = None) -> dict:
-	"""Resolve a sales row's warehouse from the chosen "All Warehouses" group, following:
-	  our group  ->  our own leaf with stock (use it, no sister)
-	             ->  else sister GROUP with the SAME branch  ->  its child leaf with the
-	                 most stock (the sister supply)  ->  back to OUR leaf: match the sister
-	                 leaf's branch, else its name, else any leaf under our group.
-	The returned `warehouse` is ALWAYS our own company's leaf (never the sister's — you
-	can't put another company's warehouse on our document); the sister only supplies.
-	Returns {warehouse, from_sister, supply_company, supply_warehouse} (empty if unusable)."""
+	"""Resolve a sales row's warehouse from the chosen "All Warehouses" pick:
+	  1. our OWN stock (under the picked group if given, else anywhere in our company) -> use it;
+	  2. else a SISTER company (identified by our landing-warehouse config, NOT branches) with
+	     the most stock of the item -> From sister, supply = that sister leaf, and the row
+	     warehouse = OUR landing warehouse for that sister (a warehouse we're allowed to use).
+	     A branch that matches the picked group is preferred when present, but not required.
+	The returned `warehouse` is ALWAYS one of our own company's warehouses (the landing);
+	the sister only supplies. Returns {warehouse, from_sister, supply_company,
+	supply_warehouse} (empty if nothing usable)."""
 	from azzir_fleet.item_codes import code_owner
 
-	if not group or not company:
+	if not company:
 		return {}
 	item = code_owner(item_code) or item_code
-	grp = frappe.db.get_value(
-		"Warehouse", group, ["lft", "rgt", "azzir_branch", "is_group"], as_dict=True
-	)
-	if not grp or grp.lft is None:
-		return {}
+	grp = None
+	if group:
+		grp = frappe.db.get_value("Warehouse", group, ["lft", "rgt", "azzir_branch"], as_dict=True)
 
-	# Our own leaves under the picked group (for the map-back step).
-	our_leaves = frappe.db.sql(
-		"""select name, azzir_branch, warehouse_name from `tabWarehouse`
-		   where company = %(co)s and is_group = 0 and disabled = 0
-		     and lft >= %(l)s and rgt <= %(r)s order by name""",
-		{"co": company, "l": grp.lft, "r": grp.rgt}, as_dict=True,
-	)
-
-	# 1) Prefer our OWN stock under this group — no sister needed.
+	# 1) Prefer our OWN stock (scoped to the picked group when one is given).
 	if item:
-		own = _best_leaf_with_stock(item, company=company, lft=grp.lft, rgt=grp.rgt)
+		if grp and grp.lft is not None:
+			own = _best_leaf_with_stock(item, company=company, lft=grp.lft, rgt=grp.rgt)
+		else:
+			own = _best_leaf_with_stock(item, company=company)
 		if own:
 			return {"warehouse": own.warehouse, "from_sister": 0}
-
-	# 2) Sister GROUP(s) with the same branch as our group -> their child with most stock.
-	sister_leaf = None
-	if item and grp.azzir_branch:
-		best_qty = -1.0
-		for sg in frappe.get_all(
-			"Warehouse",
-			filters={"is_group": 1, "disabled": 0, "company": ["!=", company],
-			         "azzir_branch": grp.azzir_branch},
-			fields=["name", "lft", "rgt"],
-		):
-			cand = _best_leaf_with_stock(item, lft=sg.lft, rgt=sg.rgt, exclude_company=company)
-			if cand and flt(cand.qty) > best_qty:
-				best_qty, sister_leaf = flt(cand.qty), cand
-
-	# 3) Map the sister leaf back to OUR leaf: by branch, else by name, else any of ours.
-	our = None
-	if sister_leaf and our_leaves:
-		if sister_leaf.azzir_branch:
-			our = next((l for l in our_leaves if l.azzir_branch == sister_leaf.azzir_branch), None)
-		if not our:
-			sn = (sister_leaf.warehouse_name or "").strip().lower()
-			our = next((l for l in our_leaves if (l.warehouse_name or "").strip().lower() == sn), None)
-	if not our and our_leaves:
-		our = our_leaves[0]
-	if not our:
+	if not item:
 		return {}
 
-	if sister_leaf:
-		return {
-			"warehouse": our.name, "from_sister": 1,
-			"supply_company": sister_leaf.company, "supply_warehouse": sister_leaf.warehouse,
-		}
-	return {"warehouse": our.name, "from_sister": 0}
+	# 2) Sister companies come from our landing config. For each, find its leaf with the most
+	#    stock of the item — preferring a leaf under a group sharing the picked branch.
+	landings = _sister_landings(company)
+	if not landings:
+		return {}
+	branch = grp.azzir_branch if grp else None
+	best = None
+	for sister, landing in landings.items():
+		cand = None
+		if branch:
+			for sg in frappe.get_all(
+				"Warehouse",
+				filters={"company": sister, "is_group": 1, "disabled": 0, "azzir_branch": branch},
+				fields=["lft", "rgt"],
+			):
+				c = _best_leaf_with_stock(item, company=sister, lft=sg.lft, rgt=sg.rgt)
+				if c and (cand is None or flt(c.qty) > flt(cand.qty)):
+					cand = c
+		if not cand:
+			cand = _best_leaf_with_stock(item, company=sister)
+		if cand and (best is None or flt(cand.qty) > flt(best["qty"])):
+			best = {"sister": sister, "leaf": cand.warehouse, "qty": flt(cand.qty), "landing": landing}
+
+	if not best:
+		return {}
+	return {
+		"warehouse": best["landing"],  # our landing warehouse (permitted + set_landing agrees)
+		"from_sister": 1,
+		"supply_company": best["sister"],
+		"supply_warehouse": best["leaf"],
+	}
 
 
 @frappe.whitelist()

@@ -263,7 +263,13 @@ def enforce_warehouse_selection(doc, method=None):
 	"""Server-side guarantee (desk, portal AND API): reject any row whose warehouse the
 	user is not allowed to SELECT. Unrestricted users (Admin/System Manager, or no cost
 	center / warehouse permission) pass. Sister-sourced rows are skipped (their warehouse
-	is system-managed). Only leaf warehouses are policed."""
+	is system-managed). Only leaf warehouses are policed.
+
+	Quotations post no stock and often inherit an item's default warehouse the user can't
+	use — so they are not policed here; enforcement applies where stock actually moves
+	(Sales Invoice / Delivery Note / Stock Entry / Purchase Receipt)."""
+	if getattr(doc, "doctype", None) == "Quotation":
+		return
 	if not _field_ready():
 		return
 	all_bounds = _effective_bounds()  # Warehouse permission wins over cost centre
