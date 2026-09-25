@@ -526,9 +526,13 @@ override_whitelisted_methods = {
 # each overriding function accepts a `data` argument;
 # generated from the base implementation of the doctype dashboard,
 # along with any modifications made in other Frappe apps
-# override_doctype_dashboards = {
-# 	"Task": "azzir_fleet.task.get_dashboard_data"
-# }
+#
+# A Purchase Receipt must not be raised straight off a Purchase Order. The toolbar
+# button is removed client-side (public/js/azzir_purchase.js); this shuts the OTHER
+# path — the '+' the Connections section renders next to each linked doctype.
+override_doctype_dashboards = {
+	"Purchase Order": "azzir_fleet.purchase_cycle.purchase_order_dashboard",
+}
 
 # exempt linked doctypes from being automatically cancelled
 #

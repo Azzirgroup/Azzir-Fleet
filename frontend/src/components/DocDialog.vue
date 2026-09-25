@@ -56,7 +56,7 @@
           <div class="hidden overflow-x-auto md:block">
           <table class="min-w-full text-sm">
             <thead class="bg-gray-50 text-left text-gray-500">
-              <tr><th class="px-3 py-2">Item</th><th class="px-2 py-2 w-16">Qty</th><th class="px-2 py-2 w-24">Rate</th><th class="px-2 py-2 w-44">Warehouse</th><th class="px-2 py-2 w-24 text-right">Amount</th><th></th></tr>
+              <tr><th class="px-3 py-2">Item</th><th class="px-2 py-2 w-16">Qty</th><th class="px-2 py-2 w-24">Rate</th><th class="px-2 py-2 w-44">All Warehouse</th><th class="px-2 py-2 w-44">Warehouse</th><th class="px-2 py-2 w-24 text-right">Amount</th><th></th></tr>
             </thead>
             <tbody>
               <template v-for="(row, i) in rows" :key="i">
@@ -64,17 +64,26 @@
                   <td class="px-2 py-2 w-64"><Combo v-model="row.item_code" doctype="Item" display="item_name" placeholder="Select item / part no." query-method="azzir_fleet.alias.item_search_for_spa" @update:model-value="(v) => onItem(i, v)" /></td>
                   <td class="px-2 py-2"><input v-model.number="row.qty" type="number" class="w-14 rounded border px-2 py-1" /></td>
                   <td class="px-2 py-2"><input v-model.number="row.rate" type="number" class="w-20 rounded border px-2 py-1" /></td>
+                  <!-- All Warehouse comes FIRST: it's the input. Pick one of our groups
+                       and the backend resolves the concrete leaf (ours, or a branch-
+                       matched sister that has the stock) into Warehouse beside it. -->
                   <td class="px-2 py-2">
-                    <div class="flex items-center gap-1">
-                      <div class="w-40"><Combo v-model="row.warehouse" doctype="Warehouse" display="name" placeholder="—" query-method="azzir_fleet.warehouse_cc.warehouse_search" :query-args="{ company }" /></div>
-                      <button v-if="row.item_code" class="rounded border px-1.5 py-1 text-xs" title="See all warehouses" @click="stockRow = i">📦</button>
-                    </div>
-                    <!-- All Warehouses: pick one of our groups; backend fills the concrete
-                         leaf (ours, or a branch-matched sister that has the stock). -->
-                    <div v-if="sisterEligible && row.item_code" class="mt-1 w-40">
+                    <div v-if="sisterEligible && row.item_code" class="w-40">
                       <Combo v-model="row.all_warehouses" doctype="Warehouse" display="name" placeholder="All Warehouses"
                         query-method="azzir_fleet.intercompany_sale.company_group_warehouses" :query-args="{ company }"
                         @update:model-value="() => onPickAllWarehouses(row)" />
+                    </div>
+                    <div v-else class="px-1 text-sm text-gray-300">—</div>
+                  </td>
+                  <!-- Warehouse: the RESOLVED leaf, filled by the All Warehouse picker —
+                       read-only so it can't drift from what the backend resolved. Users
+                       without the All Warehouse picker keep an editable field, otherwise
+                       they'd have no way to set a warehouse at all. -->
+                  <td class="px-2 py-2">
+                    <div class="flex items-center gap-1">
+                      <div v-if="sisterEligible" class="w-40 truncate rounded-md border bg-gray-50 px-3 py-2 text-sm text-gray-600" :title="row.warehouse">{{ row.warehouse || '—' }}</div>
+                      <div v-else class="w-40"><Combo v-model="row.warehouse" doctype="Warehouse" display="name" placeholder="—" query-method="azzir_fleet.warehouse_cc.warehouse_search" :query-args="{ company }" /></div>
+                      <button v-if="row.item_code" class="rounded border px-1.5 py-1 text-xs" title="See all warehouses" @click="stockRow = i">📦</button>
                     </div>
                   </td>
                   <td class="px-2 py-2 text-right">{{ fmt((row.qty || 0) * (row.rate || 0)) }}</td>
@@ -82,29 +91,30 @@
                 </tr>
                 <!-- Editable item description (auto-fills from the item, override freely). -->
                 <tr v-if="row.item_code">
-                  <td colspan="6" class="px-2 pb-2">
+                  <td colspan="7" class="px-2 pb-2">
                     <input v-model="row.description" placeholder="Description (editable)" class="w-full rounded border px-2 py-1 text-xs text-gray-600" />
                   </td>
                 </tr>
                 <!-- Per-row sister source (buy-from-sister): tick only the lines that
                      come from a sister; the rest stay normal. -->
                 <tr v-if="sisterEligible">
-                  <td colspan="6" class="px-2 pb-2">
+                  <td colspan="7" class="px-2 pb-2">
                     <div class="flex flex-wrap items-center gap-2 rounded bg-amber-50 px-2 py-1 text-xs">
                       <label class="flex items-center gap-1"><input type="checkbox" v-model="row.from_sister" @change="onRowFromSister(row)" /> From sister</label>
+                      <!-- Supply company / warehouse are resolved by the backend (All
+                           Warehouse pick, or the sister default for the item) — shown
+                           read-only so a hand edit can't contradict the resolution. -->
                       <template v-if="row.from_sister">
-                        <div class="w-48"><Combo v-model="row.supply_company" doctype="Company" display="name" placeholder="Sister company" /></div>
-                        <div class="w-56"><Combo v-model="row.supply_warehouse" doctype="Warehouse" display="label" placeholder="Warehouse (in stock)"
-                          query-method="azzir_fleet.intercompany_sale.supply_warehouses"
-                          :query-args="{ company: row.supply_company, item_codes: row.item_code ? [row.item_code] : [] }" /></div>
+                        <div class="w-48 truncate rounded border bg-white px-2 py-1 text-gray-700" :title="row.supply_company">{{ row.supply_company || '—' }}</div>
+                        <div class="w-56 truncate rounded border bg-white px-2 py-1 text-gray-700" :title="row.supply_warehouse">{{ row.supply_warehouse || '—' }}</div>
                       </template>
                     </div>
                   </td>
                 </tr>
               </template>
-              <tr v-if="!rows.length"><td colspan="6" class="px-3 py-6 text-center text-gray-400">No items.</td></tr>
+              <tr v-if="!rows.length"><td colspan="7" class="px-3 py-6 text-center text-gray-400">No items.</td></tr>
             </tbody>
-            <tfoot><tr class="border-t"><td colspan="4"></td><td class="px-3 py-2 text-right font-semibold">Total</td><td class="px-3 py-2 text-right font-semibold">{{ fmt(total) }}</td></tr></tfoot>
+            <tfoot><tr class="border-t"><td colspan="5" class="px-3 py-2 text-right font-semibold">Total</td><td class="px-3 py-2 text-right font-semibold">{{ fmt(total) }}</td><td></td></tr></tfoot>
           </table>
           </div>
 
@@ -120,15 +130,19 @@
                 <div><label class="mb-1 block text-xs text-gray-500">Rate</label><input v-model.number="row.rate" type="number" class="w-full rounded border px-2 py-1" /></div>
               </div>
               <div>
-                <label class="mb-1 block text-xs text-gray-500">Warehouse</label>
-                <div class="flex items-center gap-1">
-                  <div class="flex-1"><Combo v-model="row.warehouse" doctype="Warehouse" display="name" placeholder="—" query-method="azzir_fleet.warehouse_cc.warehouse_search" :query-args="{ company }" /></div>
-                  <button v-if="row.item_code" class="rounded border px-2 py-1 text-xs" title="See all warehouses" @click="stockRow = i">📦</button>
-                </div>
-                <div v-if="sisterEligible && row.item_code" class="mt-1">
+                <!-- All Warehouse first (the input), Warehouse below it (the result) —
+                     same order as the desktop table. -->
+                <div v-if="sisterEligible && row.item_code" class="mb-2">
+                  <label class="mb-1 block text-xs text-gray-500">All Warehouse</label>
                   <Combo v-model="row.all_warehouses" doctype="Warehouse" display="name" placeholder="All Warehouses"
                     query-method="azzir_fleet.intercompany_sale.company_group_warehouses" :query-args="{ company }"
                     @update:model-value="() => onPickAllWarehouses(row)" />
+                </div>
+                <label class="mb-1 block text-xs text-gray-500">Warehouse</label>
+                <div class="flex items-center gap-1">
+                  <div v-if="sisterEligible" class="flex-1 truncate rounded-md border bg-gray-50 px-3 py-2 text-sm text-gray-600">{{ row.warehouse || '—' }}</div>
+                  <div v-else class="flex-1"><Combo v-model="row.warehouse" doctype="Warehouse" display="name" placeholder="—" query-method="azzir_fleet.warehouse_cc.warehouse_search" :query-args="{ company }" /></div>
+                  <button v-if="row.item_code" class="rounded border px-2 py-1 text-xs" title="See all warehouses" @click="stockRow = i">📦</button>
                 </div>
               </div>
               <div v-if="row.item_code">
@@ -136,11 +150,10 @@
               </div>
               <div v-if="sisterEligible" class="rounded bg-amber-50 px-2 py-2 text-xs">
                 <label class="flex items-center gap-1"><input type="checkbox" v-model="row.from_sister" @change="onRowFromSister(row)" /> From sister</label>
+                <!-- Read-only: resolved by the backend, same as the desktop view. -->
                 <template v-if="row.from_sister">
-                  <div class="mt-2"><Combo v-model="row.supply_company" doctype="Company" display="name" placeholder="Sister company" /></div>
-                  <div class="mt-2"><Combo v-model="row.supply_warehouse" doctype="Warehouse" display="label" placeholder="Warehouse (in stock)"
-                    query-method="azzir_fleet.intercompany_sale.supply_warehouses"
-                    :query-args="{ company: row.supply_company, item_codes: row.item_code ? [row.item_code] : [] }" /></div>
+                  <div class="mt-2 truncate rounded border bg-white px-2 py-1 text-gray-700">{{ row.supply_company || '—' }}</div>
+                  <div class="mt-2 truncate rounded border bg-white px-2 py-1 text-gray-700">{{ row.supply_warehouse || '—' }}</div>
                 </template>
               </div>
               <div class="flex items-center justify-between pt-1">

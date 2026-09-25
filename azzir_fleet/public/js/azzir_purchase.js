@@ -38,10 +38,19 @@ azzir_fleet.autofill_purchase_warehouse = function (frm, cdt, cdn) {
 		refresh(frm) {
 			azzir_fleet.set_target_wh_query(frm);
 			// Purchase Order: drop the standard "Create > Purchase Receipt" button.
+			// ERPNext adds it in its own refresh, and re-adds it after async events
+			// (status change, reload). One 500ms retry lost that race, so re-check
+			// over the first couple of seconds and stop as soon as it's gone.
 			if (frm.doc.doctype === "Purchase Order") {
-				const drop = () => frm.remove_custom_button(__("Purchase Receipt"), __("Create"));
+				const drop = () => {
+					try {
+						frm.remove_custom_button(__("Purchase Receipt"), __("Create"));
+					} catch (e) {
+						/* button not there — nothing to remove */
+					}
+				};
 				drop();
-				setTimeout(drop, 500); // in case ERPNext adds it late
+				[100, 300, 700, 1200, 2000].forEach((ms) => setTimeout(drop, ms));
 			}
 		},
 	});

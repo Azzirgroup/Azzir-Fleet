@@ -204,3 +204,25 @@ def _build_target_transfer(doc, source_company, target_company, rows, ic_price_l
 	pr.submit()
 
 	return (dn.name, pr.name)
+
+
+def purchase_order_dashboard(data=None):
+	"""Drop 'Purchase Receipt' from the Purchase Order connections.
+
+	The toolbar's Create > Purchase Receipt button is removed client-side (see
+	public/js/azzir_purchase.js), but the Connections section renders its OWN '+'
+	next to each linked doctype — a second way to raise a receipt straight off the
+	PO that the button removal never touched. Strip it here so both paths are shut,
+	and drop any group that ends up empty.
+
+	Called by Frappe as hook(data=data) and must return the dashboard dict.
+	"""
+	data = data or {}
+	groups = []
+	for group in data.get("transactions") or []:
+		items = [i for i in (group.get("items") or []) if i != "Purchase Receipt"]
+		if items:
+			group["items"] = items
+			groups.append(group)
+	data["transactions"] = groups
+	return data
