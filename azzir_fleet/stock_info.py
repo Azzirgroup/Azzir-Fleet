@@ -308,6 +308,32 @@ def best_warehouse_in_group(item_code: str | None = None, warehouse: str | None 
 
 
 @frappe.whitelist()
+def target_warehouse_in_group(item_code: str | None = None, warehouse: str | None = None):
+	"""Leaf under `warehouse` to auto-fill a Stock Entry row's TARGET Warehouse from the
+	chosen Default Group Target Warehouse: the leaf holding the MOST of the item, or — when
+	none holds it (e.g. a receipt into an empty group) — the first (alphabetical) enabled
+	leaf in the group, so the target always lands somewhere sensible. None if the group has
+	no usable leaf."""
+	if not warehouse:
+		return None
+	best = best_warehouse_in_group(item_code, warehouse) if item_code else None
+	if best:
+		return best
+	b = frappe.db.get_value("Warehouse", warehouse, ["lft", "rgt"])
+	if not b or b[0] is None:
+		return None
+	row = frappe.db.sql(
+		"""select w.name from `tabWarehouse` w
+		   where w.is_group = 0 and w.disabled = 0
+		     and w.lft >= %(lft)s and w.rgt <= %(rgt)s
+		   order by w.name limit 1""",
+		{"lft": b[0], "rgt": b[1]},
+		as_dict=True,
+	)
+	return row[0].name if row else None
+
+
+@frappe.whitelist()
 @frappe.validate_and_sanitize_search_inputs
 def leaves_in_group(doctype, txt, searchfield, start, page_len, filters):
 	"""Link-field query: leaf warehouses that sit UNDER filters['group'] (a group

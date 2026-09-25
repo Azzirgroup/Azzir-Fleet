@@ -88,6 +88,23 @@ function autofill_group_source(frm, cdt, cdn) {
 	});
 }
 
+// When a Group Target is set and an item is chosen, auto-fill the row's Target
+// Warehouse with the child warehouse holding the most of that item — and if none
+// holds it, the first leaf in the group (so a receipt still lands somewhere). Never
+// override a target the user already set.
+function autofill_group_target(frm, cdt, cdn) {
+	const row = locals[cdt] && locals[cdt][cdn];
+	if (!row || !row.item_code || !frm.doc.azzir_group_target_warehouse) return;
+	if (row.t_warehouse) return;
+	frappe.call({
+		method: "azzir_fleet.stock_info.target_warehouse_in_group",
+		args: { item_code: row.item_code, warehouse: frm.doc.azzir_group_target_warehouse },
+		callback(r) {
+			if (r.message) frappe.model.set_value(cdt, cdn, "t_warehouse", r.message);
+		},
+	});
+}
+
 frappe.ui.form.on("Stock Entry", {
 	setup: set_stock_item_query,
 	onload: set_stock_item_query,
@@ -108,6 +125,7 @@ frappe.ui.form.on("Stock Entry Detail", {
 			},
 		});
 		autofill_group_source(frm, cdt, cdn);
+		autofill_group_target(frm, cdt, cdn);
 	},
 
 	azzir_view_stock(frm, cdt, cdn) {
