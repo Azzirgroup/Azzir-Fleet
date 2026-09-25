@@ -170,6 +170,9 @@ fixtures = [
 					"Purchase Order-azzir_remark",
 					"Purchase Receipt-azzir_remark",
 					"Purchase Invoice-azzir_remark",
+					# Stock Entry group-warehouse defaults.
+					"Stock Entry-azzir_group_source_warehouse",
+					"Stock Entry-azzir_group_target_warehouse",
 					# Hide-a-company-everywhere checkbox.
 					"Company-azzir_hidden",
 					# Sales Invoice delivery progress (top of form + list view).
@@ -205,6 +208,10 @@ fixtures = [
 					# Per-row Source/Target Warehouse locked on Stock Entry items.
 					"Stock Entry Detail-s_warehouse-read_only",
 					"Stock Entry Detail-t_warehouse-read_only",
+					# Group-warehouse Stock Entry: hide the default source/target, Item first.
+					"Stock Entry-from_warehouse-hidden",
+					"Stock Entry-to_warehouse-hidden",
+					"Stock Entry Detail-main-field_order",
 				],
 			]
 		],

@@ -286,6 +286,53 @@ def get_stock_tree(
 
 
 @frappe.whitelist()
+def best_warehouse_in_group(item_code: str | None = None, warehouse: str | None = None):
+	"""The leaf warehouse UNDER `warehouse` (a group, or a leaf) that holds the MOST
+	stock of the item — used to auto-fill a Stock Entry row's Source Warehouse from the
+	chosen Default Group Source Warehouse. Nested groups included. None if none hold it."""
+	if not item_code or not warehouse:
+		return None
+	bounds = frappe.db.get_value("Warehouse", warehouse, ["lft", "rgt"])
+	if not bounds or bounds[0] is None:
+		return None
+	row = frappe.db.sql(
+		"""select b.warehouse, sum(b.actual_qty) qty
+		   from `tabBin` b join `tabWarehouse` w on w.name = b.warehouse
+		   where b.item_code = %(it)s and b.actual_qty > 0 and w.is_group = 0 and w.disabled = 0
+		     and w.lft >= %(lft)s and w.rgt <= %(rgt)s
+		   group by b.warehouse having qty > 0 order by qty desc limit 1""",
+		{"it": item_code, "lft": bounds[0], "rgt": bounds[1]},
+		as_dict=True,
+	)
+	return row[0].warehouse if row else None
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def leaves_in_group(doctype, txt, searchfield, start, page_len, filters):
+	"""Link-field query: leaf warehouses that sit UNDER filters['group'] (a group
+	warehouse) — for a Stock Entry row's Target Warehouse once a Default Group Target
+	Warehouse is chosen. No group given -> all leaf warehouses."""
+	if isinstance(filters, str):
+		filters = frappe.parse_json(filters)
+	filters = filters or {}
+	group = filters.get("group")
+	like = "%%%s%%" % (txt or "")
+	conds = ["w.disabled = 0", "w.is_group = 0", "(w.name like %(t)s or w.warehouse_name like %(t)s)"]
+	vals = {"t": like, "s": start, "p": page_len}
+	if group:
+		b = frappe.db.get_value("Warehouse", group, ["lft", "rgt"])
+		if b and b[0] is not None:
+			conds.append("w.lft >= %(lft)s and w.rgt <= %(rgt)s")
+			vals["lft"], vals["rgt"] = b[0], b[1]
+	return frappe.db.sql(
+		"select w.name, w.warehouse_name from `tabWarehouse` w where "
+		+ " and ".join(conds) + " order by w.name limit %(s)s, %(p)s",
+		vals,
+	)
+
+
+@frappe.whitelist()
 def last_warehouse(item_code: str, company: str | None = None) -> str:
 	"""The warehouse this item was most recently stored in (last stock ledger
 	entry), even if that warehouse is now empty. For auto-filling receipts."""

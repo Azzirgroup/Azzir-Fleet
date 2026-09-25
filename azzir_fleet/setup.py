@@ -702,6 +702,35 @@ CUSTOM_FIELDS.setdefault("Sales Invoice", []).extend(
 # Per-row Target Company + Target Warehouse on Purchase Order / Receipt / Invoice
 # items. Only used when the target company differs from the buying company (then
 # the received stock is transferred there at submit — see azzir_fleet.purchase_cycle).
+# Stock Entry: group-warehouse defaults. Pick a GROUP as source/target; per item
+# the source auto-fills the child warehouse with the most stock, and the target
+# is filtered to the child warehouses of the group (see public/js/stock_entry.js).
+CUSTOM_FIELDS.setdefault("Stock Entry", []).extend(
+	[
+		{
+			"fieldname": "azzir_group_source_warehouse",
+			"label": "Default Group Source Warehouse",
+			"fieldtype": "Link",
+			"options": "Warehouse",
+			"insert_after": "from_warehouse",
+			"depends_on": "eval:doc.purpose != 'Material Receipt'",
+			"description": "Pick a GROUP. When an item is added, its Source Warehouse "
+			"auto-fills with the child warehouse holding the most of that item.",
+		},
+		{
+			"fieldname": "azzir_group_target_warehouse",
+			"label": "Default Group Target Warehouse",
+			"fieldtype": "Link",
+			"options": "Warehouse",
+			"insert_after": "to_warehouse",
+			"depends_on": "eval:doc.purpose != 'Material Issue'",
+			"description": "Pick a GROUP. Each row's Target Warehouse is then filtered "
+			"to the child warehouses of this group.",
+		},
+	]
+)
+
+
 _ROW_TARGET_FIELDS = [
 	{
 		# Per-row toggle: this line is bought FOR another internal company. Sole
@@ -810,6 +839,8 @@ def after_migrate():
 		("item_link_code_only", _show_item_code_only_in_links),
 		("warehouse_mandatory", _make_warehouse_mandatory),
 		("stock_entry_row_wh_readonly", _stock_entry_row_warehouses_readonly),
+		("stock_entry_hide_default_wh", _hide_stock_entry_default_warehouses),
+		("stock_entry_item_first", _stock_entry_item_first),
 		("cost_center_user_perm_exempt", _exempt_cost_center_from_user_permissions),
 		("editable_customer_name", _make_customer_name_editable),
 		# Backfill delivery %/status on invoices missing it (custom fields already
@@ -1088,6 +1119,31 @@ def _stock_entry_row_warehouses_readonly():
 		make_property_setter(
 			"Stock Entry Detail", field, "read_only", 1, "Check", validate_fields_for_doctype=False
 		)
+
+
+def _hide_stock_entry_default_warehouses():
+	"""Hide the built-in Default Source / Default Target Warehouse header fields — the
+	Default GROUP Source/Target Warehouse fields replace them. Reversible."""
+	for field in ("from_warehouse", "to_warehouse"):
+		make_property_setter(
+			"Stock Entry", field, "hidden", 1, "Check", validate_fields_for_doctype=False
+		)
+
+
+def _stock_entry_item_first():
+	"""Make Item the first column of the Stock Entry item grid (users pick the item,
+	then the source warehouse auto-fills). Done via a doctype field_order property
+	setter; Frappe reconciles any fields not listed, so it's safe across upgrades."""
+	import json
+
+	order = [f.fieldname for f in frappe.get_meta("Stock Entry Detail").fields]
+	if "item_code" not in order or order[0] == "item_code":
+		return
+	new_order = ["item_code"] + [f for f in order if f != "item_code"]
+	make_property_setter(
+		"Stock Entry Detail", "", "field_order", json.dumps(new_order), "Data",
+		for_doctype=True, validate_fields_for_doctype=False,
+	)
 
 
 def _make_customer_name_editable():
