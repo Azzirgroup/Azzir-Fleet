@@ -293,6 +293,17 @@ def make_next(source_doctype: str, source_name: str, target: str) -> dict:
 		doc.insert(ignore_permissions=True)
 		return {"mode": "open", "doctype": doc.doctype, "name": doc.name}
 
+	if target == "Credit Note" and source_doctype == "Sales Invoice":
+		# A Credit Note is a Sales Invoice RETURN (is_return=1, negative qty, linked via
+		# return_against). Create the draft return straight away and open it for review —
+		# it inherits the mandatory approval (flag_below_cost forces it for returns), so it
+		# can only be submitted through the approval workflow.
+		from erpnext.accounts.doctype.sales_invoice.sales_invoice import make_sales_return
+
+		ret = make_sales_return(source_name)
+		ret.insert()  # respects the user's create permission on Sales Invoice
+		return {"mode": "open", "doctype": "Sales Invoice", "name": ret.name, "spa": True}
+
 	if target == "Sales Invoice" and source_doctype == "Quotation":
 		from azzir_fleet.quotation import make_sales_invoice
 		doc = make_sales_invoice(source_name)

@@ -102,7 +102,13 @@ const statusClass = computed(() => doc.value.docstatus === 1 ? 'bg-green-100 tex
 const SPA_ROUTE = { Quotation: '/quotations', 'Sales Invoice': '/invoices', 'Delivery Note': '/delivery-notes' }
 const nextActions = computed(() => {
   if (props.doctype === 'Quotation') return [{ target: 'Sales Invoice', label: 'Sales Invoice' }]
-  if (props.doctype === 'Sales Invoice') return [{ target: 'Delivery Note', label: 'Delivery Note' }, { target: 'Payment Entry', label: 'Payment Entry' }]
+  if (props.doctype === 'Sales Invoice') {
+    const acts = [{ target: 'Delivery Note', label: 'Delivery Note' }, { target: 'Payment Entry', label: 'Payment Entry' }]
+    // Credit Note = a return of THIS invoice (needs Sales Invoice create perm). Not on a
+    // credit note itself, and only on a submitted invoice.
+    if (!doc.value.is_return && doc.value.docstatus === 1) acts.push({ target: 'Credit Note', label: 'Credit Note', perm: 'Sales Invoice' })
+    return acts
+  }
   return []
 })
 // Per-target create permission (false = not allowed) — gates the buttons and drives
@@ -111,7 +117,7 @@ const creatable = ref({})
 const blockedNext = computed(() => nextActions.value.filter((a) => creatable.value[a.target] === false))
 async function loadCreatePerms() {
   const entries = await Promise.all(
-    nextActions.value.map(async (a) => [a.target, await canCreateDoc(a.target).catch(() => false)]),
+    nextActions.value.map(async (a) => [a.target, await canCreateDoc(a.perm || a.target).catch(() => false)]),
   )
   creatable.value = Object.fromEntries(entries)
 }
@@ -179,9 +185,16 @@ async function createNext(target) {
     const r = await makeNext(props.doctype, props.name, target)
     err.value = false
     if (r.mode === 'open') {
-      // Payment Entry: created straight away, open it in the desk.
-      window.open(`/app/${r.doctype.toLowerCase().replace(/ /g, '-')}/${encodeURIComponent(r.name)}`, '_blank')
-      msg.value = `${r.doctype} created — opened in a new tab.`
+      if (r.spa && SPA_ROUTE[r.doctype]) {
+        // Credit Note: a return created straight away — open it here in the app to review
+        // and send for approval.
+        router.push(`${SPA_ROUTE[r.doctype]}/${encodeURIComponent(r.name)}`)
+        msg.value = `${target} created — review and send for approval.`
+      } else {
+        // Payment Entry: created straight away, open it in the desk.
+        window.open(`/app/${r.doctype.toLowerCase().replace(/ /g, '-')}/${encodeURIComponent(r.name)}`, '_blank')
+        msg.value = `${r.doctype} created — opened in a new tab.`
+      }
     } else {
       // Sales Invoice / Delivery Note: review the prefilled form, then save.
       createTarget.value = r.doctype

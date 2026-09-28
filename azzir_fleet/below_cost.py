@@ -23,6 +23,11 @@ def flag_below_cost(doc, method=None):
 	# no selling price on record).
 	if not below and doc.doctype == "Sales Invoice" and doc.get("azzir_source_quotation"):
 		below = bool(frappe.db.get_value("Quotation", doc.azzir_source_quotation, "azzir_below_cost"))
+	# A Credit Note (Sales Invoice return) ALWAYS needs approval — reuse the same flag so
+	# it routes through the existing 'Sales Below Cost Approval' workflow (no straight
+	# submit). Returning stock/credit is never allowed without a manager's sign-off.
+	if doc.doctype == "Sales Invoice" and doc.get("is_return"):
+		below = True
 	doc.azzir_below_cost = 1 if below else 0
 
 
