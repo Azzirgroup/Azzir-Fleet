@@ -182,6 +182,8 @@ fixtures = [
 					# Sales Invoice delivery progress (top of form + list view).
 					"Sales Invoice-azzir_delivery_status",
 					"Sales Invoice-azzir_per_delivered",
+					# Employee: receives sales-approval requests on WhatsApp.
+					"Employee-azzir_approval_recipient",
 				],
 			]
 		],
@@ -408,6 +410,8 @@ doc_events = {
 			"azzir_fleet.below_cost.set_previous_price",
 			"azzir_fleet.customer_name.restore_override",
 		],
+		# Sent-for-approval -> WhatsApp the approval recipients (desk + /sales).
+		"on_update": "azzir_fleet.approval_notify.notify_pending_approval",
 	},
 	"Supplier Quotation": {
 		"validate": [
@@ -433,6 +437,8 @@ doc_events = {
 		# Refresh the linked Sales Invoice's delivery % / status after a delivery.
 		"on_submit": "azzir_fleet.delivery_status.refresh_from_delivery_note",
 		"on_cancel": "azzir_fleet.delivery_status.refresh_from_delivery_note",
+		# Sent-for-approval -> WhatsApp the approval recipients (desk + /sales).
+		"on_update": "azzir_fleet.approval_notify.notify_pending_approval",
 	},
 	"Sales Invoice": {
 		"before_validate": "azzir_fleet.customer_name.capture_override",
@@ -458,6 +464,8 @@ doc_events = {
 		],
 		"on_submit": "azzir_fleet.sales_invoice.mark_quotation_invoiced",
 		"on_cancel": "azzir_fleet.sales_invoice.unmark_quotation_invoiced",
+		# Sent-for-approval -> WhatsApp the approval recipients (desk + /sales).
+		"on_update": "azzir_fleet.approval_notify.notify_pending_approval",
 	},
 	"POS Invoice": {"validate": "azzir_fleet.qty_limits.validate_selling"},
 	# Monthly Budget control (Warn/Stop). JE covers Expense Entry too.

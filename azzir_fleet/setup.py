@@ -595,6 +595,20 @@ CUSTOM_FIELDS.setdefault("Company", []).append(
 	}
 )
 
+# Employee flag: receive sales-approval requests on WhatsApp. When a Quotation / Sales
+# Invoice / Delivery Note is sent for approval, every Active employee with this ticked
+# (and a Mobile number) is WhatsApped the document + an approve link.
+CUSTOM_FIELDS.setdefault("Employee", []).append(
+	{
+		"fieldname": "azzir_approval_recipient",
+		"label": "Receives Approval Requests (WhatsApp)",
+		"fieldtype": "Check",
+		"insert_after": "cell_number",
+		"description": "When a sales document is sent for approval, WhatsApp this employee "
+		"the document and an approve link. Needs a Mobile number on this Employee.",
+	}
+)
+
 # --- Sell sister-company stock (corporate company buys from a sister at a discount)
 # Flag a Cost Center as "Corporate": its assigned users can buy sister stock.
 CUSTOM_FIELDS.setdefault("Cost Center", []).append(
