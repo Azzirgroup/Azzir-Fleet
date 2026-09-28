@@ -105,10 +105,28 @@ function autofill_group_target(frm, cdt, cdn) {
 	});
 }
 
+// Back-fill EVERY existing row when the Default Group Source / Target is picked or
+// changed — so it works whether you set the default before or after adding rows.
+// Per-row helpers already skip rows that already have a warehouse, so nothing set is
+// overwritten.
+function autofill_group_source_all(frm) {
+	(frm.doc.items || []).forEach((row) => autofill_group_source(frm, row.doctype, row.name));
+}
+function autofill_group_target_all(frm) {
+	(frm.doc.items || []).forEach((row) => autofill_group_target(frm, row.doctype, row.name));
+}
+
 frappe.ui.form.on("Stock Entry", {
 	setup: set_stock_item_query,
 	onload: set_stock_item_query,
 	refresh: set_stock_item_query,
+	azzir_group_source_warehouse(frm) {
+		set_stock_item_query(frm); // refresh the read-only/query state, then back-fill rows
+		autofill_group_source_all(frm);
+	},
+	azzir_group_target_warehouse(frm) {
+		autofill_group_target_all(frm);
+	},
 });
 
 frappe.ui.form.on("Stock Entry Detail", {
