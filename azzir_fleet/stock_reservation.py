@@ -39,9 +39,20 @@ def check_stock_reservation(doc, method=None):
 		# transfer at submit (landing filled as part of submitting) — skip them.
 		if row.get("azzir_row_from_sister"):
 			continue
+		# Lines billed FROM a Delivery Note already moved their stock on that DN (e.g. the
+		# intercompany sister invoice created from its own DN, or any SI made from a DN).
+		# There is nothing left to reserve/verify here — and the warehouse now reads 0.
+		if row.get("delivery_note") or row.get("dn_detail"):
+			continue
 		_add(row.get("item_code"), row.get("warehouse"), row.get("qty"))
-	for comp in doc.get("packed_items") or []:
-		_add(comp.get("item_code"), comp.get("warehouse"), comp.get("qty"))
+	# Bundle components only reserve for a fresh invoice; when the invoice is billed from
+	# Delivery Notes, their stock has already moved too, so don't double-count them.
+	invoice_from_dn = any(
+		r.get("delivery_note") or r.get("dn_detail") for r in (doc.get("items") or [])
+	)
+	if not invoice_from_dn:
+		for comp in doc.get("packed_items") or []:
+			_add(comp.get("item_code"), comp.get("warehouse"), comp.get("qty"))
 
 	def _n(x):
 		return "%g" % flt(x)  # tidy number: 12 not 12.0
