@@ -168,6 +168,7 @@ async function doAction(action) {
 function onEdited() { editing.value = false; load() }
 
 async function createNext(target) {
+  if (busy.value) return  // guard against a fast double-click creating the next doc twice
   if (creatable.value[target] === false) {
     err.value = true
     msg.value = `You don't have permission to create a ${target}. Please ask your manager for access.`

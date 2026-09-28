@@ -370,6 +370,10 @@ async function fetchBuyingRates() {
 }
 
 async function save(submit) {
+  // Re-entrancy guard: a fast double/triple click can fire save() again before Vue has
+  // re-rendered the disabled button, which would insert duplicate documents. Bail if a
+  // save is already in flight.
+  if (busy.value) return
   msg.value = ''
   if (!customer.value) { err.value = true; msg.value = 'Pick a customer.'; return }
   const sister = sisterDoctype(props.doctype) && canBuySister.value
