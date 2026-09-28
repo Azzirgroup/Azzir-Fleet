@@ -23,7 +23,7 @@ number and it resolves to the live item (via azzir_fleet.alias)."""
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, flt, today
+from frappe.utils import add_days, flt, strip_html, today
 
 
 def execute(filters=None):
@@ -60,7 +60,7 @@ def get_rows(filters):
 		"Item",
 		filters=item_conds,
 		or_filters={"min_order_qty": [">", 0], "max_order_qty": [">", 0]},
-		fields=["name", "item_name", "min_order_qty", "max_order_qty"],
+		fields=["name", "item_name", "description", "min_order_qty", "max_order_qty"],
 	)
 	if not items:
 		return []
@@ -179,6 +179,7 @@ def get_rows(filters):
 				"item_code": b.item_code,
 				"label": b.item_code,
 				"item_name": im.item_name,
+				"description": (strip_html(im.description or "").strip() or im.item_name),
 				"min_order_qty": mn,
 				"max_order_qty": mx,
 				"reorder_level": reorder_level.get((b.item_code, b.warehouse), 0.0),
@@ -226,6 +227,7 @@ def get_columns():
 	return [
 		{"label": _("Warehouse / Item"), "fieldname": "label", "fieldtype": "Data", "width": 260},
 		{"label": _("Item Name / Company"), "fieldname": "item_name", "fieldtype": "Data", "width": 220},
+		{"label": _("Description"), "fieldname": "description", "fieldtype": "Data", "width": 260},
 		{"label": _("Min Order Qty"), "fieldname": "min_order_qty", "fieldtype": "Float", "width": 110},
 		{"label": _("Max Order Qty"), "fieldname": "max_order_qty", "fieldtype": "Float", "width": 110},
 		{"label": _("Reorder Level"), "fieldname": "reorder_level", "fieldtype": "Float", "width": 110},
