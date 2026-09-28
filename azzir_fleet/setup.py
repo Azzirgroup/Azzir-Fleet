@@ -609,6 +609,35 @@ CUSTOM_FIELDS.setdefault("Employee", []).append(
 	}
 )
 
+# Auto Email Report: a per-report SEND TIME. With a time set (default 08:00), the report
+# goes out at that time of day (via azzir_fleet.auto_email_time) instead of the single
+# daily scheduler time. Only meaningful for Daily / Weekdays / Weekly reports.
+CUSTOM_FIELDS.setdefault("Auto Email Report", []).extend(
+	[
+		{
+			"fieldname": "azzir_send_time",
+			"label": "Send At (time of day)",
+			"fieldtype": "Time",
+			"insert_after": "frequency",
+			"default": "08:00:00",
+			"depends_on": 'eval:["Daily","Weekdays","Weekly"].includes(doc.frequency)',
+			"description": "Send at this time of day (server timezone). Leave blank to use the "
+			"default daily schedule.",
+		},
+		{
+			"fieldname": "azzir_last_sent_date",
+			"label": "Last Timed Send",
+			"fieldtype": "Date",
+			"insert_after": "azzir_send_time",
+			"read_only": 1,
+			"hidden": 1,
+			"no_copy": 1,
+			"description": "Internal: the date this report was last sent by the timed scheduler "
+			"(prevents sending twice in one day).",
+		},
+	]
+)
+
 # --- Sell sister-company stock (corporate company buys from a sister at a discount)
 # Flag a Cost Center as "Corporate": its assigned users can buy sister stock.
 CUSTOM_FIELDS.setdefault("Cost Center", []).append(

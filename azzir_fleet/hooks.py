@@ -184,6 +184,9 @@ fixtures = [
 					"Sales Invoice-azzir_per_delivered",
 					# Employee: receives sales-approval requests on WhatsApp.
 					"Employee-azzir_approval_recipient",
+					# Auto Email Report: per-report send time.
+					"Auto Email Report-azzir_send_time",
+					"Auto Email Report-azzir_last_sent_date",
 				],
 			]
 		],
@@ -517,6 +520,15 @@ override_doctype_class = {
 	"Sales Invoice": "azzir_fleet.overrides.AzzirSalesInvoice",
 	# Allow ordering below Minimum Order Qty (flagged + approval workflow instead).
 	"Purchase Order": "azzir_fleet.overrides.AzzirPurchaseOrder",
+	# Per-report Send At time (honoured by the scheduler below).
+	"Auto Email Report": "azzir_fleet.auto_email_time.AzzirAutoEmailReport",
+}
+
+# Send time-scheduled Auto Email Reports close to their chosen time (every 15 minutes).
+scheduler_events = {
+	"cron": {
+		"*/15 * * * *": ["azzir_fleet.auto_email_time.send_timed_reports"],
+	},
 }
 
 # Overriding Methods
