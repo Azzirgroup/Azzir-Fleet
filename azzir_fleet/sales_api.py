@@ -81,6 +81,15 @@ def has_permission(doc, ptype: str | None = None, user: str | None = None) -> bo
 
 
 @frappe.whitelist()
+def company_default_all_warehouse(company: str | None = None) -> str | None:
+	"""The company's 'Default All Warehouse' — auto-selected and locked in the sales
+	'All Warehouses' field as each item is chosen. None when not configured."""
+	if not company:
+		return None
+	return frappe.db.get_value("Company", company, "azzir_default_all_warehouse") or None
+
+
+@frappe.whitelist()
 def get_defaults() -> dict:
 	"""Company / currency / price list the Sales forms post against."""
 	company = frappe.defaults.get_user_default("Company") or frappe.db.get_value("Company", {}, "name")

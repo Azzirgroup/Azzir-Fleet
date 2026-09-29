@@ -69,7 +69,9 @@
                        matched sister that has the stock) into Warehouse beside it. -->
                   <td class="px-2 py-2">
                     <div v-if="sisterEligible && row.item_code" class="w-40">
-                      <Combo v-model="row.all_warehouses" doctype="Warehouse" display="name" placeholder="All Warehouses"
+                      <!-- Locked to the company's Default All Warehouse when one is set. -->
+                      <div v-if="defaultAllWh" class="truncate rounded-md border bg-gray-50 px-3 py-2 text-sm text-gray-600" :title="row.all_warehouses || defaultAllWh">{{ row.all_warehouses || defaultAllWh }}</div>
+                      <Combo v-else v-model="row.all_warehouses" doctype="Warehouse" display="name" placeholder="All Warehouses"
                         query-method="azzir_fleet.intercompany_sale.company_group_warehouses" :query-args="{ company }"
                         @update:model-value="() => onPickAllWarehouses(row)" />
                     </div>
@@ -134,7 +136,8 @@
                      same order as the desktop table. -->
                 <div v-if="sisterEligible && row.item_code" class="mb-2">
                   <label class="mb-1 block text-xs text-gray-500">All Warehouse</label>
-                  <Combo v-model="row.all_warehouses" doctype="Warehouse" display="name" placeholder="All Warehouses"
+                  <div v-if="defaultAllWh" class="truncate rounded-md border bg-gray-50 px-3 py-2 text-sm text-gray-600">{{ row.all_warehouses || defaultAllWh }}</div>
+                  <Combo v-else v-model="row.all_warehouses" doctype="Warehouse" display="name" placeholder="All Warehouses"
                     query-method="azzir_fleet.intercompany_sale.company_group_warehouses" :query-args="{ company }"
                     @update:model-value="() => onPickAllWarehouses(row)" />
                 </div>
@@ -190,7 +193,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { insertDoc, submitSalesDoc, saveDoc, itemDetails, salesDefaults, userCanBuySister, sisterDefaultForItem, resolveAllWarehouses, myAllowedWarehouses, userWarehouseForItem, fmt } from '@/utils/api.js'
+import { insertDoc, submitSalesDoc, saveDoc, itemDetails, salesDefaults, userCanBuySister, sisterDefaultForItem, resolveAllWarehouses, companyDefaultAllWh, myAllowedWarehouses, userWarehouseForItem, fmt } from '@/utils/api.js'
 import Combo from '@/components/Combo.vue'
 import StockTree from '@/components/StockTree.vue'
 import AddItemsDialog from '@/components/AddItemsDialog.vue'
@@ -214,6 +217,7 @@ const err = ref(false)
 const stockRow = ref(null)
 const showAddMultiple = ref(false) // the "Add multiple" item picker
 const allowedWh = ref(null) // warehouses this user may pick; null = unrestricted
+const defaultAllWh = ref('') // company's Default All Warehouse (auto-fills + locks the field)
 const applyVat = ref(true) // Apply VAT (default on); untick to drop VAT from the doc
 const hidePartNo = ref(false) // Hide Part Numbers on the printout
 const comments = ref('') // free-text document comments (azzir_comments)
@@ -249,6 +253,7 @@ const belowCost = computed(() =>
 watch(company, async (n, o) => {
   if (o) { customer.value = ''; customerName.value = '' }
   allowedWh.value = await myAllowedWarehouses(n).catch(() => null)
+  defaultAllWh.value = (await companyDefaultAllWh(n).catch(() => '')) || ''
 })
 // Picking a customer auto-fills the (editable) customer name.
 function onCustomerPicked(o) { customerName.value = o?.customer_name || o?.name || '' }
@@ -257,6 +262,7 @@ onMounted(async () => {
   defaults.value = await salesDefaults().catch(() => ({}))
   company.value = props.edit?.company || props.initial?.company || defaults.value.company || ''
   allowedWh.value = await myAllowedWarehouses(company.value).catch(() => null)
+  defaultAllWh.value = (await companyDefaultAllWh(company.value).catch(() => '')) || ''
   if (sisterDoctype(props.doctype)) {
     canBuySister.value = await userCanBuySister().catch(() => false)
   }
@@ -313,11 +319,12 @@ async function fillSisterDefault(row) {
 // "All Warehouses" picker: the user chose one of OUR company's group warehouses. Resolve
 // it to a concrete leaf — our own if we hold stock, otherwise a branch-matched sister
 // supplies and our matching leaf goes on the row. Fills warehouse + sister source.
-async function onPickAllWarehouses(row) {
+async function onPickAllWarehouses(row, { silent = false } = {}) {
   if (!row.all_warehouses || !row.item_code) return
   const r = await resolveAllWarehouses(row.item_code, row.all_warehouses, company.value).catch(() => null)
   if (!r || !r.warehouse) {
-    err.value = true; msg.value = `No warehouse (ours or a sister on that branch) has stock of ${row.item_code}.`
+    // silent = the company-default auto-fill fired on item select; don't nag on every pick.
+    if (!silent) { err.value = true; msg.value = `No warehouse (ours or a sister on that branch) has stock of ${row.item_code}.` }
     return
   }
   row.warehouse = r.warehouse
@@ -349,14 +356,24 @@ async function onItem(i, item_code) {
   if (d && d.buying_rate) rows.value[i].buying_rate = d.buying_rate
   if (d && d.description && !rows.value[i].description) rows.value[i].description = d.description
   if (d && d.rate && !rows.value[i].rate) rows.value[i].rate = d.rate
+  const row = rows.value[i]
+  // Company 'Default All Warehouse': as each item is chosen, drop it into the (locked)
+  // All Warehouses field and resolve it — so the warehouse + sister source fill in for you.
+  let resolvedByDefault = false
+  if (sisterEligible.value && defaultAllWh.value) {
+    row.all_warehouses = defaultAllWh.value
+    await onPickAllWarehouses(row, { silent: true })
+    resolvedByDefault = true
+  }
   // Auto-fill the user's allowed (cost-centre) warehouse that holds this item — only
   // when the row has none yet, so a manual pick is never overridden. Same as the desk.
-  if (!rows.value[i].warehouse) {
+  if (!row.warehouse) {
     const wh = await userWarehouseForItem(item_code, company.value).catch(() => null)
-    if (wh && !rows.value[i].warehouse) rows.value[i].warehouse = wh
+    if (wh && !row.warehouse) row.warehouse = wh
   }
-  // If this line is sourced from a sister, refresh its sister supply for the new item.
-  if (rows.value[i].from_sister) fillSisterDefault(rows.value[i])
+  // If this line is sourced from a sister (and wasn't just resolved above), refresh its
+  // sister supply for the new item.
+  if (!resolvedByDefault && row.from_sister) fillSisterDefault(row)
 }
 
 // Fill in buying rates for prefilled rows (edit / next-doc) so the submit button

@@ -91,6 +91,9 @@ export const sisterDefaultForItem = (item_code) =>
 // resolves it to our concrete leaf (using a branch-matched sister that holds the stock).
 export const resolveAllWarehouses = (item_code, group, company) =>
   call('azzir_fleet.intercompany_sale.resolve_all_warehouses', { item_code, group, company })
+// The company's default 'All Warehouses' value (auto-selected + locked on the sales forms).
+export const companyDefaultAllWh = (company) =>
+  call('azzir_fleet.sales_api.company_default_all_warehouse', { company })
 export const dashboardStats = () => call('azzir_fleet.sales_api.dashboard_stats')
 export const itemDetails = (item_code, customer, company, price_list, qty = 1) =>
   call('azzir_fleet.sales_api.item_details', { item_code, customer, company, price_list, qty })

@@ -184,6 +184,8 @@ fixtures = [
 					"Sales Invoice-azzir_per_delivered",
 					# Employee: receives sales-approval requests on WhatsApp.
 					"Employee-azzir_approval_recipient",
+					# Company: default 'All Warehouses' for the sales forms.
+					"Company-azzir_default_all_warehouse",
 					# Auto Email Report: per-report send time.
 					"Auto Email Report-azzir_send_time",
 					"Auto Email Report-azzir_last_sent_date",

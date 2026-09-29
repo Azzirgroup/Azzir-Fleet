@@ -595,6 +595,21 @@ CUSTOM_FIELDS.setdefault("Company", []).append(
 	}
 )
 
+# Company-level default for the sales "All Warehouses" field: when set, this (group)
+# warehouse is auto-selected in the All Warehouses field on Quotation / Sales Invoice as
+# each item is picked, and locked there on the frontend.
+CUSTOM_FIELDS.setdefault("Company", []).append(
+	{
+		"fieldname": "azzir_default_all_warehouse",
+		"label": "Default All Warehouse",
+		"fieldtype": "Link",
+		"options": "Warehouse",
+		"insert_after": "azzir_auto_purchase_from_sister",
+		"description": "Auto-selected (and locked) in the 'All Warehouses' field on Quotation / "
+		"Sales Invoice as each item is chosen. Usually a group warehouse.",
+	}
+)
+
 # Employee flag: receive sales-approval requests on WhatsApp. When a Quotation / Sales
 # Invoice / Delivery Note is sent for approval, every Active employee with this ticked
 # (and a Mobile number) is WhatsApped the document + an approve link.
