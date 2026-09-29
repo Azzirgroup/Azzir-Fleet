@@ -416,20 +416,10 @@ def submit_sales_doc(doctype: str, name: str) -> dict:
 		return {"name": doc.name, "docstatus": doc.docstatus, "workflow_state": None,
 		        "below_cost": int(doc.get("azzir_below_cost") or 0), "message": frappe._("Submitted.")}
 
-	# Frontend policy: normal sales submit straight through — the below-selling-price
-	# approval no longer gates the /sales portal. ONLY a Credit Note (Sales Invoice
-	# return) still routes to approval. Clear the below-cost flag for non-returns so the
-	# workflow offers a straight 'Submit'.
-	#
-	# apply_workflow() below does doc.load_from_db(), which discards in-memory changes — so
-	# we must PERSIST the cleared flag (db_set) so the reloaded doc's 'Submit' condition
-	# (azzir_below_cost == 0) holds, and set a request-global skip so flag_below_cost keeps
-	# it 0 through the workflow's own save. Credit notes keep the flag and route to approval.
-	if not doc.get("is_return"):
-		frappe.flags.azzir_skip_below_cost = True
-		doc.db_set("azzir_below_cost", 0, update_modified=False)
-
-	# Available transitions already reflect the below-cost condition + the user's role.
+	# The workflow's available transitions already reflect the below-cost condition + the
+	# user's role: a below-selling-price Sales Invoice (or a Credit Note) offers only
+	# 'Request Approval'; a normal sale offers 'Submit'. Quotations have no workflow and
+	# submit straight through above (the `not wf` path).
 	actions = [t.get("action") for t in (get_transitions(doc) or [])]
 	if not actions:
 		frappe.throw(frappe._(
@@ -444,7 +434,7 @@ def submit_sales_doc(doctype: str, name: str) -> dict:
 		"docstatus": doc.docstatus,
 		"workflow_state": doc.get("workflow_state"),
 		"below_cost": int(doc.get("azzir_below_cost") or 0),
-		"message": (frappe._("Sent for approval — a credit note needs a manager's sign-off.")
+		"message": (frappe._("Sent for approval — this needs a manager's sign-off.")
 		            if held else frappe._("Submitted.")),
 	}
 

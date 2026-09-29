@@ -5,7 +5,7 @@
         <h3 class="font-semibold">{{ edit ? `Edit ${doctype} ${edit.name}` : `New ${doctype}` }}</h3>
         <div class="ml-auto flex gap-2">
           <button :disabled="busy" class="rounded-md border px-3 py-1.5 text-sm" @click="save(false)">Save Draft</button>
-          <button :disabled="busy" class="azzir-brand rounded-md px-3 py-1.5 text-sm text-white" @click="save(true)">Save &amp; Submit</button>
+          <button :disabled="busy" class="rounded-md px-3 py-1.5 text-sm text-white" :class="belowCost ? 'bg-amber-500 hover:bg-amber-600' : 'azzir-brand'" @click="save(true)">{{ belowCost ? 'Send for Approval' : 'Save &amp; Submit' }}</button>
           <button class="rounded-md p-1 text-gray-400 hover:text-gray-700" @click="close">✕</button>
         </div>
       </div>
@@ -238,13 +238,16 @@ const total = computed(() => rows.value.reduce((s, r) => s + (Number(r.qty) || 0
 // True when any line is priced BELOW its selling (list) price — or below its
 // buying price when the item has no selling price. The submit then routes to
 // approval, so the button reads "Send for Approval" instead of "Save & Submit".
+// Only meaningful for the Sales Invoice (Quotations have no approval workflow). Flag a
+// line ONLY when a real selling price is loaded and the rate is below it — no buying-price
+// fallback, which used to misfire "Send for Approval" at full price when the price hadn't
+// loaded. The SERVER remains authoritative for the actual approval routing.
 const belowCost = computed(() =>
+  props.doctype === 'Sales Invoice' &&
   rows.value.some((r) => {
     if (!r.item_code || !(Number(r.rate) > 0)) return false
     const selling = Number(r.price_list_rate) || 0
-    if (selling > 0) return Number(r.rate) < selling
-    const buying = Number(r.buying_rate) || 0
-    return buying > 0 && Number(r.rate) < buying
+    return selling > 0 && Number(r.rate) < selling
   }),
 )
 

@@ -547,6 +547,8 @@ def _build_one_transfer(doc, corporate, sister, rows, ic_price_list, factor, cor
 	dn.customer = internal_customer
 	dn.selling_price_list = ic_price_list
 	dn.ignore_pricing_rule = 1
+	if dn.meta.has_field("azzir_apply_vat"):
+		dn.azzir_apply_vat = 0  # intercompany transfer — no VAT
 	for r, wh in rows:
 		transfer_rate = flt(r.rate) * factor
 		dn.append(
@@ -575,6 +577,8 @@ def _build_one_transfer(doc, corporate, sister, rows, ic_price_list, factor, cor
 	from erpnext.stock.doctype.delivery_note.delivery_note import make_sales_invoice as _dn_to_si
 
 	sister_si = _dn_to_si(dn.name)
+	if sister_si.meta.has_field("azzir_apply_vat"):
+		sister_si.azzir_apply_vat = 0  # intercompany transfer — no VAT
 	_force_cost_center(sister_si, sister_cc)
 	sister_si.flags.ignore_permissions = True
 	sister_si.insert()
@@ -587,6 +591,10 @@ def _build_one_transfer(doc, corporate, sister, rows, ic_price_list, factor, cor
 
 	pi = make_inter_company_purchase_invoice(sister_si.name)
 	pi.update_stock = 1
+	# Intercompany transfer — no VAT on the corporate Purchase Invoice either.
+	pi.set("taxes", [])
+	if pi.meta.has_field("taxes_and_charges"):
+		pi.taxes_and_charges = None
 	pi.set_warehouse = landing or receiving[0]
 	pi_items = pi.get("items") or []
 	for idx, pir in enumerate(pi_items):
