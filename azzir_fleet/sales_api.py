@@ -369,6 +369,15 @@ def submit_sales_doc(doctype: str, name: str) -> dict:
 		return {"name": doc.name, "docstatus": doc.docstatus, "workflow_state": None,
 		        "below_cost": int(doc.get("azzir_below_cost") or 0), "message": frappe._("Submitted.")}
 
+	# Frontend policy: normal sales submit straight through — the below-selling-price
+	# approval no longer gates the /sales portal. ONLY a Credit Note (Sales Invoice
+	# return) still routes to approval. Clear the below-cost flag for non-returns so the
+	# workflow offers a straight 'Submit' (below_cost.flag_below_cost keeps it 0 while the
+	# skip flag is set, and still forces 1 for returns).
+	if not doc.get("is_return"):
+		doc.flags.azzir_skip_below_cost = True
+		doc.azzir_below_cost = 0
+
 	# Available transitions already reflect the below-cost condition + the user's role.
 	actions = [t.get("action") for t in (get_transitions(doc) or [])]
 	if not actions:
@@ -384,7 +393,7 @@ def submit_sales_doc(doctype: str, name: str) -> dict:
 		"docstatus": doc.docstatus,
 		"workflow_state": doc.get("workflow_state"),
 		"below_cost": int(doc.get("azzir_below_cost") or 0),
-		"message": (frappe._("Sent for approval — this sale is below buying price.")
+		"message": (frappe._("Sent for approval — a credit note needs a manager's sign-off.")
 		            if held else frappe._("Submitted.")),
 	}
 

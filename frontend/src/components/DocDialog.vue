@@ -5,7 +5,7 @@
         <h3 class="font-semibold">{{ edit ? `Edit ${doctype} ${edit.name}` : `New ${doctype}` }}</h3>
         <div class="ml-auto flex gap-2">
           <button :disabled="busy" class="rounded-md border px-3 py-1.5 text-sm" @click="save(false)">Save Draft</button>
-          <button :disabled="busy" class="rounded-md px-3 py-1.5 text-sm text-white" :class="belowCost ? 'bg-amber-500 hover:bg-amber-600' : 'azzir-brand'" @click="save(true)">{{ belowCost ? 'Send for Approval' : 'Save & Submit' }}</button>
+          <button :disabled="busy" class="azzir-brand rounded-md px-3 py-1.5 text-sm text-white" @click="save(true)">Save &amp; Submit</button>
           <button class="rounded-md p-1 text-gray-400 hover:text-gray-700" @click="close">✕</button>
         </div>
       </div>
