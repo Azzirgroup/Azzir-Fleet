@@ -464,13 +464,23 @@ def workflow_actions(doctype: str, name: str) -> dict:
 	trans = get_transitions(doc) or []
 	# get_transitions does NOT apply the self-approval rule (Frappe only enforces it
 	# when the action is actually taken), so mirror it here — otherwise the creator of
-	# a below-cost doc would see an "Approve" button that errors on click. A user is
-	# offered a transition only if: they're Administrator, the transition allows self
-	# approval, or they aren't the document's owner.
+	# a below-cost doc would see an "Approve" button that errors on click.
+	#
+	# But the block must apply ONLY to transitions that actually APPROVE (submit the doc,
+	# next state docstatus = 1). The owner must still be able to REQUEST approval — e.g.
+	# 'Request Approval' on a credit note keeps it in draft (docstatus 0) — otherwise the
+	# creator is offered nothing and can never send their own document for approval.
+	wf_doc = frappe.get_doc("Workflow", get_workflow_name(doctype))
+	submits = {s.state for s in wf_doc.states if int(s.doc_status or 0) == 1}
 	user = frappe.session.user
 	owner = doc.get("owner")
+
 	def _offerable(t):
-		return user == "Administrator" or t.get("allow_self_approval") or user != owner
+		if user == "Administrator" or t.get("allow_self_approval") or user != owner:
+			return True
+		# Owner: allow non-submitting transitions (Request Approval), block self-approval.
+		return t.get("next_state") not in submits
+
 	return {"workflow": True, "state": doc.get("workflow_state"),
 	        "actions": [{"action": t.get("action")} for t in trans if _offerable(t)]}
 
