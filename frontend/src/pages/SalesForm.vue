@@ -72,7 +72,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { getDoc, workflowActions, applyWorkflowAction, makeNext, canCreateDoc, actionPerms, cancelSalesDoc, amendSalesDoc, fmt } from '@/utils/api.js'
 import DocDialog from '@/components/DocDialog.vue'
@@ -134,6 +134,9 @@ async function load() {
   } finally { loading.value = false }
 }
 onMounted(load)
+// Vue reuses this component when only the route param changes (e.g. navigating to the
+// just-created Credit Note), so reload when the document name changes.
+watch(() => props.name, () => { msg.value = ''; editing.value = false; load() })
 
 // Cancel a submitted document (permission enforced server-side).
 async function cancelDoc() {
