@@ -31,22 +31,53 @@ def _can_see_all(user: str | None = None) -> bool:
 
 
 def get_permission_query_conditions(user: str | None = None) -> str:
-	"""Desk list views / reports: a 'Document Creator' sees only the documents
-	they created; everyone else is left to the standard role permissions. Same
-	rule as the /sales portal, now on the desk too."""
+	"""Desk list views / reports (Quotation): a 'Document Creator' sees only the documents
+	they created; everyone else is left to the standard role permissions. Same rule as the
+	/sales portal, now on the desk too."""
 	user = user or frappe.session.user
 	if not _own_only(user):
 		return ""
 	return "`owner` = {user}".format(user=frappe.db.escape(user))
 
 
+def get_permission_query_conditions_sales(user: str | None = None) -> str:
+	"""Sales Invoice / Delivery Note: a 'Document Creator' sees the documents they created
+	PLUS intercompany documents (raised to an internal customer) — so a branch's staff can
+	see the sister-company invoices/delivery notes auto-created for their branch, which are
+	owned by Administrator. Their Company User Permission still limits it to their own
+	company's documents."""
+	user = user or frappe.session.user
+	if not _own_only(user):
+		return ""
+	return (
+		"(`owner` = {user} or `customer` in "
+		"(select name from `tabCustomer` where is_internal_customer = 1))"
+	).format(user=frappe.db.escape(user))
+
+
+def _is_intercompany_doc(doc) -> bool:
+	"""A Sales Invoice / Delivery Note raised to an internal customer — i.e. one of the
+	auto-created intercompany (sister) documents."""
+	cust = getattr(doc, "customer", None)
+	return bool(
+		getattr(doc, "doctype", None) in ("Sales Invoice", "Delivery Note")
+		and cust
+		and frappe.db.get_value("Customer", cust, "is_internal_customer")
+	)
+
+
 def has_permission(doc, ptype: str | None = None, user: str | None = None) -> bool:
-	"""Block a 'Document Creator' from opening someone else's sales document by
-	URL. Returning True defers to Frappe's standard role permissions."""
+	"""Block a 'Document Creator' from opening someone else's sales document by URL —
+	except intercompany (sister) documents, which their branch should see. Returning True
+	defers to Frappe's standard role permissions."""
 	user = user or frappe.session.user
 	if not _own_only(user):
 		return True
-	return (doc.owner == user) if getattr(doc, "owner", None) else True
+	if getattr(doc, "owner", None) == user:
+		return True
+	if _is_intercompany_doc(doc):
+		return True
+	return not getattr(doc, "owner", None)
 
 
 @frappe.whitelist()
@@ -106,15 +137,22 @@ def sales_list(doctype: str, fields: list | str | None = None, filters: dict | s
 		frappe.throw(frappe._("Not allowed."))
 	filters = frappe.parse_json(filters) if isinstance(filters, str) else (filters or {})
 	fields = frappe.parse_json(fields) if isinstance(fields, str) else (fields or ["name"])
+	or_filters = None
 	if _own_only():
-		filters["owner"] = frappe.session.user
+		if doctype == "Quotation":
+			filters["owner"] = frappe.session.user  # no intercompany quotations
+		else:
+			# Own documents PLUS intercompany (sister) documents — those go to an internal
+			# customer and are owned by Administrator, so a branch's staff can still see them.
+			internal = frappe.get_all("Customer", filters={"is_internal_customer": 1}, pluck="name") or ["__none__"]
+			or_filters = [["owner", "=", frappe.session.user], ["customer", "in", internal]]
 	if part_number and part_number.strip():
 		parents = _part_number_parents(doctype, part_number)
 		if not parents:
 			return []
 		filters["name"] = ["in", parents]
 	return frappe.get_list(
-		doctype, fields=fields, filters=filters, order_by=order_by,
+		doctype, fields=fields, filters=filters, or_filters=or_filters, order_by=order_by,
 		limit_page_length=limit_page_length, limit_start=limit_start,
 	)
 

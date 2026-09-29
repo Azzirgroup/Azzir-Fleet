@@ -302,12 +302,12 @@ permission_query_conditions = {
 # created (desk list views, reports, and opening a doc by URL) — the same rule
 # the /sales portal applies. 'Azzir Sales Overseer' / 'System Manager' override
 # it and still see everything.
-permission_query_conditions.update(
-	{
-		dt: "azzir_fleet.sales_api.get_permission_query_conditions"
-		for dt in ("Quotation", "Sales Invoice", "Delivery Note")
-	}
-)
+permission_query_conditions["Quotation"] = "azzir_fleet.sales_api.get_permission_query_conditions"
+# Sales Invoice / Delivery Note also let a Document Creator see intercompany (sister)
+# documents raised to an internal customer, so a branch's staff can see the invoices /
+# delivery notes auto-created for their branch.
+permission_query_conditions["Sales Invoice"] = "azzir_fleet.sales_api.get_permission_query_conditions_sales"
+permission_query_conditions["Delivery Note"] = "azzir_fleet.sales_api.get_permission_query_conditions_sales"
 # A Company ticked `azzir_hidden` is removed from every Company list / link field /
 # report filter (System Managers still see it, to un-hide it).
 permission_query_conditions["Company"] = "azzir_fleet.company_visibility.get_permission_query_conditions"
