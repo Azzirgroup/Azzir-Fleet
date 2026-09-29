@@ -27,6 +27,19 @@
       You don't have permission to create {{ title }}. Please ask your manager for access.
     </div>
 
+    <!-- Optional tabs (e.g. Invoices / Credit Notes) -->
+    <div v-if="tabs.length" class="mb-3 flex gap-1 border-b">
+      <button
+        v-for="(t, i) in tabs"
+        :key="i"
+        class="-mb-px border-b-2 px-3 py-1.5 text-sm"
+        :class="activeTab === i ? 'border-blue-600 font-medium text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700'"
+        @click="pickTab(i)"
+      >
+        {{ t.label }}
+      </button>
+    </div>
+
     <DocDialog
       v-if="showDialog"
       :doctype="doctype"
@@ -79,6 +92,8 @@ const props = defineProps({
   searchField: { type: String, default: 'name' },
   editable: { type: Boolean, default: false },
   partNumber: { type: Boolean, default: false },
+  // Optional tabs: [{ label, filters }]. The active tab's filters merge into the query.
+  tabs: { type: Array, default: () => [] },
 })
 const emit = defineEmits(['edit'])
 
@@ -89,6 +104,15 @@ const loading = ref(false)
 const q = ref('')
 const pn = ref('')
 const showDialog = ref(false)
+const activeTab = ref(0)
+// Base filters = the page's filters + the active tab's filters (e.g. is_return).
+function baseFilters() {
+  const f = { ...props.filters }
+  const t = props.tabs[activeTab.value]
+  if (t && t.filters) Object.assign(f, t.filters)
+  return f
+}
+function pickTab(i) { activeTab.value = i; load() }
 // This list is one of the creatable sales doctypes (drives salesList vs getList).
 const isSalesDoctype = computed(() =>
   ['Quotation', 'Sales Invoice', 'Delivery Note'].includes(props.doctype),
@@ -106,7 +130,7 @@ function onSaved(doc) {
 async function load() {
   loading.value = true
   try {
-    const filters = { ...props.filters }
+    const filters = baseFilters()
     if (q.value) filters[props.searchField] = ['like', `%${q.value}%`]
     const fetchList = isSalesDoctype.value ? salesList : getList
     const opts = { fields: props.columns.map((c) => c.field), filters, limit: 100 }
@@ -126,7 +150,7 @@ function open(r) {
 // (e.g. customer names) among the records this user can see.
 async function suggestMain(txt) {
   const val = (txt || '').trim()
-  const filters = { ...props.filters }
+  const filters = baseFilters()
   if (val) filters[props.searchField] = ['like', `%${val}%`]
   const fetchList = isSalesDoctype.value ? salesList : getList
   const rows = await fetchList(props.doctype, {
