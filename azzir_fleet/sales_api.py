@@ -419,11 +419,15 @@ def submit_sales_doc(doctype: str, name: str) -> dict:
 	# Frontend policy: normal sales submit straight through — the below-selling-price
 	# approval no longer gates the /sales portal. ONLY a Credit Note (Sales Invoice
 	# return) still routes to approval. Clear the below-cost flag for non-returns so the
-	# workflow offers a straight 'Submit' (below_cost.flag_below_cost keeps it 0 while the
-	# skip flag is set, and still forces 1 for returns).
+	# workflow offers a straight 'Submit'.
+	#
+	# apply_workflow() below does doc.load_from_db(), which discards in-memory changes — so
+	# we must PERSIST the cleared flag (db_set) so the reloaded doc's 'Submit' condition
+	# (azzir_below_cost == 0) holds, and set a request-global skip so flag_below_cost keeps
+	# it 0 through the workflow's own save. Credit notes keep the flag and route to approval.
 	if not doc.get("is_return"):
-		doc.flags.azzir_skip_below_cost = True
-		doc.azzir_below_cost = 0
+		frappe.flags.azzir_skip_below_cost = True
+		doc.db_set("azzir_below_cost", 0, update_modified=False)
 
 	# Available transitions already reflect the below-cost condition + the user's role.
 	actions = [t.get("action") for t in (get_transitions(doc) or [])]

@@ -18,8 +18,9 @@ from frappe.utils import flt
 def flag_below_cost(doc, method=None):
 	# The /sales submit path can ask us to bypass below-selling-price approval for a normal
 	# sale (returns still require approval). Honour that here so a straight 'Submit' stays
-	# available on the frontend.
-	if doc.flags.get("azzir_skip_below_cost"):
+	# available on the frontend. The request-global frappe.flags variant survives
+	# apply_workflow()'s doc.load_from_db(), which drops the per-doc flag.
+	if doc.flags.get("azzir_skip_below_cost") or frappe.flags.get("azzir_skip_below_cost"):
 		doc.azzir_below_cost = 1 if (doc.doctype == "Sales Invoice" and doc.get("is_return")) else 0
 		return
 	below = _any_line_below(doc)
