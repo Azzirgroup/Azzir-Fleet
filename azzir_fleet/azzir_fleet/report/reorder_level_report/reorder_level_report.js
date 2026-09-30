@@ -2,10 +2,7 @@
 // For license information, please see license.txt
 
 frappe.query_reports["Reorder Level Report"] = {
-	// Grouped as a tree: warehouse (parent) → out-of-band items (children).
-	tree: true,
-	name_field: "label",
-	initial_depth: 1,
+	// Flat list — one row per item/warehouse (Part Number + Warehouse are their own columns).
 	filters: [
 		{
 			// No default — show every company's warehouses until one is picked.
@@ -64,15 +61,8 @@ frappe.query_reports["Reorder Level Report"] = {
 		},
 	],
 	formatter(value, row, column, data, default_formatter) {
-		// Warehouse (parent) rows: bold; item (child) code links to the Item.
-		if (data && data.indent === 0) {
-			value = default_formatter(value, row, column, data);
-			if (column.fieldname === "label") {
-				value = `<span style="font-weight:700;">🏢 ${value}</span>`;
-			}
-			return value;
-		}
-		if (data && column.fieldname === "label" && data.item_code) {
+		// Part Number links to the Item.
+		if (data && column.fieldname === "part_number" && data.item_code) {
 			return `<a href="/app/item/${encodeURIComponent(data.item_code)}">${frappe.utils.escape_html(
 				data.item_code
 			)}</a>`;

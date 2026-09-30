@@ -177,7 +177,8 @@ def get_rows(filters):
 		grp["kids"].append(
 			{
 				"item_code": b.item_code,
-				"label": b.item_code,
+				"part_number": b.item_code,
+				"warehouse": b.warehouse,
 				"item_name": im.item_name,
 				"description": (strip_html(im.description or "").strip() or im.item_name),
 				"min_order_qty": mn,
@@ -190,12 +191,11 @@ def get_rows(filters):
 				"status": below_label if below else above_label,
 				# Variance is the COMPANY shortfall/excess (matches the company-level status).
 				"variance": (mn - ctotal) if below else (ctotal - mx),
-				"indent": 1,
 			}
 		)
 
-	# 7) Emit warehouse parents (indent 0) then their item children (indent 1).
-	#    Warehouses holding the most below-minimum items float to the top.
+	# 7) Flat list — one row per item/warehouse. Warehouses with the most below-minimum
+	#    items first, then within each: below-minimum first, largest shortfall first.
 	def wh_sort_key(wh):
 		kids = by_wh[wh]["kids"]
 		below_ct = sum(1 for k in kids if k["status"] == below_label)
@@ -203,31 +203,18 @@ def get_rows(filters):
 
 	rows = []
 	for wh in sorted(by_wh, key=wh_sort_key):
-		grp = by_wh[wh]
-		kids = grp["kids"]
+		kids = by_wh[wh]["kids"]
 		kids.sort(key=lambda x: (x["status"] != below_label, -x["variance"]))
-		below_ct = sum(1 for k in kids if k["status"] == below_label)
-		rows.append(
-			{
-				"label": wh,
-				"warehouse": wh,
-				"item_name": grp["company"],
-				"actual_qty": sum(k["actual_qty"] for k in kids),
-				"economy_stock": sum(k["economy_stock"] for k in kids),
-				"status": _("{0} below · {1} item(s)").format(below_ct, len(kids)),
-				"is_group": 1,
-				"indent": 0,
-			}
-		)
 		rows.extend(kids)
 	return rows
 
 
 def get_columns():
 	return [
-		{"label": _("Warehouse / Item"), "fieldname": "label", "fieldtype": "Data", "width": 260},
-		{"label": _("Item Name / Company"), "fieldname": "item_name", "fieldtype": "Data", "width": 220},
+		{"label": _("Part Number"), "fieldname": "part_number", "fieldtype": "Data", "width": 150},
+		{"label": _("Item Name"), "fieldname": "item_name", "fieldtype": "Data", "width": 200},
 		{"label": _("Description"), "fieldname": "description", "fieldtype": "Data", "width": 260},
+		{"label": _("Warehouse"), "fieldname": "warehouse", "fieldtype": "Link", "options": "Warehouse", "width": 180},
 		{"label": _("Min Order Qty"), "fieldname": "min_order_qty", "fieldtype": "Float", "width": 110},
 		{"label": _("Max Order Qty"), "fieldname": "max_order_qty", "fieldtype": "Float", "width": 110},
 		{"label": _("Reorder Level"), "fieldname": "reorder_level", "fieldtype": "Float", "width": 110},
