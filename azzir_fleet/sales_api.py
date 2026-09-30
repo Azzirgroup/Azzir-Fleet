@@ -15,6 +15,9 @@ OWN_ONLY_ROLE = "Document Creator"
 # These override the role — a system/sales overseer still sees everyone's sales
 # even if "Document Creator" was also assigned to them.
 SEE_ALL_ROLES = {"Azzir Sales Overseer", "System Manager"}
+# A 'Document Creator' who ALSO holds this role additionally sees documents owned by
+# Administrator (e.g. the auto-created intercompany docs, or anything created by scripts).
+INTERCOMPANY_VIEWER_ROLE = "Intercompany Viewer"
 
 
 def _own_only(user: str | None = None) -> bool:
@@ -23,6 +26,11 @@ def _own_only(user: str | None = None) -> bool:
 	if roles & SEE_ALL_ROLES:
 		return False
 	return OWN_ONLY_ROLE in roles
+
+
+def _sees_admin_docs(user: str | None = None) -> bool:
+	"""True when the user may also see Administrator-owned sales documents."""
+	return INTERCOMPANY_VIEWER_ROLE in set(frappe.get_roles(user) if user else frappe.get_roles())
 
 
 def _can_see_all(user: str | None = None) -> bool:
@@ -37,7 +45,10 @@ def get_permission_query_conditions(user: str | None = None) -> str:
 	user = user or frappe.session.user
 	if not _own_only(user):
 		return ""
-	return "`owner` = {user}".format(user=frappe.db.escape(user))
+	clauses = ["`owner` = {user}".format(user=frappe.db.escape(user))]
+	if _sees_admin_docs(user):
+		clauses.append("`owner` = 'Administrator'")
+	return "(" + " or ".join(clauses) + ")"
 
 
 def get_permission_query_conditions_sales(user: str | None = None) -> str:
@@ -49,10 +60,13 @@ def get_permission_query_conditions_sales(user: str | None = None) -> str:
 	user = user or frappe.session.user
 	if not _own_only(user):
 		return ""
-	return (
-		"(`owner` = {user} or `customer` in "
-		"(select name from `tabCustomer` where is_internal_customer = 1))"
-	).format(user=frappe.db.escape(user))
+	clauses = [
+		"`owner` = {user}".format(user=frappe.db.escape(user)),
+		"`customer` in (select name from `tabCustomer` where is_internal_customer = 1)",
+	]
+	if _sees_admin_docs(user):
+		clauses.append("`owner` = 'Administrator'")
+	return "(" + " or ".join(clauses) + ")"
 
 
 def _is_intercompany_doc(doc) -> bool:
@@ -76,6 +90,8 @@ def has_permission(doc, ptype: str | None = None, user: str | None = None) -> bo
 	if getattr(doc, "owner", None) == user:
 		return True
 	if _is_intercompany_doc(doc):
+		return True
+	if _sees_admin_docs(user) and getattr(doc, "owner", None) == "Administrator":
 		return True
 	return not getattr(doc, "owner", None)
 
@@ -148,13 +164,19 @@ def sales_list(doctype: str, fields: list | str | None = None, filters: dict | s
 	fields = frappe.parse_json(fields) if isinstance(fields, str) else (fields or ["name"])
 	or_filters = None
 	if _own_only():
+		admin = _sees_admin_docs()  # 'Intercompany Viewer' also sees Administrator-owned docs
 		if doctype == "Quotation":
-			filters["owner"] = frappe.session.user  # no intercompany quotations
+			if admin:
+				or_filters = [["owner", "=", frappe.session.user], ["owner", "=", "Administrator"]]
+			else:
+				filters["owner"] = frappe.session.user  # no intercompany quotations
 		else:
 			# Own documents PLUS intercompany (sister) documents — those go to an internal
 			# customer and are owned by Administrator, so a branch's staff can still see them.
 			internal = frappe.get_all("Customer", filters={"is_internal_customer": 1}, pluck="name") or ["__none__"]
 			or_filters = [["owner", "=", frappe.session.user], ["customer", "in", internal]]
+			if admin:
+				or_filters.append(["owner", "=", "Administrator"])
 	if part_number and part_number.strip():
 		parents = _part_number_parents(doctype, part_number)
 		if not parents:
