@@ -679,6 +679,19 @@ CUSTOM_FIELDS.setdefault("User", []).append(
 		"Invoices (desk and the /sales portal) auto-fill with it.",
 	}
 )
+# A per-user home GROUP warehouse. On a NEW Stock Entry, it auto-selects the Default
+# Group Source Warehouse for that user — nothing else is restricted or changed.
+CUSTOM_FIELDS.setdefault("User", []).append(
+	{
+		"fieldname": "azzir_home_group_warehouse",
+		"label": "Home Group Warehouse",
+		"fieldtype": "Link",
+		"options": "Warehouse",
+		"insert_after": "azzir_company",
+		"description": "A GROUP warehouse (e.g. this user's branch). On a NEW Stock Entry it "
+		"auto-selects this as the Default Group Source Warehouse. Nothing else changes.",
+	}
+)
 # On a corporate warehouse, mark it as the landing point for one sister company's stock.
 CUSTOM_FIELDS.setdefault("Warehouse", []).extend(
 	[

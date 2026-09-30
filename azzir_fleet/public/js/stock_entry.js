@@ -116,9 +116,28 @@ function autofill_group_target_all(frm) {
 	(frm.doc.items || []).forEach((row) => autofill_group_target(frm, row.doctype, row.name));
 }
 
+// On a NEW Stock Entry, auto-select the Default Group Source Warehouse from the current
+// user's Home Group Warehouse (User doctype) — only if the field is still blank, so it
+// never overrides a value already set. Target and everything else are untouched.
+function autofill_home_group_source(frm) {
+	if (!frm.is_new() || !frm.fields_dict.azzir_group_source_warehouse) return;
+	if (frm.doc.azzir_group_source_warehouse) return;
+	frappe.db
+		.get_value("User", frappe.session.user, "azzir_home_group_warehouse")
+		.then((r) => {
+			const wh = r && r.message && r.message.azzir_home_group_warehouse;
+			if (wh && !frm.doc.azzir_group_source_warehouse) {
+				frm.set_value("azzir_group_source_warehouse", wh);
+			}
+		});
+}
+
 frappe.ui.form.on("Stock Entry", {
 	setup: set_stock_item_query,
-	onload: set_stock_item_query,
+	onload(frm) {
+		set_stock_item_query(frm);
+		autofill_home_group_source(frm);
+	},
 	refresh: set_stock_item_query,
 	azzir_group_source_warehouse(frm) {
 		set_stock_item_query(frm); // refresh the read-only/query state, then back-fill rows

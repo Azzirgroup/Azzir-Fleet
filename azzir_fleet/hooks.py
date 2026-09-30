@@ -62,6 +62,7 @@ doctype_js = {
 	"Delivery Note": "public/js/delivery_note.js",
 	"Purchase Receipt": "public/js/purchase_receipt.js",
 	"Warehouse": "public/js/warehouse.js",
+	"User": "public/js/user.js",
 }
 doctype_list_js = {"Sales Invoice": "public/js/sales_invoice_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
@@ -189,6 +190,8 @@ fixtures = [
 					# Auto Email Report: per-report send time.
 					"Auto Email Report-azzir_send_time",
 					"Auto Email Report-azzir_last_sent_date",
+					# User: home group warehouse -> auto-selects Stock Entry's group source.
+					"User-azzir_home_group_warehouse",
 				],
 			]
 		],
