@@ -1118,11 +1118,11 @@ def _require_po_approval():
 		# Only path out of Draft is Request Approval — no unconditional Submit.
 		{"state": "Draft", "action": "Request Approval", "next_state": "Pending Approval",
 		 "allowed": submit_role},
-		# Separation of duties: the creator can't approve/reject their own PO.
+		# Any Purchase Manager — including the PO's own creator — may approve/reject it.
 		{"state": "Pending Approval", "action": "Approve", "next_state": "Approved",
-		 "allowed": approve_role, "allow_self_approval": 0},
+		 "allowed": approve_role, "allow_self_approval": 1},
 		{"state": "Pending Approval", "action": "Reject", "next_state": "Draft",
-		 "allowed": approve_role, "allow_self_approval": 0},
+		 "allowed": approve_role, "allow_self_approval": 1},
 	]
 	# Retire the old min-qty-only workflow (only one active workflow per doctype).
 	if frappe.db.exists("Workflow", _OLD_PO_WORKFLOW):
