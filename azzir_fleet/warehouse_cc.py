@@ -310,3 +310,32 @@ def enforce_warehouse_selection(doc, method=None):
 			.format(", ".join(sorted(bad))),
 			title=frappe._("Warehouse not allowed"),
 		)
+
+
+def resolve_warehouse_cost_center(warehouse: str | None) -> str | None:
+	"""The cost centre for `warehouse`: its own azzir_cost_center, else its parent
+	warehouse's, and so on up the tree. None if no warehouse in the chain has one."""
+	seen = set()
+	wh = warehouse
+	while wh and wh not in seen:
+		seen.add(wh)
+		cc, parent = frappe.db.get_value("Warehouse", wh, ["azzir_cost_center", "parent_warehouse"]) or (None, None)
+		if cc:
+			return cc
+		wh = parent
+	return None
+
+
+def set_header_cost_center_from_first_item(doc, method=None):
+	"""New Sales Invoice: if the header Cost Center isn't set, resolve it from the
+	FIRST item row's warehouse — walking up to its parent warehouse(s) until one
+	carries a cost centre — and set it there. Never overrides a Cost Center the
+	user (or anything else) already set."""
+	if doc.get("cost_center") or not _field_ready():
+		return
+	first_wh = next((r.get("warehouse") for r in (doc.get("items") or []) if r.get("warehouse")), None)
+	if not first_wh:
+		return
+	cc = resolve_warehouse_cost_center(first_wh)
+	if cc:
+		doc.cost_center = cc
