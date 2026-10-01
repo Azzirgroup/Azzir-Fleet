@@ -38,9 +38,8 @@ def get_conditions(filters):
 		params["customer"] = filters.customer
 
 	if filters.get("cost_center"):
-		# Match the invoice HEADER cost center (what the report groups by), falling
-		# back to the line's when the header is empty.
-		conditions.append("COALESCE(si.cost_center, sii.cost_center) = %(cost_center)s")
+		# The invoice HEADER cost center only — no fallback to the line's.
+		conditions.append("si.cost_center = %(cost_center)s")
 		params["cost_center"] = filters.cost_center
 
 	if filters.get("item_group"):
@@ -58,7 +57,7 @@ def get_data(conditions, params):
 			si.posting_date AS posting_date,
 			si.customer AS customer,
 			si.customer_name AS customer_name,
-			COALESCE(si.cost_center, sii.cost_center, 'Undefined') AS cost_center,
+			si.cost_center AS cost_center,
 			SUM(sii.qty) AS qty,
 			SUM(sii.base_net_amount) AS amount
 		FROM `tabSales Invoice` si
