@@ -451,15 +451,18 @@ doc_events = {
 	"Sales Invoice": {
 		"before_validate": "azzir_fleet.customer_name.capture_override",
 		"validate": [
-			# Header Cost Center, when not already set: from the first item row's
-			# warehouse, walking up to its parent until one carries a cost centre.
-			"azzir_fleet.warehouse_cc.set_header_cost_center_from_first_item",
 			"azzir_fleet.warehouse_cc.enforce_warehouse_selection",
 			# Auto buy-from-sister (only at submit): if a line's warehouse is short and
 			# the company opted in, flag the row from a branch-matched sister BEFORE the
 			# landing warehouse is assigned below.
 			"azzir_fleet.auto_sister.auto_source_from_sister",
 			"azzir_fleet.intercompany_sale.set_landing_warehouse",
+			# Header Cost Center, when not already set: from the first item row's
+			# FINAL warehouse (after the sister routing above has resolved it — a
+			# manual pick, the 'All Warehouses' resolver, or an auto-purchase landing
+			# warehouse all land here the same way), walking up its parent chain until
+			# one carries a cost centre.
+			"azzir_fleet.warehouse_cc.set_header_cost_center_from_first_item",
 			"azzir_fleet.warehouse.require_warehouse_for_stock",
 			"azzir_fleet.qty_limits.validate_selling",
 			"azzir_fleet.qty_limits.validate_sales_stock",
