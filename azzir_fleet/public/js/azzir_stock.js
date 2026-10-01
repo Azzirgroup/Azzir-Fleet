@@ -99,6 +99,37 @@ azzir_fleet.autoset_cc_warehouse = function (frm, cdt, cdn) {
 	}, 800);
 };
 
+// Changing the header Company clears every row's warehouse — it belonged to the OLD
+// company and may not even exist (or be allowed) in the new one. Mirrors the /sales
+// portal's behaviour. Only on a draft; "table" defaults to "items".
+azzir_fleet.clear_row_warehouses_on_company_change = function (frm, table) {
+	table = table || "items";
+	if (frm.doc.docstatus !== 0 || !frm.fields_dict[table]) return;
+	const grid_doctype = frm.fields_dict[table].grid.doctype;
+	if (!frappe.meta.has_field(grid_doctype, "warehouse")) return;
+	let changed = false;
+	(frm.doc[table] || []).forEach((row) => {
+		if (row.warehouse) {
+			row.warehouse = "";
+			changed = true;
+		}
+		// Clear the sister-source fields too — they were resolved for the old warehouse.
+		["azzir_row_from_sister", "azzir_supply_company", "azzir_supply_warehouse"].forEach((f) => {
+			if (frappe.meta.has_field(grid_doctype, f) && row[f]) {
+				row[f] = f === "azzir_row_from_sister" ? 0 : "";
+				changed = true;
+			}
+		});
+	});
+	if (changed) {
+		frm.refresh_field(table);
+		frappe.show_alert({
+			message: __("Row warehouses cleared — pick them again for the new company."),
+			indicator: "orange",
+		});
+	}
+};
+
 // Per-warehouse tree breakdown dialog.
 // on_select (optional): fn(warehouse) called when a warehouse is picked. When
 // given, each ACTUAL (non-group) warehouse gets a radio; picking one calls

@@ -3,6 +3,9 @@
 // are pulled from a submitted Sales Invoice instead. (Pick List stays.)
 
 frappe.ui.form.on("Delivery Note", {
+	company(frm) {
+		azzir_fleet.clear_row_warehouses_on_company_change(frm);
+	},
 	refresh(frm) {
 		azzir_fleet.set_warehouse_cc_query(frm);
 		if (frm.doc.docstatus !== 0) return; // get-items only makes sense on a draft

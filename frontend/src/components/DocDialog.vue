@@ -251,10 +251,20 @@ const belowCost = computed(() =>
   }),
 )
 
-// Changing the company clears the picked customer (it may not belong to the new one)
-// and refreshes which warehouses this user may pick.
+// Changing the company clears the picked customer (it may not belong to the new one),
+// clears every row's warehouse pick (it belonged to the OLD company and may not even
+// exist in the new one), and refreshes which warehouses this user may pick.
 watch(company, async (n, o) => {
-  if (o) { customer.value = ''; customerName.value = '' }
+  if (o) {
+    customer.value = ''; customerName.value = ''
+    rows.value.forEach((row) => {
+      row.warehouse = ''
+      row.all_warehouses = ''
+      row.from_sister = false
+      row.supply_company = ''
+      row.supply_warehouse = ''
+    })
+  }
   allowedWh.value = await myAllowedWarehouses(n).catch(() => null)
   defaultAllWh.value = (await companyDefaultAllWh(n).catch(() => '')) || ''
 })

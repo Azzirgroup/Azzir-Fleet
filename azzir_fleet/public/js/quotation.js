@@ -3,6 +3,9 @@
 // (hidden when the quotation itself came from a Sales Invoice), plus live stock cols.
 
 frappe.ui.form.on("Quotation", {
+	company(frm) {
+		azzir_fleet.clear_row_warehouses_on_company_change(frm);
+	},
 	onload_post_render(frm) {
 		azzir_fleet.toggle_sister_columns(frm);
 		azzir_fleet.set_supply_wh_query(frm);
