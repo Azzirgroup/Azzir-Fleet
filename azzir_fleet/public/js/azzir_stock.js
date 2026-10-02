@@ -102,8 +102,31 @@ azzir_fleet.autoset_cc_warehouse = function (frm, cdt, cdn) {
 // Changing the header Company clears every row's warehouse — it belonged to the OLD
 // company and may not even exist (or be allowed) in the new one. Mirrors the /sales
 // portal's behaviour. Only on a draft; "table" defaults to "items".
+//
+// The `company` field trigger fires not only on a genuine user edit, but also while
+// ERPNext POPULATES a brand-new / mapped document (e.g. a Delivery Note created FROM a
+// Sales Invoice carries the invoice's own company + correctly-matching row warehouses) —
+// that first firing is not a "change" and must not wipe out valid, just-mapped data.
+//
+// Track the last-seen company keyed to the DOCUMENT'S OWN identity (frm.doc.name — every
+// doc, including a brand-new/mapped one, gets a unique local name immediately). Frappe can
+// reuse the same `frm` JS object across navigations (e.g. Delivery Note A -> Delivery Note
+// B, or A -> "+New"), so keying only on the form instance would carry a stale value from a
+// DIFFERENT document into this one. Keying on the name means a new document identity always
+// starts its own fresh baseline, while a genuine edit within the SAME document is still
+// caught correctly.
 azzir_fleet.clear_row_warehouses_on_company_change = function (frm, table) {
 	table = table || "items";
+	const nameKey = "_azzir_cc_doc_" + table;
+	const valKey = "_azzir_cc_val_" + table;
+	if (frm[nameKey] !== frm.doc.name) {
+		frm[nameKey] = frm.doc.name;
+		frm[valKey] = frm.doc.company;
+		return; // new document identity — this sighting is the baseline, not a change
+	}
+	const prev = frm[valKey];
+	frm[valKey] = frm.doc.company;
+	if (prev === frm.doc.company) return; // unchanged
 	if (frm.doc.docstatus !== 0 || !frm.fields_dict[table]) return;
 	const grid_doctype = frm.fields_dict[table].grid.doctype;
 	if (!frappe.meta.has_field(grid_doctype, "warehouse")) return;

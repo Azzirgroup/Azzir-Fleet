@@ -253,6 +253,17 @@
   };
   azzir_fleet.clear_row_warehouses_on_company_change = function(frm, table) {
     table = table || "items";
+    const nameKey = "_azzir_cc_doc_" + table;
+    const valKey = "_azzir_cc_val_" + table;
+    if (frm[nameKey] !== frm.doc.name) {
+      frm[nameKey] = frm.doc.name;
+      frm[valKey] = frm.doc.company;
+      return;
+    }
+    const prev = frm[valKey];
+    frm[valKey] = frm.doc.company;
+    if (prev === frm.doc.company)
+      return;
     if (frm.doc.docstatus !== 0 || !frm.fields_dict[table])
       return;
     const grid_doctype = frm.fields_dict[table].grid.doctype;
@@ -629,4 +640,4 @@
     });
   });
 })();
-//# sourceMappingURL=azzir_fleet.bundle.RHDXOHMQ.js.map
+//# sourceMappingURL=azzir_fleet.bundle.ANTDYNXK.js.map
