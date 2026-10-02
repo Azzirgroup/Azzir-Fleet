@@ -55,13 +55,17 @@ def _best_sister_in_branch(item, branch, exclude_company):
 	with warehouse/company/qty, or None."""
 	from azzir_fleet.intercompany_sale import _best_leaf_with_stock
 
+	# The CANDIDATE (supplying) company only needs azzir_sister_supply_enabled — a
+	# separate flag from azzir_auto_purchase_from_sister (the buyer flag checked in
+	# auto_source_from_sister below) so a company can supply sisters WITHOUT itself
+	# becoming able to auto-buy from anyone. One-directional on purpose.
 	best = None
 	for sg in frappe.db.sql(
 		"""select w.name, w.lft, w.rgt, w.company
 		   from `tabWarehouse` w
 		   join `tabCompany` c on c.name = w.company
 		   where w.azzir_branch = %(branch)s and w.is_group = 1 and w.disabled = 0
-		     and w.company != %(co)s and c.azzir_auto_purchase_from_sister = 1""",
+		     and w.company != %(co)s and c.azzir_sister_supply_enabled = 1""",
 		{"branch": branch, "co": exclude_company}, as_dict=True,
 	):
 		cand = _best_leaf_with_stock(item, lft=sg.lft, rgt=sg.rgt, exclude_company=exclude_company)
@@ -79,6 +83,12 @@ def auto_source_from_sister(doc, method=None):
 		return
 
 	notes = []
+	# How much of each (item, sister warehouse) earlier ROWS in THIS SAME document have
+	# already claimed. Without this, two rows needing the same item from the same sister
+	# warehouse are each checked against the FULL stock independently and silently
+	# over-commit more than the sister actually has — the real shortfall then surfaces
+	# later, confusingly, during the actual transfer instead of here, clearly.
+	claimed = {}
 	for row in doc.get("items") or []:
 		if row.get("azzir_row_from_sister"):
 			continue  # seller already chose a sister source for this line
@@ -113,15 +123,23 @@ def auto_source_from_sister(doc, method=None):
 				"Add stock to {0} or to a sister warehouse on that branch."
 			).format(wh, item, w_avail, needed, branch), title=_("Not enough stock"))
 
-		ws_avail = flt(best.qty)
+		key = (item, best.warehouse)
+		already_claimed = flt(claimed.get(key))
+		ws_avail = flt(best.qty) - already_claimed
 		if ws_avail < needed:
+			extra = (
+				_(" ({0} of it already claimed by an earlier line on this invoice)").format(already_claimed)
+				if already_claimed else ""
+			)
 			frappe.throw(_(
 				"We noted warehouse <b>{0}</b> did not have enough <b>{1}</b> (has {2}, need {3}) "
-				"and looked to buy from sister <b>{4}</b> (warehouse {5}) — but it only has "
-				"<b>{6}</b>. Consider reducing the quantity to {6}, or add more stock "
+				"and looked to buy from sister <b>{4}</b> (warehouse {5}) — but only "
+				"<b>{6}</b> is free{7}. Consider reducing the quantity, or add more stock "
 				"(to {0} or {5})."
-			).format(wh, item, w_avail, needed, best.company, best.warehouse, ws_avail),
+			).format(wh, item, w_avail, needed, best.company, best.warehouse, ws_avail, extra),
 				title=_("Sister stock also short"))
+
+		claimed[key] = already_claimed + needed
 
 		# Sister can cover — auto-fill the buy-from-sister fields for this line.
 		row.azzir_row_from_sister = 1

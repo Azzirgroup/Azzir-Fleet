@@ -192,6 +192,8 @@ fixtures = [
 					"Auto Email Report-azzir_last_sent_date",
 					# User: home group warehouse -> auto-selects Stock Entry's group source.
 					"User-azzir_home_group_warehouse",
+					# Company: separate one-directional sister-supply flag.
+					"Company-azzir_sister_supply_enabled",
 				],
 			]
 		],

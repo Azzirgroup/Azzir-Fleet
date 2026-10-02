@@ -585,13 +585,32 @@ CUSTOM_FIELDS.setdefault("Branch", []).append(
 	}
 )
 
-# Company-level toggle: this company auto-purchases from a sister company.
+# Company-level toggle: this company auto-purchases from a sister company. This is the
+# BUYER side only — ticking it does NOT make this company a source other companies can
+# draw from (see azzir_sister_supply_enabled below for that, a separate flag on purpose,
+# so the relationship can be one-directional).
 CUSTOM_FIELDS.setdefault("Company", []).append(
 	{
 		"fieldname": "azzir_auto_purchase_from_sister",
 		"label": "Is Auto Purchase From Sister Company",
 		"fieldtype": "Check",
 		"insert_after": "company_name",
+		"description": "This company may AUTOMATICALLY buy from a sister when its own warehouse "
+		"is short. Does not make this company itself a source others can buy from.",
+	}
+)
+
+# Company-level toggle: OTHER companies' auto-purchase may draw stock from this company.
+# Deliberately separate from azzir_auto_purchase_from_sister (the buyer flag) so a
+# company can supply sisters WITHOUT itself being able to auto-buy from anyone.
+CUSTOM_FIELDS.setdefault("Company", []).append(
+	{
+		"fieldname": "azzir_sister_supply_enabled",
+		"label": "Available as a Sister Supply Source",
+		"fieldtype": "Check",
+		"insert_after": "azzir_auto_purchase_from_sister",
+		"description": "Other companies' automatic buy-from-sister may draw stock from this "
+		"company. This company itself does NOT become a buyer by ticking this.",
 	}
 )
 
