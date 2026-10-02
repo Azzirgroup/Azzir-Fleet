@@ -168,6 +168,20 @@ def user_warehouse_for_item(item_code: str | None = None, company: str | None = 
 
 
 @frappe.whitelist()
+def auto_warehouse_for_item(item_code: str | None = None, company: str | None = None) -> dict:
+	"""Desk auto-fill companion to user_warehouse_for_item: ALSO says whether this user
+	is restricted at all, so the caller can tell "unrestricted — leave ERPNext's own
+	default alone" apart from "restricted, but none of their warehouses hold this item —
+	clear whatever's there". Without this, a restricted user's row could keep ERPNext's
+	native Item Default warehouse (set by the item_code trigger BEFORE our override runs)
+	completely unchecked — including one that's DISABLED, since ERPNext's own default
+	fetch doesn't look at that field at all."""
+	restricted = _effective_bounds() is not None
+	wh = user_warehouse_for_item(item_code, company) if restricted else None
+	return {"warehouse": wh, "restricted": restricted}
+
+
+@frappe.whitelist()
 @frappe.validate_and_sanitize_search_inputs
 def warehouse_query(
 	doctype: str, txt: str, searchfield: str, start: int, page_len: int, filters: dict | str | None

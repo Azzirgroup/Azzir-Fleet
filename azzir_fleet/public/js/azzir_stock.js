@@ -81,6 +81,13 @@ azzir_fleet.set_supply_wh_query = function (frm) {
 // When an item is picked, override ERPNext's default-warehouse fetch with a
 // warehouse in the user's own cost center. We wait a moment so this runs AFTER
 // ERPNext has set the item default (otherwise it would clobber ours).
+//
+// A restricted user's row must never be left on ERPNext's own default silently — that
+// default is set by ERPNext's native item_code trigger BEFORE this runs, and ERPNext
+// does not check whether that warehouse is DISABLED (an Item Default pointing at a
+// disabled/duplicate warehouse sails straight through). So when we find nothing of
+// theirs holds the item, we CLEAR the field instead of leaving it untouched. An
+// unrestricted user is unaffected — ERPNext's own default stays exactly as before.
 azzir_fleet.autoset_cc_warehouse = function (frm, cdt, cdn) {
 	const row = locals[cdt] && locals[cdt][cdn];
 	if (!row || !row.item_code) return;
@@ -88,12 +95,23 @@ azzir_fleet.autoset_cc_warehouse = function (frm, cdt, cdn) {
 		const r2 = locals[cdt] && locals[cdt][cdn];
 		if (!r2 || !r2.item_code) return;
 		frappe.call({
-			method: "azzir_fleet.warehouse_cc.user_warehouse_for_item",
+			method: "azzir_fleet.warehouse_cc.auto_warehouse_for_item",
 			args: { item_code: r2.item_code, company: frm.doc.company },
 			callback(r) {
-				if (r.message && locals[cdt] && locals[cdt][cdn]) {
-					frappe.model.set_value(cdt, cdn, "warehouse", r.message);
+				if (!locals[cdt] || !locals[cdt][cdn]) return;
+				const out = r.message || {};
+				if (out.warehouse) {
+					frappe.model.set_value(cdt, cdn, "warehouse", out.warehouse);
+				} else if (out.restricted) {
+					frappe.model.set_value(cdt, cdn, "warehouse", "");
 				}
+				// ERPNext sets its OWN item-scoped warehouse query (filtered by item_code,
+				// company, is_group) as part of this SAME async item-details round trip —
+				// and that native query does NOT check `disabled`, so it silently overrides
+				// our filtered one the moment an item is picked (that's how a disabled
+				// warehouse could show up in the dropdown at all). Re-assert ours last,
+				// after ERPNext's response has landed, so it's the one actually active.
+				azzir_fleet.set_warehouse_cc_query(frm);
 			},
 		});
 	}, 800);

@@ -241,12 +241,18 @@
       if (!r2 || !r2.item_code)
         return;
       frappe.call({
-        method: "azzir_fleet.warehouse_cc.user_warehouse_for_item",
+        method: "azzir_fleet.warehouse_cc.auto_warehouse_for_item",
         args: { item_code: r2.item_code, company: frm.doc.company },
         callback(r) {
-          if (r.message && locals[cdt] && locals[cdt][cdn]) {
-            frappe.model.set_value(cdt, cdn, "warehouse", r.message);
+          if (!locals[cdt] || !locals[cdt][cdn])
+            return;
+          const out = r.message || {};
+          if (out.warehouse) {
+            frappe.model.set_value(cdt, cdn, "warehouse", out.warehouse);
+          } else if (out.restricted) {
+            frappe.model.set_value(cdt, cdn, "warehouse", "");
           }
+          azzir_fleet.set_warehouse_cc_query(frm);
         }
       });
     }, 800);
@@ -640,4 +646,4 @@
     });
   });
 })();
-//# sourceMappingURL=azzir_fleet.bundle.ANTDYNXK.js.map
+//# sourceMappingURL=azzir_fleet.bundle.FHEK7LLJ.js.map
