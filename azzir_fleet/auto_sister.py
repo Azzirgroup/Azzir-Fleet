@@ -46,20 +46,17 @@ def _effective_branch(warehouse):
 	return None
 
 
-def _best_sister_in_branch(item, branch, exclude_company):
-	"""Best (most stock) LEAF of `item` under any OPTED-IN sister company's GROUP
-	warehouse sharing `branch` — the group carries the branch tag, not necessarily its
-	leaves. Reuses intercompany_sale's leaf-under-bounds search (_best_leaf_with_stock)
-	so this and the manual 'All Warehouses' resolver share one implementation for
-	"find stock under a group" instead of two copies of the same SQL. Returns a row
-	with warehouse/company/qty, or None."""
-	from azzir_fleet.intercompany_sale import _best_leaf_with_stock
-
+def _sister_candidates_in_branch(item, branch, exclude_company):
+	"""EVERY sister LEAF of `item` (not just the best) under any OPTED-IN sister
+	company's GROUP warehouse sharing `branch` — the group carries the branch tag, not
+	necessarily its leaves. Ordered by stock, most first, so a short line can be covered
+	by combining more than one sister warehouse. Returns a list of rows with
+	warehouse/company/qty."""
 	# The CANDIDATE (supplying) company only needs azzir_sister_supply_enabled — a
 	# separate flag from azzir_auto_purchase_from_sister (the buyer flag checked in
 	# auto_source_from_sister below) so a company can supply sisters WITHOUT itself
 	# becoming able to auto-buy from anyone. One-directional on purpose.
-	best = None
+	candidates = []
 	for sg in frappe.db.sql(
 		"""select w.name, w.lft, w.rgt, w.company
 		   from `tabWarehouse` w
@@ -68,10 +65,45 @@ def _best_sister_in_branch(item, branch, exclude_company):
 		     and w.company != %(co)s and c.azzir_sister_supply_enabled = 1""",
 		{"branch": branch, "co": exclude_company}, as_dict=True,
 	):
-		cand = _best_leaf_with_stock(item, lft=sg.lft, rgt=sg.rgt, exclude_company=exclude_company)
-		if cand and (best is None or flt(cand.qty) > flt(best.qty)):
-			best = cand
-	return best
+		for leaf in frappe.db.sql(
+			"""select b.warehouse, sum(b.actual_qty) qty
+			   from `tabBin` b join `tabWarehouse` w on w.name = b.warehouse
+			   where b.item_code = %(item)s and w.is_group = 0 and w.disabled = 0
+			     and w.lft >= %(lft)s and w.rgt <= %(rgt)s
+			   group by b.warehouse having qty > 0""",
+			{"item": item, "lft": sg.lft, "rgt": sg.rgt}, as_dict=True,
+		):
+			candidates.append(frappe._dict(warehouse=leaf.warehouse, company=sg.company, qty=flt(leaf.qty)))
+	candidates.sort(key=lambda c: -c.qty)
+	return candidates
+
+
+def _best_sister_in_branch(item, branch, exclude_company):
+	"""Best (most stock) single LEAF — kept for any other caller that only wants one."""
+	cands = _sister_candidates_in_branch(item, branch, exclude_company)
+	return cands[0] if cands else None
+
+
+_ROW_COPY_SKIP = {
+	"name", "idx", "owner", "creation", "modified", "modified_by", "docstatus",
+	"parent", "parentfield", "parenttype", "doctype",
+}
+
+
+def _split_row_copy(doc, row, qty, conv):
+	"""A new child row cloned from `row` (same item/rate/description/etc.) carrying
+	only `qty` of the original line — used when one sister warehouse can't cover the
+	whole line and the remainder is split onto a second (or third...) sister source."""
+	new_row = doc.append("items", {})
+	for fieldname, value in row.as_dict().items():
+		if fieldname in _ROW_COPY_SKIP:
+			continue
+		new_row.set(fieldname, value)
+	new_row.qty = (qty / conv) if conv else qty
+	new_row.stock_qty = qty
+	new_row.amount = flt(new_row.qty) * flt(new_row.rate)
+	new_row.net_amount = new_row.amount
+	return new_row
 
 
 def auto_source_from_sister(doc, method=None):
@@ -83,13 +115,16 @@ def auto_source_from_sister(doc, method=None):
 		return
 
 	notes = []
+	split_happened = False
 	# How much of each (item, sister warehouse) earlier ROWS in THIS SAME document have
 	# already claimed. Without this, two rows needing the same item from the same sister
 	# warehouse are each checked against the FULL stock independently and silently
 	# over-commit more than the sister actually has — the real shortfall then surfaces
 	# later, confusingly, during the actual transfer instead of here, clearly.
 	claimed = {}
-	for row in doc.get("items") or []:
+	# Iterate a SNAPSHOT — rows added for a split go onto doc.items directly and must not
+	# themselves be re-processed by this same loop.
+	for row in list(doc.get("items") or []):
 		if row.get("azzir_row_from_sister"):
 			continue  # seller already chose a sister source for this line
 		item = row.get("item_code")
@@ -112,40 +147,69 @@ def auto_source_from_sister(doc, method=None):
 			# let normal stock validation handle it.
 			continue
 
-		# Best sister LEAF, found by matching the GROUP warehouse branch (not the leaf's
-		# own) and drilling into that group's children for stock — most stock first.
-		best = _best_sister_in_branch(item, branch, company)
-
-		if not best:
+		# Every sister LEAF sharing this branch, most stock first — a short line is
+		# covered by ONE warehouse when possible, or SPLIT across several in turn when
+		# the biggest alone isn't enough.
+		candidates = _sister_candidates_in_branch(item, branch, company)
+		if not candidates:
 			frappe.throw(_(
 				"Auto-purchase: warehouse <b>{0}</b> is short of <b>{1}</b> (has {2}, need {3}), "
 				"and no sister company sharing branch <b>{4}</b> has any stock of it. "
 				"Add stock to {0} or to a sister warehouse on that branch."
 			).format(wh, item, w_avail, needed, branch), title=_("Not enough stock"))
 
-		key = (item, best.warehouse)
-		already_claimed = flt(claimed.get(key))
-		ws_avail = flt(best.qty) - already_claimed
-		if ws_avail < needed:
-			extra = (
-				_(" ({0} of it already claimed by an earlier line on this invoice)").format(already_claimed)
-				if already_claimed else ""
-			)
+		remaining = needed
+		allocations = []  # [(candidate, qty_taken), ...]
+		for cand in candidates:
+			if remaining <= 1e-9:
+				break
+			key = (item, cand.warehouse)
+			free = flt(cand.qty) - flt(claimed.get(key, 0))
+			if free <= 1e-9:
+				continue
+			take = min(free, remaining)
+			allocations.append((cand, take))
+			claimed[key] = flt(claimed.get(key, 0)) + take
+			remaining -= take
+
+		if remaining > 1e-9:
+			# Not enough even combining EVERY matching sister warehouse. Undo the
+			# partial claims this line made so a later line isn't wrongly blocked by them.
+			for cand, taken in allocations:
+				claimed[(item, cand.warehouse)] -= taken
+			covered = needed - remaining
 			frappe.throw(_(
-				"We noted warehouse <b>{0}</b> did not have enough <b>{1}</b> (has {2}, need {3}) "
-				"and looked to buy from sister <b>{4}</b> (warehouse {5}) — but only "
-				"<b>{6}</b> is free{7}. Consider reducing the quantity, or add more stock "
-				"(to {0} or {5})."
-			).format(wh, item, w_avail, needed, best.company, best.warehouse, ws_avail, extra),
+				"We noted warehouse <b>{0}</b> did not have enough <b>{1}</b> (has {2}, need {3}). "
+				"Combining every sister warehouse on branch <b>{4}</b> only covers "
+				"<b>{5}</b> — still short by <b>{6}</b>. Reduce the quantity, or add more stock."
+			).format(wh, item, w_avail, needed, branch, covered, remaining),
 				title=_("Sister stock also short"))
 
-		claimed[key] = already_claimed + needed
-
-		# Sister can cover — auto-fill the buy-from-sister fields for this line.
+		# Covered — by one warehouse, or split across several. The FIRST (biggest)
+		# allocation updates the ORIGINAL row; any further allocations become NEW rows.
+		conv = flt(row.get("conversion_factor") or 1)
+		first_cand, first_qty = allocations[0]
 		row.azzir_row_from_sister = 1
-		row.azzir_supply_company = best.company
-		row.azzir_supply_warehouse = best.warehouse
-		notes.append(_("{0}: bought from sister {1} ({2})").format(item, best.company, best.warehouse))
+		row.azzir_supply_company = first_cand.company
+		row.azzir_supply_warehouse = first_cand.warehouse
+		if len(allocations) > 1:
+			split_happened = True
+			row.qty = (first_qty / conv) if conv else first_qty
+			notes.append(_("{0}: {1} from sister {2} ({3})").format(
+				item, first_qty, first_cand.company, first_cand.warehouse))
+			for cand, qty_taken in allocations[1:]:
+				new_row = _split_row_copy(doc, row, qty_taken, conv)
+				new_row.azzir_row_from_sister = 1
+				new_row.azzir_supply_company = cand.company
+				new_row.azzir_supply_warehouse = cand.warehouse
+				notes.append(_("{0}: {1} from sister {2} ({3})").format(
+					item, qty_taken, cand.company, cand.warehouse))
+		else:
+			notes.append(_("{0}: bought from sister {1} ({2})").format(
+				item, first_cand.company, first_cand.warehouse))
+
+	if split_happened:
+		doc.calculate_taxes_and_totals()
 
 	if notes:
 		frappe.msgprint(
