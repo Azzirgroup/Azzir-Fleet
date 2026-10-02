@@ -28,6 +28,48 @@ def _needed_qty(row):
 	return flt(row.get("qty")) * flt(row.get("conversion_factor") or 1)
 
 
+def _effective_branch(warehouse):
+	"""The warehouse's own azzir_branch if set, else its nearest ancestor GROUP's —
+	walking up parent_warehouse. Branch lives on the GROUP; a leaf doesn't need its own
+	branch tagged as long as the group it sits under has one. Mirrors
+	warehouse_cc.resolve_warehouse_cost_center's walk-up for cost centres."""
+	seen = set()
+	wh = warehouse
+	while wh and wh not in seen:
+		seen.add(wh)
+		branch, parent = frappe.db.get_value(
+			"Warehouse", wh, ["azzir_branch", "parent_warehouse"]
+		) or (None, None)
+		if branch:
+			return branch
+		wh = parent
+	return None
+
+
+def _best_sister_in_branch(item, branch, exclude_company):
+	"""Best (most stock) LEAF of `item` under any OPTED-IN sister company's GROUP
+	warehouse sharing `branch` — the group carries the branch tag, not necessarily its
+	leaves. Reuses intercompany_sale's leaf-under-bounds search (_best_leaf_with_stock)
+	so this and the manual 'All Warehouses' resolver share one implementation for
+	"find stock under a group" instead of two copies of the same SQL. Returns a row
+	with warehouse/company/qty, or None."""
+	from azzir_fleet.intercompany_sale import _best_leaf_with_stock
+
+	best = None
+	for sg in frappe.db.sql(
+		"""select w.name, w.lft, w.rgt, w.company
+		   from `tabWarehouse` w
+		   join `tabCompany` c on c.name = w.company
+		   where w.azzir_branch = %(branch)s and w.is_group = 1 and w.disabled = 0
+		     and w.company != %(co)s and c.azzir_auto_purchase_from_sister = 1""",
+		{"branch": branch, "co": exclude_company}, as_dict=True,
+	):
+		cand = _best_leaf_with_stock(item, lft=sg.lft, rgt=sg.rgt, exclude_company=exclude_company)
+		if cand and (best is None or flt(cand.qty) > flt(best.qty)):
+			best = cand
+	return best
+
+
 def auto_source_from_sister(doc, method=None):
 	# Only at submit — leave draft saves alone.
 	if doc.docstatus != 1:
@@ -54,34 +96,23 @@ def auto_source_from_sister(doc, method=None):
 		if w_avail >= needed:
 			continue  # this warehouse has enough — nothing to do
 
-		branch = frappe.db.get_value("Warehouse", wh, "azzir_branch")
+		branch = _effective_branch(wh)
 		if not branch:
-			# No branch to match a sister on — let normal stock validation handle it.
+			# No branch (on this warehouse or any ancestor group) to match a sister on —
+			# let normal stock validation handle it.
 			continue
 
-		# Best sister warehouse: same branch, another opted-in company, leaf, enabled,
-		# holding the item — most stock first.
-		cand = frappe.db.sql(
-			"""select b.warehouse, w.company, sum(b.actual_qty) qty
-			   from `tabBin` b
-			   join `tabWarehouse` w on w.name = b.warehouse
-			   join `tabCompany` c on c.name = w.company
-			   where b.item_code = %(item)s and w.azzir_branch = %(branch)s
-			     and w.company != %(co)s and w.is_group = 0 and w.disabled = 0
-			     and c.azzir_auto_purchase_from_sister = 1
-			   group by b.warehouse having qty > 0 order by qty desc limit 1""",
-			{"item": item, "branch": branch, "co": company},
-			as_dict=True,
-		)
+		# Best sister LEAF, found by matching the GROUP warehouse branch (not the leaf's
+		# own) and drilling into that group's children for stock — most stock first.
+		best = _best_sister_in_branch(item, branch, company)
 
-		if not cand:
+		if not best:
 			frappe.throw(_(
 				"Auto-purchase: warehouse <b>{0}</b> is short of <b>{1}</b> (has {2}, need {3}), "
 				"and no sister company sharing branch <b>{4}</b> has any stock of it. "
 				"Add stock to {0} or to a sister warehouse on that branch."
 			).format(wh, item, w_avail, needed, branch), title=_("Not enough stock"))
 
-		best = cand[0]
 		ws_avail = flt(best.qty)
 		if ws_avail < needed:
 			frappe.throw(_(
