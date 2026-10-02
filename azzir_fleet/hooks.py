@@ -463,6 +463,9 @@ doc_events = {
 			# warehouse all land here the same way), walking up its parent chain until
 			# one carries a cost centre.
 			"azzir_fleet.warehouse_cc.set_header_cost_center_from_first_item",
+			# Keep every item row's Cost Center forced to match the header, on EVERY
+			# save — not a one-time fill.
+			"azzir_fleet.warehouse_cc.sync_item_cost_centers_to_header",
 			"azzir_fleet.warehouse.require_warehouse_for_stock",
 			"azzir_fleet.qty_limits.validate_selling",
 			"azzir_fleet.qty_limits.validate_sales_stock",

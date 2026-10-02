@@ -353,3 +353,17 @@ def set_header_cost_center_from_first_item(doc, method=None):
 	cc = resolve_warehouse_cost_center(first_wh)
 	if cc:
 		doc.cost_center = cc
+
+
+def sync_item_cost_centers_to_header(doc, method=None):
+	"""Every item row's Cost Center is forced to match the HEADER Cost Center, on every
+	save (not just once) — overriding whatever ERPNext's own per-line resolution (Item /
+	Item Group / Brand Selling Cost Center) would otherwise set. Runs AFTER
+	set_header_cost_center_from_first_item, so the header is already resolved. No-op
+	when the header has no Cost Center (nothing to push down)."""
+	cc = doc.get("cost_center")
+	if not cc:
+		return
+	for row in doc.get("items") or []:
+		if row.meta.has_field("cost_center"):
+			row.cost_center = cc
