@@ -194,6 +194,12 @@ fixtures = [
 					"User-azzir_home_group_warehouse",
 					# Company: separate one-directional sister-supply flag.
 					"Company-azzir_sister_supply_enabled",
+					# Intercompany payment settlement.
+					"Company-azzir_intercompany_clearing_account",
+					"Payment Entry-azzir_paid_on_behalf_of_sister",
+					"Payment Entry-azzir_sister_company",
+					"Payment Entry-azzir_sister_invoice",
+					"Payment Entry-azzir_settlement_journal_entry",
 				],
 			]
 		],
@@ -487,6 +493,13 @@ doc_events = {
 		"on_update": "azzir_fleet.approval_notify.notify_pending_approval",
 	},
 	"POS Invoice": {"validate": "azzir_fleet.qty_limits.validate_selling"},
+	# Paid On Behalf Of Sister Company: redirect the cash to the Intercompany Clearing
+	# Account, then settle the sister's real invoice with a Journal Entry on submit.
+	"Payment Entry": {
+		"before_validate": "azzir_fleet.intercompany_payment.before_validate",
+		"on_submit": "azzir_fleet.intercompany_payment.on_submit",
+		"on_cancel": "azzir_fleet.intercompany_payment.on_cancel",
+	},
 	# Monthly Budget control (Warn/Stop). JE covers Expense Entry too.
 	"Journal Entry": {
 		"validate": [

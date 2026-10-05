@@ -614,6 +614,72 @@ CUSTOM_FIELDS.setdefault("Company", []).append(
 	}
 )
 
+# Company-level account used when a customer pays THIS company for something they
+# actually owe a SISTER company (see intercompany_payment.py). Credited on the company
+# that collected the cash (it now owes the sister); debited on the sister (settling the
+# customer's receivable there). Must be set on BOTH companies for the feature to work.
+CUSTOM_FIELDS.setdefault("Company", []).append(
+	{
+		"fieldname": "azzir_intercompany_clearing_account",
+		"label": "Intercompany Clearing Account (Sister Companies)",
+		"fieldtype": "Link",
+		"options": "Account",
+		"insert_after": "azzir_sister_supply_enabled",
+		"description": "Used when a payment is received on behalf of a sister company, or "
+		"owed to one. A liability-type account on each company involved works best.",
+	}
+)
+
+# Payment Entry: a customer paid THIS company for something they actually owe a SISTER
+# company (e.g. bought from HPL, paid into HCL). Ticking this reveals the Sister Company
+# + their invoice there; on submit we post the cash against the Intercompany Clearing
+# Account (not the customer's own ledger here — they owe nothing to THIS company) and
+# auto-create a Journal Entry in the sister settling their real invoice.
+CUSTOM_FIELDS.setdefault("Payment Entry", []).extend(
+	[
+		{
+			"fieldname": "azzir_paid_on_behalf_of_sister",
+			"label": "Paid On Behalf Of Sister Company",
+			"fieldtype": "Check",
+			"insert_after": "party",
+			"depends_on": "eval:doc.party_type=='Customer'",
+			"description": "Tick when this customer is actually paying off a SISTER company's "
+			"invoice, not one of this company's own.",
+		},
+		{
+			"fieldname": "azzir_sister_company",
+			"label": "Sister Company",
+			"fieldtype": "Link",
+			"options": "Company",
+			"insert_after": "azzir_paid_on_behalf_of_sister",
+			"depends_on": "eval:doc.azzir_paid_on_behalf_of_sister",
+			"mandatory_depends_on": "eval:doc.azzir_paid_on_behalf_of_sister",
+		},
+		{
+			"fieldname": "azzir_sister_invoice",
+			"label": "Sister Company's Invoice",
+			"fieldtype": "Link",
+			"options": "Sales Invoice",
+			"insert_after": "azzir_sister_company",
+			"depends_on": "eval:doc.azzir_paid_on_behalf_of_sister",
+			"mandatory_depends_on": "eval:doc.azzir_paid_on_behalf_of_sister",
+			"description": "The outstanding invoice, IN the sister company, that this payment settles.",
+		},
+		{
+			"fieldname": "azzir_settlement_journal_entry",
+			"label": "Settlement Journal Entry",
+			"fieldtype": "Link",
+			"options": "Journal Entry",
+			"insert_after": "azzir_sister_invoice",
+			"read_only": 1,
+			"no_copy": 1,
+			"depends_on": "eval:doc.azzir_paid_on_behalf_of_sister",
+			"description": "Auto-created on submit — settles the sister's invoice. Cancelled "
+			"automatically if this Payment Entry is cancelled.",
+		},
+	]
+)
+
 # Company-level default for the sales "All Warehouses" field: when set, this (group)
 # warehouse is auto-selected in the All Warehouses field on Quotation / Sales Invoice as
 # each item is picked, and locked there on the frontend.
