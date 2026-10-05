@@ -318,6 +318,15 @@ async function onAddMultiple(codes) {
 // default sister company + the in-group warehouse with the most stock of the item.
 async function onRowFromSister(row) {
   if (!row.from_sister) { row.supply_company = ''; row.supply_warehouse = ''; return }
+  // Same resolution item-select uses (checks every sister via landing config, branch
+  // matched) — not the narrower Azzir-Settings-single-default lookup, which can come back
+  // empty for a sister that genuinely has stock elsewhere, making a re-tick look "worse"
+  // than the original auto-fill for the very same item.
+  if (sisterEligible.value && defaultAllWh.value) {
+    row.all_warehouses = defaultAllWh.value
+    await onPickAllWarehouses(row, { silent: true })
+    if (row.supply_company && row.supply_warehouse) return
+  }
   await fillSisterDefault(row)
 }
 // Auto-fill a row's sister source from Azzir Fleet Settings (default company + the
