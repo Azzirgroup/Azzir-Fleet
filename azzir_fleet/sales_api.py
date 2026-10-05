@@ -406,6 +406,10 @@ def make_next(source_doctype: str, source_name: str, target: str) -> dict:
 					"qty": r.qty,
 					"rate": r.rate,
 					"warehouse": r.get("warehouse"),
+					# The quotation row's (possibly edited) description -- without this it
+					# comes through blank and gets silently refilled from the Item master's
+					# own default description on save, losing any edit the seller made.
+					"description": r.get("description"),
 					# Carry the PER-ROW buy-from-sister choice so the transfer still runs
 					# when this Sales Invoice is submitted (was previously dropped here).
 					"azzir_row_from_sister": r.get("azzir_row_from_sister"),
