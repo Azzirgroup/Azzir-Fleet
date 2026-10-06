@@ -194,6 +194,56 @@ def get_rows(filters):
 			}
 		)
 
+	# 6b) Items with a Minimum Order Qty but ZERO stock ANYWHERE never get a Bin row at
+	#     all -- the loop above only ever sees items that appear in `bins`, so an item
+	#     that has simply never been received/issued (the single most urgent "below
+	#     minimum" case there is) was silently invisible. Surface it via its configured
+	#     default warehouse(s); if it has none configured either, still show it rather
+	#     than drop it -- procurement needs every out-of-band item to be on this list.
+	covered = {ic for (ic, _co) in company_total}
+	zero_stock = [c for c in codes if c not in covered and flt(meta[c].min_order_qty) > 0]
+	if zero_stock:
+		item_defaults = frappe.get_all(
+			"Item Default",
+			filters={"parent": ["in", zero_stock]},
+			fields=["parent as item_code", "company", "default_warehouse"],
+		)
+		by_item = {}
+		for d in item_defaults:
+			by_item.setdefault(d.item_code, []).append(d)
+
+		for item_code in zero_stock:
+			if item_code in reordered:
+				continue  # already reordered, same drop-off rule as above
+			im = meta[item_code]
+			mn = flt(im.min_order_qty)
+			targets = by_item.get(item_code) or [frappe._dict(company="", default_warehouse="")]
+			for t in targets:
+				if filters.get("company") and t.company and t.company != filters.company:
+					continue
+				wh = t.default_warehouse or ""
+				if filters.get("warehouse") and wh and wh != filters.get("warehouse"):
+					continue
+				grp = by_wh.setdefault(wh, {"company": t.company, "kids": []})
+				grp["kids"].append(
+					{
+						"item_code": item_code,
+						"part_number": item_code,
+						"warehouse": wh,
+						"item_name": im.item_name,
+						"description": (strip_html(im.description or "").strip() or im.item_name),
+						"min_order_qty": mn,
+						"max_order_qty": flt(im.max_order_qty),
+						"reorder_level": reorder_level.get((item_code, wh), 0.0),
+						"actual_qty": 0.0,
+						"company_total": 0.0,
+						"selling_price": selling_price.get(item_code, 0.0),
+						"economy_stock": economy.get((item_code, wh), 0.0),
+						"status": below_label,
+						"variance": mn,
+					}
+				)
+
 	# 7) Flat list — one row per item/warehouse. Warehouses with the most below-minimum
 	#    items first, then within each: below-minimum first, largest shortfall first.
 	def wh_sort_key(wh):
