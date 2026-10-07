@@ -56,10 +56,12 @@ def get_rows(filters):
 	picked = _item_filter(filters)
 	if picked:
 		item_conds["name"] = ["in", picked]
+	# No Min/Max Order Qty filter here any more -- an item with Min Order Qty left at 0
+	# (unconfigured) still needs to show up the moment it has ZERO stock anywhere; see the
+	# below/above check below, which treats an unconfigured minimum as "should have some".
 	items = frappe.get_all(
 		"Item",
 		filters=item_conds,
-		or_filters={"min_order_qty": [">", 0], "max_order_qty": [">", 0]},
 		fields=["name", "item_name", "description", "min_order_qty", "max_order_qty"],
 	)
 	if not items:
@@ -166,8 +168,10 @@ def get_rows(filters):
 		mn, mx = flt(im.min_order_qty), flt(im.max_order_qty)
 		actual = flt(b.q)  # stock in THIS warehouse (shown so the team sees where it sits)
 		ctotal = flt(company_total.get((b.item_code, b.company), 0.0))  # company-wide total
-		# Judge below/above on the COMPANY total, not this one warehouse.
-		below = mn > 0 and ctotal < mn
+		# Judge below/above on the COMPANY total, not this one warehouse. An unconfigured
+		# (0) Min Order Qty still flags once stock hits zero -- nobody having set a proper
+		# minimum shouldn't mean a completely out-of-stock item goes unreported.
+		below = (ctotal < mn) if mn > 0 else (ctotal <= 0)
 		above = mx > 0 and ctotal > mx
 		if not (below or above):
 			continue  # the company as a whole is within the [min, max] band — fine
@@ -201,7 +205,9 @@ def get_rows(filters):
 	#     default warehouse(s); if it has none configured either, still show it rather
 	#     than drop it -- procurement needs every out-of-band item to be on this list.
 	covered = {ic for (ic, _co) in company_total}
-	zero_stock = [c for c in codes if c not in covered and flt(meta[c].min_order_qty) > 0]
+	# Zero stock anywhere is always "below" now -- whether Min Order Qty is a real
+	# threshold or left at 0 (unconfigured), having NOTHING in stock still qualifies.
+	zero_stock = [c for c in codes if c not in covered]
 	if zero_stock:
 		item_defaults = frappe.get_all(
 			"Item Default",
