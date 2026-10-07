@@ -200,6 +200,8 @@ fixtures = [
 					"Payment Entry-azzir_sister_company",
 					"Payment Entry-azzir_sister_invoice",
 					"Payment Entry-azzir_settlement_journal_entry",
+					# Auto Buy For Sister Company on Purchase Orders.
+					"Company-azzir_auto_buy_for_sister",
 				],
 			]
 		],
@@ -382,6 +384,7 @@ doc_events = {
 	"Purchase Order": {
 		"validate": [
 			"azzir_fleet.qty_limits.validate_buying",
+			"azzir_fleet.purchase_cycle.auto_target_from_sister",
 			"azzir_fleet.purchase_cycle.default_target_rows",
 			# Below Minimum Order Qty -> flag (drives the approval workflow).
 			"azzir_fleet.qty_limits.flag_below_min_qty",

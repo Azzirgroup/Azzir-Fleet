@@ -62,8 +62,48 @@ azzir_fleet.autofill_purchase_warehouse = function (frm, cdt, cdn) {
 	frappe.ui.form.on(dt, {
 		item_code(frm, cdt, cdn) {
 			azzir_fleet.autofill_purchase_warehouse(frm, cdt, cdn);
+			azzir_fleet.autofill_target_from_sister(frm, cdt, cdn);
 		},
 	});
+});
+
+// Auto Buy For Sister Company (Purchase Order only): the moment the row's own
+// (receiving) Warehouse is known -- set directly, or filled in async a moment later
+// by autofill_purchase_warehouse above -- check whether the buying company auto-buys
+// for a sister, and if so fill in "Buy For Target Company" + Target Company + Target
+// Warehouse right away, live, rather than waiting for Save.
+azzir_fleet.autofill_target_from_sister = function (frm, cdt, cdn) {
+	if (frm.doc.doctype !== "Purchase Order") return;
+	const row = locals[cdt] && locals[cdt][cdn];
+	if (!row || !row.warehouse || row.azzir_row_to_target) return;
+	frappe.call({
+		method: "azzir_fleet.purchase_cycle.auto_target_for_row",
+		args: { company: frm.doc.company, warehouse: row.warehouse },
+		callback(r) {
+			const d = r.message;
+			const cur = locals[cdt] && locals[cdt][cdn];
+			if (d && d.target_company && d.target_warehouse && cur && !cur.azzir_row_to_target) {
+				frappe.model.set_value(cdt, cdn, "azzir_row_to_target", 1);
+				frappe.model.set_value(cdt, cdn, "azzir_target_company", d.target_company);
+				frappe.model.set_value(cdt, cdn, "azzir_target_warehouse", d.target_warehouse);
+				// The values land in the underlying doc correctly either way, but an
+				// OPEN row-edit dialog doesn't always repaint on its own when a
+				// background call (not a direct user edit) changes its fields -- force
+				// it, so you see the tick without having to close/reopen the row.
+				const grid_row = frm.fields_dict.items.grid.grid_rows_by_docname[cdn];
+				if (grid_row && grid_row.grid_form && grid_row.grid_form.fields_dict) {
+					grid_row.grid_form.refresh();
+				}
+				frm.fields_dict.items.grid.refresh();
+			}
+		},
+	});
+};
+
+frappe.ui.form.on("Purchase Order Item", {
+	warehouse(frm, cdt, cdn) {
+		azzir_fleet.autofill_target_from_sister(frm, cdt, cdn);
+	},
 });
 
 // Per-row: unticking "Buy For Target Company" clears the target picks; changing the

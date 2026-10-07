@@ -457,8 +457,39 @@
     frappe.ui.form.on(dt, {
       item_code(frm, cdt, cdn) {
         azzir_fleet.autofill_purchase_warehouse(frm, cdt, cdn);
+        azzir_fleet.autofill_target_from_sister(frm, cdt, cdn);
       }
     });
+  });
+  azzir_fleet.autofill_target_from_sister = function(frm, cdt, cdn) {
+    if (frm.doc.doctype !== "Purchase Order")
+      return;
+    const row = locals[cdt] && locals[cdt][cdn];
+    if (!row || !row.warehouse || row.azzir_row_to_target)
+      return;
+    frappe.call({
+      method: "azzir_fleet.purchase_cycle.auto_target_for_row",
+      args: { company: frm.doc.company, warehouse: row.warehouse },
+      callback(r) {
+        const d = r.message;
+        const cur = locals[cdt] && locals[cdt][cdn];
+        if (d && d.target_company && d.target_warehouse && cur && !cur.azzir_row_to_target) {
+          frappe.model.set_value(cdt, cdn, "azzir_row_to_target", 1);
+          frappe.model.set_value(cdt, cdn, "azzir_target_company", d.target_company);
+          frappe.model.set_value(cdt, cdn, "azzir_target_warehouse", d.target_warehouse);
+          const grid_row = frm.fields_dict.items.grid.grid_rows_by_docname[cdn];
+          if (grid_row && grid_row.grid_form && grid_row.grid_form.fields_dict) {
+            grid_row.grid_form.refresh();
+          }
+          frm.fields_dict.items.grid.refresh();
+        }
+      }
+    });
+  };
+  frappe.ui.form.on("Purchase Order Item", {
+    warehouse(frm, cdt, cdn) {
+      azzir_fleet.autofill_target_from_sister(frm, cdt, cdn);
+    }
   });
   ["Purchase Order Item", "Purchase Receipt Item", "Purchase Invoice Item"].forEach(function(dt) {
     frappe.ui.form.on(dt, {
@@ -646,4 +677,4 @@
     });
   });
 })();
-//# sourceMappingURL=azzir_fleet.bundle.FHEK7LLJ.js.map
+//# sourceMappingURL=azzir_fleet.bundle.QAVVIC2X.js.map

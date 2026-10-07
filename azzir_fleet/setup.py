@@ -630,6 +630,23 @@ CUSTOM_FIELDS.setdefault("Company", []).append(
 	}
 )
 
+# Company-level toggle: this company's Purchase Orders automatically mark rows "Buy For
+# Target Company" toward a sister sharing the row's warehouse's Branch, instead of
+# someone setting that up by hand per row. Opposite direction from
+# azzir_auto_purchase_from_sister (sourcing a SHORTAGE from a sister on sell-side docs) --
+# this is buying externally WITH THE INTENT of routing it straight to a sister on receipt.
+CUSTOM_FIELDS.setdefault("Company", []).append(
+	{
+		"fieldname": "azzir_auto_buy_for_sister",
+		"label": "Auto Buy For Sister Company (Purchase Orders)",
+		"fieldtype": "Check",
+		"insert_after": "azzir_intercompany_clearing_account",
+		"description": "New Purchase Order rows automatically tick 'Buy For Target Company' "
+		"toward a sister sharing the row's warehouse's Branch, using that sister's "
+		"landing warehouse for this company. Leave a row's own manual setting alone.",
+	}
+)
+
 # Payment Entry: a customer paid THIS company for something they actually owe a SISTER
 # company (e.g. bought from HPL, paid into HCL). Ticking this reveals the Sister Company
 # + their invoice there; on submit we post the cash against the Intercompany Clearing

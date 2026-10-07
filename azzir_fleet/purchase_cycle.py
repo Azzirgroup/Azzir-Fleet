@@ -52,6 +52,64 @@ def _linked_source_row(r):
 	)
 
 
+def _resolve_target_for_warehouse(company, warehouse):
+	"""For a Purchase Order row's own (receiving) `warehouse`, the sister (if any)
+	sharing its Branch, and that sister's own configured landing warehouse for
+	`company` (the same sister-landing config the sell-side sister flow already
+	relies on, not a separate lookup). Returns (target_company, target_warehouse),
+	or (None, None) when nothing branch-matches."""
+	if not warehouse:
+		return None, None
+	from azzir_fleet.auto_sister import _effective_branch
+	from azzir_fleet.intercompany_sale import _sister_landings
+
+	branch = _effective_branch(warehouse)
+	if not branch:
+		return None, None
+	for sister_co in frappe.get_all("Company", filters={"name": ["!=", company]}, pluck="name"):
+		landing_wh = _sister_landings(sister_co).get(company)
+		if landing_wh and _effective_branch(landing_wh) == branch:
+			return sister_co, landing_wh
+	return None, None
+
+
+def auto_target_from_sister(doc, method=None):
+	"""Purchase Order validate: when the buying company has 'Auto Buy For Sister
+	Company' on, automatically mark a row 'Buy For Target Company' toward a sister
+	sharing the row's warehouse's Branch. A safety net for rows created outside the
+	desk (API, the /sales portal's mapper, etc.) — the desk form itself fills this in
+	live via auto_target_for_row below, as soon as an item/warehouse is picked, not
+	only on save. A row the user (or a linked source document, via default_target_rows
+	below) already set is left alone; a row whose warehouse has no branch-matching
+	sister just stays a normal purchase line."""
+	if not frappe.db.get_value("Company", doc.company, "azzir_auto_buy_for_sister"):
+		return
+
+	for r in doc.get("items") or []:
+		if r.get("azzir_row_to_target"):
+			continue  # already set — leave it alone
+		tc, tw = _resolve_target_for_warehouse(doc.company, r.get("warehouse"))
+		if tc:
+			r.azzir_row_to_target = 1
+			r.azzir_target_company = tc
+			r.azzir_target_warehouse = tw
+
+
+@frappe.whitelist()
+def auto_target_for_row(company: str | None = None, warehouse: str | None = None) -> dict:
+	"""Live, pre-save lookup for the Purchase Order desk form: when `company` has
+	'Auto Buy For Sister Company' on, resolve the sister + landing warehouse for
+	`warehouse`'s Branch -- the same resolution auto_target_from_sister applies on
+	save, but callable the moment a row's item (and warehouse) is picked. Returns
+	{target_company, target_warehouse}, or {} when nothing applies."""
+	if not company or not warehouse:
+		return {}
+	if not frappe.db.get_value("Company", company, "azzir_auto_buy_for_sister"):
+		return {}
+	tc, tw = _resolve_target_for_warehouse(company, warehouse)
+	return {"target_company": tc, "target_warehouse": tw} if tc else {}
+
+
 def default_target_rows(doc, method=None):
 	"""PO / PR / PI validate: carry the per-row target fields from the linked source
 	document row (PO -> PR -> PI), since ERPNext's mapper doesn't copy custom fields.

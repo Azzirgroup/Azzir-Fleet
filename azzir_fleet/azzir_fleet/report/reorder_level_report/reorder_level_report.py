@@ -140,8 +140,10 @@ def get_rows(filters):
 		reorder_level[(r.item_code, r.warehouse)] = flt(r.lvl)
 
 	# 5) Below-Minimum items drop off once a Purchase Invoice has been raised for
-	#    them. 0 days = any open Purchase Invoice, ever.
-	reordered = set()
+	#    them -- but only in the SAME company. A Purchase Invoice in HCL doesn't mean
+	#    HPL's own shortage got resolved; scoped per (item, company), not just item.
+	#    0 days = any open Purchase Invoice, ever.
+	reordered = set()  # {(item_code, company), ...}
 	if not filters.get("show_reordered"):
 		days = int(filters.get("reordered_within_days") or 0)
 		pi_conds = ["pi.docstatus in (0, 1)"]
@@ -150,12 +152,13 @@ def get_rows(filters):
 			pi_conds.append("pi.posting_date >= %(cutoff)s")
 			pi_vals["cutoff"] = add_days(today(), -days)
 		reordered = {
-			r[0]
+			(r.item_code, r.company)
 			for r in frappe.db.sql(
-				"""select distinct pii.item_code from `tabPurchase Invoice Item` pii
+				"""select distinct pii.item_code, pi.company from `tabPurchase Invoice Item` pii
 				   join `tabPurchase Invoice` pi on pi.name = pii.parent
 				   where pii.item_code in %(codes)s and {c}""".format(c=" and ".join(pi_conds)),
 				pi_vals,
+				as_dict=True,
 			)
 		}
 
@@ -175,8 +178,8 @@ def get_rows(filters):
 		above = mx > 0 and ctotal > mx
 		if not (below or above):
 			continue  # the company as a whole is within the [min, max] band — fine
-		if below and not above and b.item_code in reordered:
-			continue  # already reordered
+		if below and not above and (b.item_code, b.company) in reordered:
+			continue  # already reordered IN THIS company
 		grp = by_wh.setdefault(b.warehouse, {"company": b.company, "kids": []})
 		grp["kids"].append(
 			{
@@ -219,8 +222,6 @@ def get_rows(filters):
 			by_item.setdefault(d.item_code, []).append(d)
 
 		for item_code in zero_stock:
-			if item_code in reordered:
-				continue  # already reordered, same drop-off rule as above
 			im = meta[item_code]
 			mn = flt(im.min_order_qty)
 			item_targets = by_item.get(item_code) or []
@@ -234,6 +235,8 @@ def get_rows(filters):
 			else:
 				targets = item_targets or [frappe._dict(company="", default_warehouse="")]
 			for t in targets:
+				if (item_code, t.company) in reordered:
+					continue  # already reordered IN THIS company -- same drop-off rule as above
 				wh = t.default_warehouse or ""
 				if filters.get("warehouse") and wh and wh != filters.get("warehouse"):
 					continue
