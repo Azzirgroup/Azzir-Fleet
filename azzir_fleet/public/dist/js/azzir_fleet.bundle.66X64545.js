@@ -43,6 +43,42 @@
     }
   })();
 
+  // ../azzir_fleet/azzir_fleet/public/js/draft_guard.js
+  frappe.provide("azzir_fleet");
+  azzir_fleet.guard_create = function(frm, { child_doctype, link_field, target_doctype, make }) {
+    frappe.call({
+      method: "azzir_fleet.draft_guard.find_draft_target",
+      args: { child_doctype, link_field, source_name: frm.doc.name },
+      callback(r) {
+        const existing = r.message;
+        if (!existing) {
+          make();
+          return;
+        }
+        const d = new frappe.ui.Dialog({
+          title: __("Unsaved {0} already exists", [__(target_doctype)]),
+          fields: [
+            {
+              fieldtype: "HTML",
+              options: `<p>${__("{0} {1} was already started from this document and hasn't been saved or submitted yet.", [__(target_doctype), `<b>${frappe.utils.escape_html(existing)}</b>`])}</p>`
+            }
+          ],
+          primary_action_label: __("Go to it"),
+          primary_action() {
+            d.hide();
+            frappe.set_route("Form", target_doctype, existing);
+          },
+          secondary_action_label: __("Create new anyway"),
+          secondary_action() {
+            d.hide();
+            make();
+          }
+        });
+        d.show();
+      }
+    });
+  };
+
   // ../azzir_fleet/azzir_fleet/public/js/azzir_compat.js
   frappe.provide("frappe.model");
   (function() {
@@ -677,4 +713,4 @@
     });
   });
 })();
-//# sourceMappingURL=azzir_fleet.bundle.QAVVIC2X.js.map
+//# sourceMappingURL=azzir_fleet.bundle.66X64545.js.map

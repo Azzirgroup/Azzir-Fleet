@@ -6,6 +6,7 @@
 // the raw /assets/*.js includes showed up inconsistently after deploys).
 
 import "./portal_redirect";
+import "./draft_guard";
 import "./azzir_compat";
 import "./azzir_alias";
 import "./azzir_stock";
