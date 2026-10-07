@@ -225,10 +225,10 @@ def get_rows(filters):
 			mn = flt(im.min_order_qty)
 			item_targets = by_item.get(item_code) or []
 			if filters.get("company"):
-				# Scoped to ONE company: show it under that company regardless of where
-				# the item's own Item Default happens to point -- "zero stock in the
-				# company I'm looking at" is what matters, not where it's configured by
-				# default. Use its default warehouse here if one is set, else blank.
+				# Scoped to ONE company: always show it there -- Item Default plays no
+				# part in whether it's relevant, only (if one happens to match this
+				# company) in which warehouse to display. Zero stock in the company
+				# you're looking at is reason enough on its own.
 				match = next((t for t in item_targets if t.company == filters.company), None)
 				targets = [frappe._dict(company=filters.company, default_warehouse=match.default_warehouse if match else "")]
 			else:
