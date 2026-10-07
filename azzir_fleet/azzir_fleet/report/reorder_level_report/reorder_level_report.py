@@ -223,10 +223,17 @@ def get_rows(filters):
 				continue  # already reordered, same drop-off rule as above
 			im = meta[item_code]
 			mn = flt(im.min_order_qty)
-			targets = by_item.get(item_code) or [frappe._dict(company="", default_warehouse="")]
+			item_targets = by_item.get(item_code) or []
+			if filters.get("company"):
+				# Scoped to ONE company: show it under that company regardless of where
+				# the item's own Item Default happens to point -- "zero stock in the
+				# company I'm looking at" is what matters, not where it's configured by
+				# default. Use its default warehouse here if one is set, else blank.
+				match = next((t for t in item_targets if t.company == filters.company), None)
+				targets = [frappe._dict(company=filters.company, default_warehouse=match.default_warehouse if match else "")]
+			else:
+				targets = item_targets or [frappe._dict(company="", default_warehouse="")]
 			for t in targets:
-				if filters.get("company") and t.company and t.company != filters.company:
-					continue
 				wh = t.default_warehouse or ""
 				if filters.get("warehouse") and wh and wh != filters.get("warehouse"):
 					continue
