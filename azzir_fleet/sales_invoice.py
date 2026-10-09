@@ -77,3 +77,25 @@ def unmark_quotation_invoiced(doc, method=None):
 		{"azzir_source_quotation": q, "docstatus": 1, "name": ["!=", doc.name]},
 	)
 	frappe.db.set_value("Quotation", q, "azzir_invoiced", 1 if other else 0, update_modified=False)
+
+
+# All four Habili companies shared one Sales Invoice naming series setup, so every
+# invoice was getting named HPL/INV/... regardless of which company it was actually
+# for. Force the right prefix (matching each Company's own abbr) by company instead of
+# relying on whoever creates the invoice to pick the correct one from the naming
+# series dropdown themselves -- that's how this happened in the first place. Covers
+# all four now, not just the two that have issued invoices so far, so this doesn't
+# need revisiting the day HUL or HEL start invoicing too.
+_COMPANY_NAMING_SERIES = {
+	"HABILI AND COMPANY LIMITED": "HCL/INV/2026/001",
+	"HABILI UNDERCARRIAGE LIMITED": "HUL/INV/2026/001",
+	"HABILI EQUIPMENT LIMITED": "HEL/INV/2026/001",
+	"HABILI PARTS LIMITED": "HPL/INV/2026/001",
+}
+
+
+def set_naming_series_by_company(doc, method=None):
+	"""Sales Invoice before_insert."""
+	series = _COMPANY_NAMING_SERIES.get(doc.company)
+	if series:
+		doc.naming_series = series

@@ -461,6 +461,7 @@ doc_events = {
 		"on_update": "azzir_fleet.approval_notify.notify_pending_approval",
 	},
 	"Sales Invoice": {
+		"before_insert": "azzir_fleet.sales_invoice.set_naming_series_by_company",
 		"before_validate": "azzir_fleet.customer_name.capture_override",
 		"validate": [
 			"azzir_fleet.warehouse_cc.enforce_warehouse_selection",
