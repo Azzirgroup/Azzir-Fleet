@@ -205,6 +205,7 @@ fixtures = [
 					"Payment Entry-azzir_paid_on_behalf_of_sister",
 					"Payment Entry-azzir_sister_company",
 					"Payment Entry-azzir_sister_invoice",
+					"Payment Entry-azzir_sister_purchase_invoice",
 					"Payment Entry-azzir_settlement_journal_entry",
 					# Auto Buy For Sister Company on Purchase Orders.
 					"Company-azzir_auto_buy_for_sister",

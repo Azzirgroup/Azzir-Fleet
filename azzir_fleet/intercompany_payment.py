@@ -1,27 +1,50 @@
 # Copyright (c) 2026, Azzir and contributors
 # For license information, please see license.txt
-"""Paid On Behalf Of Sister Company: a customer's cash lands in ONE company's bank, but
-the invoice it's actually settling belongs to a SISTER company (e.g. bought from HPL,
-paid into HCL).
+"""Paid On Behalf Of Sister Company: this company's cash actually settles a SISTER
+company's debt, not its own.
 
-Tick "Paid On Behalf Of Sister Company" on a Receive Payment Entry, pick the Sister
-Company and their invoice. On submit:
+Receive: a customer's cash lands in ONE company's bank, but the invoice it's settling
+belongs to a SISTER company (e.g. bought from HPL, paid into HCL).
+Pay: this company pays a SUPPLIER, but the bill it's settling is actually the SISTER's
+(the sister owes that supplier, not this company).
+
+Tick "Paid On Behalf Of Sister Company", pick the Sister Company and their invoice
+(a Sales Invoice for Receive, a Purchase Invoice for Pay). On submit:
   - THIS Payment Entry posts its cash against the Intercompany Clearing Account
-    (configured per Company) instead of the customer's own ledger here — the customer
-    owes this company nothing; the real debt sits on the sister's books.
-  - A Journal Entry is auto-created IN THE SISTER COMPANY, crediting the customer's
-    receivable there (settling their invoice) and debiting the sister's own clearing
-    account (what the paying company now owes them).
+    (configured per Company) instead of the real party's own ledger here — that party
+    owes/is-owed nothing by THIS company; the real debt sits on the sister's books.
+  - A Journal Entry is auto-created IN THE SISTER COMPANY, settling the real invoice
+    there (crediting a receivable for Receive, debiting a payable for Pay) and moving
+    the sister's own clearing account the opposite way.
 
 Both companies need their Intercompany Clearing Account set (Company -> Accounts) —
-a liability-type account works best: it's CREDITED on the company that collected cash
-it doesn't own (increasing what it owes the sister), and DEBITED on the sister
-(decreasing what the sister is owed, since their receivable from the customer closed).
+a liability-type account works best. The SAME account is used for both directions: its
+balance just nets whichever way the IOU currently runs between the two companies.
 """
 
 import frappe
 from frappe import _
 from frappe.utils import flt
+
+# Everything that differs between the two directions, keyed by Payment Entry type.
+_DIRECTION = {
+	"Receive": {
+		"party_type": "Customer",
+		"invoice_field": "azzir_sister_invoice",
+		"invoice_doctype": "Sales Invoice",
+		"invoice_party_field": "customer",
+		"invoice_account_field": "debit_to",  # the invoice's own receivable account
+		"pe_account_field": "paid_from",  # the field ERPNext treats as "the party's account" on a Receive
+	},
+	"Pay": {
+		"party_type": "Supplier",
+		"invoice_field": "azzir_sister_purchase_invoice",
+		"invoice_doctype": "Purchase Invoice",
+		"invoice_party_field": "supplier",
+		"invoice_account_field": "credit_to",  # the invoice's own payable account
+		"pe_account_field": "paid_to",  # the field ERPNext treats as "the party's account" on a Pay
+	},
+}
 
 
 def _clearing_account(company: str) -> str | None:
@@ -29,44 +52,48 @@ def _clearing_account(company: str) -> str | None:
 
 
 def before_validate(doc, method=None):
-	"""Runs BEFORE ERPNext's own Payment Entry validate, so our override of paid_from
-	(the account the cash is posted against) is in place before core computes anything
-	against it (exchange rates, account currency, etc.) — not after, which would leave
-	those stale."""
+	"""Runs BEFORE ERPNext's own Payment Entry validate, so our override of the party
+	account (paid_from for Receive, paid_to for Pay) is in place before core computes
+	anything against it (exchange rates, account currency, etc.) — not after, which
+	would leave those stale."""
 	if not doc.get("azzir_paid_on_behalf_of_sister"):
 		return
 
-	if doc.payment_type != "Receive" or doc.party_type != "Customer":
+	cfg = _DIRECTION.get(doc.payment_type)
+	if not cfg or doc.party_type != cfg["party_type"]:
 		frappe.throw(_(
-			"'Paid On Behalf Of Sister Company' only applies to a Receive payment from a Customer."
+			"'Paid On Behalf Of Sister Company' only applies to a Receive payment from a "
+			"Customer, or a Pay payment to a Supplier."
 		))
 	if not doc.get("azzir_sister_company"):
 		frappe.throw(_("Choose the Sister Company this payment is actually for."))
 	if doc.azzir_sister_company == doc.company:
 		frappe.throw(_("Sister Company must be different from this Payment Entry's own Company."))
-	if not doc.get("azzir_sister_invoice"):
+
+	invoice_name = doc.get(cfg["invoice_field"])
+	if not invoice_name:
 		frappe.throw(_("Choose the Sister Company's invoice this payment settles."))
 
 	inv = frappe.db.get_value(
-		"Sales Invoice", doc.azzir_sister_invoice,
-		["company", "customer", "docstatus", "outstanding_amount", "debit_to"],
+		cfg["invoice_doctype"], invoice_name,
+		["company", cfg["invoice_party_field"], "docstatus", "outstanding_amount", cfg["invoice_account_field"]],
 		as_dict=True,
 	)
 	if not inv:
-		frappe.throw(_("Sales Invoice {0} not found.").format(doc.azzir_sister_invoice))
+		frappe.throw(_("{0} {1} not found.").format(cfg["invoice_doctype"], invoice_name))
 	if inv.company != doc.azzir_sister_company:
 		frappe.throw(_("{0} does not belong to {1}.").format(
-			doc.azzir_sister_invoice, frappe.bold(doc.azzir_sister_company)))
-	if inv.customer != doc.party:
-		frappe.throw(_("{0} is not an invoice for {1}.").format(doc.azzir_sister_invoice, doc.party))
+			invoice_name, frappe.bold(doc.azzir_sister_company)))
+	if inv.get(cfg["invoice_party_field"]) != doc.party:
+		frappe.throw(_("{0} is not an invoice for {1}.").format(invoice_name, doc.party))
 	if inv.docstatus != 1:
-		frappe.throw(_("{0} is not a submitted invoice.").format(doc.azzir_sister_invoice))
+		frappe.throw(_("{0} is not a submitted invoice.").format(invoice_name))
 	if flt(inv.outstanding_amount) <= 0:
-		frappe.throw(_("{0} has no outstanding balance to settle.").format(doc.azzir_sister_invoice))
+		frappe.throw(_("{0} has no outstanding balance to settle.").format(invoice_name))
 	if flt(doc.paid_amount) > flt(inv.outstanding_amount) + 0.01:
 		frappe.throw(_(
 			"Paid Amount ({0}) is more than {1}'s outstanding balance ({2})."
-		).format(doc.paid_amount, doc.azzir_sister_invoice, inv.outstanding_amount))
+		).format(doc.paid_amount, invoice_name, inv.outstanding_amount))
 
 	our_clearing = _clearing_account(doc.company)
 	sister_clearing = _clearing_account(doc.azzir_sister_company)
@@ -93,9 +120,9 @@ def before_validate(doc, method=None):
 			"a plain Balance Sheet account with NO Account Type instead (Company → Accounts)."
 		).format(frappe.bold(doc.company), frappe.bold(our_clearing), our_type))
 
-	# Post the cash against the clearing account, not the customer's own ledger in THIS
-	# company — they owe this company nothing; the real debt is the sister's.
-	doc.paid_from = our_clearing
+	# Post the cash against the clearing account, not the real party's own ledger in
+	# THIS company — they owe/are-owed nothing here; the real debt is the sister's.
+	setattr(doc, cfg["pe_account_field"], our_clearing)
 
 
 def on_submit(doc, method=None):
@@ -105,31 +132,49 @@ def on_submit(doc, method=None):
 
 	from azzir_fleet.intercompany_sale import _company_cost_center
 
-	inv = frappe.get_doc("Sales Invoice", doc.azzir_sister_invoice)
+	cfg = _DIRECTION[doc.payment_type]
+	invoice_name = doc.get(cfg["invoice_field"])
+	inv = frappe.get_doc(cfg["invoice_doctype"], invoice_name)
 	sister_clearing = _clearing_account(doc.azzir_sister_company)
 	cost_center = _company_cost_center(doc.azzir_sister_company)
+	invoice_account = inv.get(cfg["invoice_account_field"])
 
 	je = frappe.new_doc("Journal Entry")
 	je.voucher_type = "Journal Entry"
 	je.company = doc.azzir_sister_company
 	je.posting_date = doc.posting_date
 	je.user_remark = _(
-		"Settlement for {0}: paid into {1} on behalf of {2}, against invoice {3}."
-	).format(doc.name, doc.company, doc.azzir_sister_company, doc.azzir_sister_invoice)
-	je.append("accounts", {
-		"account": inv.debit_to,
-		"party_type": "Customer",
+		"Settlement for {0}: {1} on behalf of {2}, against {3} {4}."
+	).format(
+		doc.name,
+		"received into {0}".format(doc.company) if doc.payment_type == "Receive"
+		else "paid out of {0}".format(doc.company),
+		doc.azzir_sister_company, cfg["invoice_doctype"], invoice_name,
+	)
+
+	party_row = {
+		"account": invoice_account,
+		"party_type": cfg["party_type"],
 		"party": doc.party,
-		"credit_in_account_currency": flt(doc.paid_amount),
-		"reference_type": "Sales Invoice",
-		"reference_name": doc.azzir_sister_invoice,
+		"reference_type": cfg["invoice_doctype"],
+		"reference_name": invoice_name,
 		"cost_center": cost_center,
-	})
-	je.append("accounts", {
-		"account": sister_clearing,
-		"debit_in_account_currency": flt(doc.paid_amount),
-		"cost_center": cost_center,
-	})
+	}
+	clearing_row = {"account": sister_clearing, "cost_center": cost_center}
+
+	if doc.payment_type == "Receive":
+		# Settling a receivable: credit it down. The sister's clearing account takes
+		# the offsetting debit (they're now owed this cash back from us).
+		party_row["credit_in_account_currency"] = flt(doc.paid_amount)
+		clearing_row["debit_in_account_currency"] = flt(doc.paid_amount)
+	else:
+		# Settling a payable: debit it down. The sister's clearing account takes the
+		# offsetting credit (they now owe this amount to us, since we paid their bill).
+		party_row["debit_in_account_currency"] = flt(doc.paid_amount)
+		clearing_row["credit_in_account_currency"] = flt(doc.paid_amount)
+
+	je.append("accounts", party_row)
+	je.append("accounts", clearing_row)
 	je.flags.ignore_permissions = True
 	je.insert()
 	je.submit()

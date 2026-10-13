@@ -647,11 +647,13 @@ CUSTOM_FIELDS.setdefault("Company", []).append(
 	}
 )
 
-# Payment Entry: a customer paid THIS company for something they actually owe a SISTER
-# company (e.g. bought from HPL, paid into HCL). Ticking this reveals the Sister Company
-# + their invoice there; on submit we post the cash against the Intercompany Clearing
-# Account (not the customer's own ledger here — they owe nothing to THIS company) and
-# auto-create a Journal Entry in the sister settling their real invoice.
+# Payment Entry: this company's cash actually settles a SISTER company's debt, not its
+# own. Receive: a customer paid THIS company for something they owe a SISTER (e.g.
+# bought from HPL, paid into HCL). Pay: THIS company paid a SUPPLIER for a bill that's
+# actually the SISTER's (the sister owed that supplier, not this company). Either way,
+# ticking this posts the cash against the Intercompany Clearing Account instead of the
+# real party's own ledger here, and auto-creates a Journal Entry in the sister settling
+# their real invoice (Sales Invoice for Receive, Purchase Invoice for Pay).
 CUSTOM_FIELDS.setdefault("Payment Entry", []).extend(
 	[
 		{
@@ -659,9 +661,10 @@ CUSTOM_FIELDS.setdefault("Payment Entry", []).extend(
 			"label": "Paid On Behalf Of Sister Company",
 			"fieldtype": "Check",
 			"insert_after": "party",
-			"depends_on": "eval:doc.party_type=='Customer'",
-			"description": "Tick when this customer is actually paying off a SISTER company's "
-			"invoice, not one of this company's own.",
+			"depends_on": "eval:(doc.payment_type=='Receive' && doc.party_type=='Customer') "
+			"|| (doc.payment_type=='Pay' && doc.party_type=='Supplier')",
+			"description": "Tick when this customer/supplier is actually settling a SISTER "
+			"company's invoice, not one of this company's own.",
 		},
 		{
 			"fieldname": "azzir_sister_company",
@@ -678,16 +681,28 @@ CUSTOM_FIELDS.setdefault("Payment Entry", []).extend(
 			"fieldtype": "Link",
 			"options": "Sales Invoice",
 			"insert_after": "azzir_sister_company",
-			"depends_on": "eval:doc.azzir_paid_on_behalf_of_sister",
-			"mandatory_depends_on": "eval:doc.azzir_paid_on_behalf_of_sister",
-			"description": "The outstanding invoice, IN the sister company, that this payment settles.",
+			"depends_on": "eval:doc.azzir_paid_on_behalf_of_sister && doc.payment_type=='Receive'",
+			"mandatory_depends_on": "eval:doc.azzir_paid_on_behalf_of_sister && doc.payment_type=='Receive'",
+			"description": "The outstanding Sales Invoice, IN the sister company, that this "
+			"payment settles (a customer paying into this company for the sister).",
+		},
+		{
+			"fieldname": "azzir_sister_purchase_invoice",
+			"label": "Sister Company's Purchase Invoice",
+			"fieldtype": "Link",
+			"options": "Purchase Invoice",
+			"insert_after": "azzir_sister_invoice",
+			"depends_on": "eval:doc.azzir_paid_on_behalf_of_sister && doc.payment_type=='Pay'",
+			"mandatory_depends_on": "eval:doc.azzir_paid_on_behalf_of_sister && doc.payment_type=='Pay'",
+			"description": "The outstanding Purchase Invoice, IN the sister company, that this "
+			"payment settles (this company paying a supplier for the sister).",
 		},
 		{
 			"fieldname": "azzir_settlement_journal_entry",
 			"label": "Settlement Journal Entry",
 			"fieldtype": "Link",
 			"options": "Journal Entry",
-			"insert_after": "azzir_sister_invoice",
+			"insert_after": "azzir_sister_purchase_invoice",
 			"read_only": 1,
 			"no_copy": 1,
 			"depends_on": "eval:doc.azzir_paid_on_behalf_of_sister",
