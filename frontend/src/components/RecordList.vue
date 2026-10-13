@@ -13,7 +13,7 @@
       />
       <button class="rounded-md border px-3 py-1.5 text-sm" @click="load">Refresh</button>
       <button
-        v-if="isSalesDoctype && mayCreate"
+        v-if="canCreateNew && mayCreate"
         class="azzir-brand ml-auto rounded-md px-3 py-1.5 text-sm text-white"
         @click="showDialog = true"
       >
@@ -21,7 +21,7 @@
       </button>
     </div>
     <div
-      v-if="isSalesDoctype && mayCreate === false"
+      v-if="canCreateNew && mayCreate === false"
       class="mb-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-700"
     >
       You don't have permission to create {{ title }}. Please ask your manager for access.
@@ -117,6 +117,11 @@ function pickTab(i) { activeTab.value = i; load() }
 const isSalesDoctype = computed(() =>
   ['Quotation', 'Sales Invoice', 'Delivery Note'].includes(props.doctype),
 )
+// Delivery Notes must be created FROM a Sales Invoice (Create > Delivery Note), never
+// blank off this list -- same reason the desk list view's own "+ Add" button is
+// hidden (see delivery_note_list.js). Kept in isSalesDoctype above since that still
+// drives the permission-aware list-fetching; just not offered a "+ New" button here.
+const canCreateNew = computed(() => isSalesDoctype.value && props.doctype !== 'Delivery Note')
 // Whether THIS user may create it — null until checked, then true/false. Gates the
 // New button; false shows a "ask your manager" note (e.g. Delivery Note).
 const mayCreate = ref(null)
@@ -180,7 +185,7 @@ async function suggestPart(txt) {
 onMounted(async () => {
   if (isSalesDoctype.value) {
     mayCreate.value = await canCreateDoc(props.doctype).catch(() => false)
-    if (route.query.new && mayCreate.value) showDialog.value = true
+    if (route.query.new && canCreateNew.value && mayCreate.value) showDialog.value = true
   }
   load()
 })

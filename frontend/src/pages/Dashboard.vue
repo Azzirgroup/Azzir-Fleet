@@ -12,7 +12,8 @@
     <div class="flex flex-wrap gap-2">
       <router-link v-if="perms['Quotation']" to="/quotations?new=1" class="azzir-brand rounded-md px-3 py-2 text-sm text-white">+ Quotation</router-link>
       <router-link v-if="perms['Sales Invoice']" to="/invoices?new=1" class="azzir-brand rounded-md px-3 py-2 text-sm text-white">+ Sales Invoice</router-link>
-      <router-link v-if="perms['Delivery Note']" to="/delivery-notes?new=1" class="azzir-brand rounded-md px-3 py-2 text-sm text-white">+ Delivery Note</router-link>
+      <!-- No "+ Delivery Note" here -- it must come from a Sales Invoice's Create
+           button, same reason the Delivery Notes list page hides its own "+ New". -->
       <router-link to="/stock" class="rounded-md border px-3 py-2 text-sm">See All Warehouses</router-link>
     </div>
 
@@ -47,7 +48,7 @@ const perms = ref({})
 
 onMounted(async () => {
   try {
-    const targets = ['Quotation', 'Sales Invoice', 'Delivery Note']
+    const targets = ['Quotation', 'Sales Invoice']
     const entries = await Promise.all(targets.map(async (t) => [t, await canCreateDoc(t).catch(() => false)]))
     perms.value = Object.fromEntries(entries)
   } catch (e) { perms.value = {} }
