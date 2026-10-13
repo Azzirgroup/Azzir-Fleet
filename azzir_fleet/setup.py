@@ -1912,6 +1912,15 @@ _PROFORMA_TEMPLATE = """
 		<span style="font-size:30px; font-weight:bold; letter-spacing:1px;">__TITLE__</span>
 	</div>
 
+	<!-- Document status: Draft / Submitted / Cancelled -->
+	{%- set _status_map = {0: ("DRAFT", "#e67e22"), 1: ("SUBMITTED", "#27ae60"), 2: ("CANCELLED", "#c0392b")} -%}
+	{%- set _status = _status_map.get(doc.docstatus) -%}
+	{% if _status %}
+	<div style="text-align:right; margin-bottom:10px;">
+		<span style="display:inline-block; padding:3px 12px; border:2px solid {{ _status[1] }}; color:{{ _status[1] }}; font-weight:bold; letter-spacing:1px; font-size:13px;">{{ _status[0] }}</span>
+	</div>
+	{% endif %}
+
 	<!-- Party + meta -->
 	<table style="width:100%; margin-bottom:12px;">
 		<tr>
@@ -2009,6 +2018,13 @@ _PROFORMA_TEMPLATE = """
 
 	<!-- Notes / Terms (from the document's Terms field — nothing hardcoded) -->
 	{% if doc.get("terms") %}<div style="margin:15px 0;">{{ doc.terms }}</div>{% endif %}
+
+	<!-- Comments (azzir_comments) -- free-text notes entered on the document, e.g. lead time -->
+	{% if doc.get("azzir_comments") %}
+	<div style="margin:15px 0; padding:8px; border:1px solid #999;">
+		<b>Comments:</b> {{ doc.azzir_comments }}
+	</div>
+	{% endif %}
 
 	<!-- Prepared by (left) + totals (right) -->
 	<table style="width:100%; margin-top:20px;">
