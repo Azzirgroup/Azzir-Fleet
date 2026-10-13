@@ -81,6 +81,18 @@ def before_validate(doc, method=None):
 			"— it is required for 'Paid On Behalf Of Sister Company'."
 		).format(frappe.bold(doc.azzir_sister_company)))
 
+	# A clearing account carrying a Party only passes ERPNext's own validation when its
+	# Account Type is blank (or Receivable/Payable/Equity, which don't make sense here).
+	# "Fixed Asset", "Cash", "Accumulated Depreciation" etc. all look like reasonable
+	# balance-sheet accounts but fail that check with a confusing generic error -- catch
+	# it here with a clear one instead.
+	our_type = frappe.db.get_value("Account", our_clearing, "account_type")
+	if our_type and our_type not in ("Receivable", "Payable", "Equity"):
+		frappe.throw(_(
+			"{0}'s Intercompany Clearing Account ({1}) has Account Type '{2}' set — pick "
+			"a plain Balance Sheet account with NO Account Type instead (Company → Accounts)."
+		).format(frappe.bold(doc.company), frappe.bold(our_clearing), our_type))
+
 	# Post the cash against the clearing account, not the customer's own ledger in THIS
 	# company — they owe this company nothing; the real debt is the sister's.
 	doc.paid_from = our_clearing

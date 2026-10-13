@@ -1438,12 +1438,16 @@ def _make_below_cost_workflow(name, doctype, submit_role, approve_role, flag="az
 def _enforce_no_self_approval():
 	"""Below-cost workflows already live on a site were created before self-approval
 	was locked down. Set allow_self_approval = 0 on their 'Approve' transition so the
-	person who raised the doc can't approve it themselves. Idempotent."""
+	person who raised the doc can't approve it themselves. Idempotent.
+
+	Purchase Order Approval is deliberately NOT in this list -- _require_po_approval
+	above explicitly sets allow_self_approval = 1 for it (a Purchase Manager, even the
+	PO's own creator, may approve it). Having both here was a standing bug: this step
+	ran right after that one on every migrate and silently reverted it back to 0."""
 	for name in (
 		"Sales Below Cost Approval",
 		"Quotation Below Cost Approval",
 		"Purchase Below Minimum Qty Approval",
-		"Purchase Order Approval",
 	):
 		if not frappe.db.exists("Workflow", name):
 			continue
