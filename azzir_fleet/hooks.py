@@ -209,6 +209,8 @@ fixtures = [
 					"Payment Entry-azzir_settlement_journal_entry",
 					# Auto Buy For Sister Company on Purchase Orders.
 					"Company-azzir_auto_buy_for_sister",
+					# Cost Center opt-out of the warehouse_cc.py lock for Stock Entry.
+					"Cost Center-azzir_permit_stock_entry",
 				],
 			]
 		],

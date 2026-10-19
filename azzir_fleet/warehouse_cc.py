@@ -68,6 +68,23 @@ def warehouse_permission_bounds(user: str | None = None) -> list | None:
 	return bounds or None
 
 
+def stock_entry_unrestricted(allowed: set | None) -> bool:
+	"""True if ANY of the user's assigned cost centers has `azzir_permit_stock_entry`
+	checked -- that cost center has opted out of the warehouse lock for Stock Entry,
+	so the user may select any warehouse there regardless of cost center."""
+	if not allowed:
+		return False
+	if not frappe.get_meta("Cost Center").has_field("azzir_permit_stock_entry"):
+		return False
+	return bool(
+		frappe.get_all(
+			"Cost Center",
+			filters={"name": ["in", list(allowed)], "azzir_permit_stock_entry": 1},
+			limit=1,
+		)
+	)
+
+
 def cost_center_bounds(allowed: set | None) -> list | None:
 	"""(lft, rgt) ranges of the warehouses tagged with one of the user's cost centres.
 	Because warehouses are a tree, a cost centre set on a GROUP warehouse thus covers
@@ -201,7 +218,9 @@ def warehouse_query(
 		vals["is_group"] = frappe.utils.cint(filters.get("is_group"))
 	# Selection is granted by a Cost Center and/or a Warehouse user permission — either
 	# one set on a GROUP warehouse cascades to its children via lft/rgt tree bounds.
-	grant = _grant_conditions(vals)
+	# A Stock Entry opens this up further: a cost center flagged azzir_permit_stock_entry
+	# lets its users pick ANY warehouse there (e.g. to transfer between branches).
+	grant = None if (doctype == "Stock Entry" and stock_entry_unrestricted(allowed_cost_centers())) else _grant_conditions(vals)
 	if grant:
 		conds.append(grant)
 
@@ -286,6 +305,8 @@ def enforce_warehouse_selection(doc, method=None):
 		return
 	if not _field_ready():
 		return
+	if doc.doctype == "Stock Entry" and stock_entry_unrestricted(allowed_cost_centers()):
+		return  # this user's cost center has opted out of the lock for Stock Entry
 	all_bounds = _effective_bounds()  # Warehouse permission wins over cost centre
 	if all_bounds is None:
 		return  # unrestricted user — nothing to enforce

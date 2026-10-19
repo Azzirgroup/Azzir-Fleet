@@ -782,6 +782,21 @@ CUSTOM_FIELDS.setdefault("Cost Center", []).append(
 		"sister company (buy-from-sister on the Sales Invoice).",
 	}
 )
+# Flag a Cost Center as free of the warehouse_cc.py lock: a user assigned THIS cost
+# center may use any warehouse in Stock Entry, regardless of its own cost center --
+# e.g. a branch that needs to transfer stock in/out of other branches.
+CUSTOM_FIELDS.setdefault("Cost Center", []).append(
+	{
+		"fieldname": "azzir_permit_stock_entry",
+		"label": "Permit Stock Entry Across Branches",
+		"fieldtype": "Check",
+		"insert_after": "azzir_is_corporate",
+		"description": "Users assigned this cost center are NOT restricted to their own "
+		"cost center's warehouses when creating a Stock Entry -- they may select any "
+		"warehouse (e.g. to transfer stock between branches). Does not affect Sales "
+		"Invoice / Delivery Note / Purchase Receipt, which stay scoped as before.",
+	}
+)
 # A per-user default Company. Setting it makes every new Quotation / Sales Invoice
 # (desk + /sales portal) auto-fill the company (synced to the user's Company
 # default — see azzir_fleet.company_default.sync_user_company).
