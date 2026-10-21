@@ -12,11 +12,16 @@
   "column_break_4",
   "company",
   "posting_date",
+  "azzir_paid_on_behalf_of_sister",
+  "supplier",
+  "azzir_sister_company",
+  "azzir_sister_purchase_invoice",
   "section_break_9",
   "accounts",
   "total_amount",
   "azzir_remark",
   "journal_entry",
+  "azzir_settlement_journal_entry",
   "amended_from"
  ],
  "fields": [
@@ -56,6 +61,38 @@
    "reqd": 1
   },
   {
+   "default": "0",
+   "description": "Tick when this cash/bank payment is actually settling a SISTER company's Purchase Invoice, not this company's own expense.",
+   "fieldname": "azzir_paid_on_behalf_of_sister",
+   "fieldtype": "Check",
+   "label": "Paid On Behalf Of Sister Company"
+  },
+  {
+   "depends_on": "eval:doc.azzir_paid_on_behalf_of_sister",
+   "fieldname": "supplier",
+   "fieldtype": "Link",
+   "label": "Supplier",
+   "mandatory_depends_on": "eval:doc.azzir_paid_on_behalf_of_sister",
+   "options": "Supplier"
+  },
+  {
+   "depends_on": "eval:doc.azzir_paid_on_behalf_of_sister",
+   "fieldname": "azzir_sister_company",
+   "fieldtype": "Link",
+   "label": "Sister Company",
+   "mandatory_depends_on": "eval:doc.azzir_paid_on_behalf_of_sister",
+   "options": "Company"
+  },
+  {
+   "depends_on": "eval:doc.azzir_paid_on_behalf_of_sister",
+   "description": "The outstanding Purchase Invoice, IN the sister company, that this expense payment settles.",
+   "fieldname": "azzir_sister_purchase_invoice",
+   "fieldtype": "Link",
+   "label": "Sister Company's Purchase Invoice",
+   "mandatory_depends_on": "eval:doc.azzir_paid_on_behalf_of_sister",
+   "options": "Purchase Invoice"
+  },
+  {
    "fieldname": "section_break_9",
    "fieldtype": "Section Break"
   },
@@ -85,6 +122,13 @@
    "fieldname": "journal_entry",
    "fieldtype": "Link",
    "label": "Journal Entry",
+   "options": "Journal Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "azzir_settlement_journal_entry",
+   "fieldtype": "Link",
+   "label": "Settlement Journal Entry",
    "options": "Journal Entry",
    "read_only": 1
   },

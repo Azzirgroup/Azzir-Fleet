@@ -63,6 +63,7 @@ doctype_js = {
 	"Purchase Receipt": "public/js/purchase_receipt.js",
 	"Purchase Invoice": "public/js/purchase_invoice.js",
 	"Payment Entry": "public/js/payment_entry.js",
+	"Expense Entry": "public/js/expense_entry.js",
 	"Company": "public/js/company.js",
 	"Warehouse": "public/js/warehouse.js",
 	"User": "public/js/user.js",
@@ -520,7 +521,12 @@ doc_events = {
 			"azzir_fleet.tax_calc.compute_journal_entry_tax",
 		]
 	},
-	"Expense Entry": {"validate": "azzir_fleet.tax_calc.compute_expense_entry_tax"},
+	"Expense Entry": {
+		"before_validate": "azzir_fleet.intercompany_expense.before_validate",
+		"validate": "azzir_fleet.tax_calc.compute_expense_entry_tax",
+		"on_submit": "azzir_fleet.intercompany_expense.on_submit",
+		"on_cancel": "azzir_fleet.intercompany_expense.on_cancel",
+	},
 }
 
 # Scheduled Tasks
