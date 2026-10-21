@@ -201,11 +201,23 @@ def auto_warehouse_for_item(item_code: str | None = None, company: str | None = 
 @frappe.whitelist()
 @frappe.validate_and_sanitize_search_inputs
 def warehouse_query(
-	doctype: str, txt: str, searchfield: str, start: int, page_len: int, filters: dict | str | None
+	doctype: str,
+	txt: str,
+	searchfield: str,
+	start: int,
+	page_len: int,
+	filters: dict | str | None,
+	reference_doctype: str | None = None,
+	**kwargs,
 ) -> list:
 	"""Link-field query for warehouse fields: shows only warehouses the user is
 	allowed to SELECT (attached to a cost center they're assigned; all if the user
-	is unrestricted). Honours an incoming company / is_group filter."""
+	is unrestricted). Honours an incoming company / is_group filter.
+
+	NOTE: `doctype` here is always "Warehouse" (the Link field's TARGET doctype,
+	i.e. what we're searching) — Frappe's search_widget passes the CALLING form's
+	doctype separately, as the `reference_doctype` kwarg. Any Stock Entry-specific
+	check below must test `reference_doctype`, not `doctype`."""
 	filters = frappe.parse_json(filters) if isinstance(filters, str) else (filters or {})
 
 	conds = ["w.disabled = 0", "(w.name like %(txt)s or w.warehouse_name like %(txt)s)"]
@@ -219,8 +231,10 @@ def warehouse_query(
 	# Selection is granted by a Cost Center and/or a Warehouse user permission — either
 	# one set on a GROUP warehouse cascades to its children via lft/rgt tree bounds.
 	# A Stock Entry opens this up further: a cost center flagged azzir_permit_stock_entry
-	# lets its users pick ANY warehouse there (e.g. to transfer between branches).
-	grant = None if (doctype == "Stock Entry" and stock_entry_unrestricted(allowed_cost_centers())) else _grant_conditions(vals)
+	# lets its users pick ANY warehouse there (e.g. to transfer between branches) —
+	# this covers every warehouse field on Stock Entry, group pickers included, since
+	# they all route through this same query function.
+	grant = None if (reference_doctype == "Stock Entry" and stock_entry_unrestricted(allowed_cost_centers())) else _grant_conditions(vals)
 	if grant:
 		conds.append(grant)
 
