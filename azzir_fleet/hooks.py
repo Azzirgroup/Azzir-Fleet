@@ -124,6 +124,10 @@ on_session_creation = [
 	"azzir_fleet.session.route_portal_users_on_login",
 ]
 
+# Adds a Description column to the standard Stock Balance report for everyone
+# (monkey-patch applied once per worker, not a per-session cost).
+boot_session = ["azzir_fleet.report_overrides.ensure_patched"]
+
 # Installation
 # ------------
 
