@@ -392,10 +392,12 @@ def _settlement(company: str) -> tuple:
 
 def _mark_si_paid(si, company: str) -> None:
 	"""Mark a (just-inserted, draft) Sales Invoice fully paid via its POS payment,
-	so it submits as Paid (outstanding 0). No-op if the company has no cash account."""
+	so it submits as Paid (outstanding 0). No-op if the company has no cash account.
+	Also used for a RETURN Sales Invoice (negative total) -- a negative POS payment
+	correctly nets its outstanding to 0, so only an exact-zero total is skipped."""
 	mop, account = _settlement(company)
 	total = flt(si.rounded_total) or flt(si.grand_total)
-	if not (mop and account) or total <= 0:
+	if not (mop and account) or total == 0:
 		return
 	si.is_pos = 1
 	si.flags.ignore_pos_profile = True
@@ -407,10 +409,11 @@ def _mark_si_paid(si, company: str) -> None:
 
 def _mark_pi_paid(pi, company: str) -> None:
 	"""Mark a (just-inserted, draft) Purchase Invoice paid (Is Paid), so it submits
-	as Paid (outstanding 0). No-op if the company has no cash account."""
+	as Paid (outstanding 0). No-op if the company has no cash account. Also used for
+	a RETURN Purchase Invoice (negative total) -- only an exact-zero total is skipped."""
 	mop, account = _settlement(company)
 	total = flt(pi.rounded_total) or flt(pi.grand_total)
-	if not (mop and account) or total <= 0:
+	if not (mop and account) or total == 0:
 		return
 	pi.is_paid = 1
 	pi.mode_of_payment = mop
@@ -436,7 +439,15 @@ def _force_cost_center(target, cost_center: str | None) -> None:
 def process_sister_purchase(doc, method=None):
 	"""Sales Invoice before_submit: for each item row marked 'Buy From Sister Company',
 	create one intercompany transfer (rows from the same sister share a transfer;
-	different sisters get separate transfers). Rows not marked are normal lines."""
+	different sisters get separate transfers). Rows not marked are normal lines.
+
+	A RETURN (Credit Note) against a sister-sourced sale is handled separately --
+	see _process_sister_return(). Rows that were never sister-sourced are untouched
+	either way and return exactly as a normal sale always has."""
+	if doc.is_return:
+		_process_sister_return(doc)
+		return
+
 	# Idempotent: already built for this invoice.
 	if doc.get("azzir_intercompany_done"):
 		return
@@ -608,3 +619,224 @@ def _build_one_transfer(doc, corporate, sister, rows, ic_price_list, factor, cor
 	pi.submit()
 
 	return (dn.name, sister_si.name, pi.name)
+
+
+def _process_sister_return(doc):
+	"""Sales Invoice before_submit, RETURN branch: for each returned row that was
+	originally sister-sourced, reverse the WHOLE original transfer -- stock goes
+	back to the sister (return Delivery Note), the sister's revenue is credited back
+	(return Sales Invoice against their original one), and the corporate company's
+	stock/cost is reversed too (return Purchase Invoice against its original one).
+	Both refunds settle via cash/bank, mirroring the forward flow.
+
+	A row that was never sister-sourced (no azzir_row_from_sister, or the original
+	row it traces to never completed a transfer) is left alone -- it returns exactly
+	like an ordinary sale always has, with no extra documents created."""
+	if not doc.return_against or doc.get("azzir_intercompany_return_done"):
+		return
+
+	original = frappe.get_doc("Sales Invoice", doc.return_against)
+	orig_rows_by_item = {}
+	for r in original.items:
+		orig_rows_by_item.setdefault(r.item_code, []).append(r)
+
+	# Group the returned qty by the sister Delivery Note it should reverse against --
+	# everything sourced from the same original transfer reverses together.
+	groups: dict[str, dict[str, float]] = {}
+	for row in doc.get("items") or []:
+		if not row.get("azzir_row_from_sister"):
+			continue
+		qty = abs(flt(row.qty))
+		if qty <= 0:
+			continue
+		orig_row = next(
+			(r for r in orig_rows_by_item.get(row.item_code, []) if r.get("azzir_sister_delivery_note")),
+			None,
+		)
+		if not orig_row:
+			continue  # nothing recorded to reverse against -- behaves as a normal return
+		dn_name = orig_row.azzir_sister_delivery_note
+		groups.setdefault(dn_name, {})
+		groups[dn_name][row.item_code] = groups[dn_name].get(row.item_code, 0) + qty
+
+	if not groups:
+		return
+
+	refs = []
+	_prev_user = frappe.session.user
+	frappe.set_user("Administrator")
+	try:
+		for dn_name, item_qtys in groups.items():
+			ret_dn, ret_si, ret_pi, true_up_je = _reverse_one_transfer(dn_name, item_qtys)
+			line = "reverses DN {0}: return DN {1} / return SI {2} / return PI {3}".format(
+				dn_name, ret_dn, ret_si, ret_pi
+			)
+			if true_up_je:
+				line += " / valuation true-up JE {0}".format(true_up_je)
+			refs.append(line)
+	finally:
+		frappe.set_user(_prev_user)
+
+	doc.azzir_intercompany_return_done = 1
+	doc.azzir_intercompany_return_refs = "\n".join(refs)
+
+
+def _reverse_one_transfer(dn_name: str, item_qtys: dict) -> tuple:
+	"""Reverse the given quantities of one original sister transfer: a return
+	Delivery Note (stock back into the sister's supply warehouse), the matching
+	return Sales Invoice / Credit Note in the sister (against their original SI),
+	and the matching return Purchase Invoice in the corporate company (against its
+	original PI, reversing stock out of the landing warehouse). Returns (dn, si, pi)
+	names of the three new return documents."""
+	from erpnext.controllers.sales_and_purchase_return import make_return_doc
+
+	sister_si_name = frappe.db.get_value("Sales Invoice Item", {"delivery_note": dn_name}, "parent")
+	if not sister_si_name:
+		frappe.throw(
+			_("Could not find the sister Sales Invoice billed from Delivery Note {0} -- "
+			  "cannot reverse this return automatically.").format(dn_name)
+		)
+	corporate_pi_name = frappe.db.get_value(
+		"Purchase Invoice", {"inter_company_invoice_reference": sister_si_name}, "name"
+	)
+	if not corporate_pi_name:
+		frappe.throw(
+			_("Could not find the corporate Purchase Invoice linked to sister invoice {0} -- "
+			  "cannot reverse this return automatically.").format(sister_si_name)
+		)
+
+	sister_company = frappe.db.get_value("Delivery Note", dn_name, "company")
+	corporate_company = frappe.db.get_value("Purchase Invoice", corporate_pi_name, "company")
+
+	# 1) Return Delivery Note -- stock goes back into the sister's supply warehouse.
+	dn_return = make_return_doc("Delivery Note", dn_name)
+	_trim_to_returned_qty(dn_return, item_qtys)
+	dn_return.flags.ignore_permissions = True
+	dn_return.insert()
+	dn_return.submit()
+
+	# 2) Return Sales Invoice / Credit Note in the sister, against their original SI.
+	si_return = make_return_doc("Sales Invoice", sister_si_name)
+	_trim_to_returned_qty(si_return, item_qtys)
+	si_return.flags.ignore_permissions = True
+	si_return.insert()
+	_mark_si_paid(si_return, sister_company)  # refund the sister's cash/bank
+	si_return.submit()
+
+	# 3) Return Purchase Invoice in the corporate company, against its original PI --
+	#    reverses stock out of the landing warehouse and the amount paid to the sister.
+	#    NOTE: ERPNext ALWAYS revalues a stock-updating return at the warehouse's
+	#    current moving-average/FIFO cost (hardcoded for every return, for correct
+	#    COGS) -- this return's amount can differ from the original transfer price
+	#    if other stock has moved through that warehouse since. _true_up_return_
+	#    valuation_gap() below corrects for that against the Unrealized P/L account.
+	pi_return = make_return_doc("Purchase Invoice", corporate_pi_name)
+	_trim_to_returned_qty(pi_return, item_qtys)
+	pi_return.flags.ignore_permissions = True
+	pi_return.insert()
+	_mark_pi_paid(pi_return, corporate_company)  # refund the corporate's cash/bank
+	pi_return.submit()
+	pi_return.reload()
+	# A stock-updating return's `rate` gets recalculated across several internal
+	# passes (insert, the settlement save, submit); outstanding_amount can be left
+	# over from an earlier pass even though it's genuinely fully settled -- the
+	# Payment Ledger / GL Entries are the source of truth and already net to zero.
+	# Force the cached field back in line rather than leave a cosmetically "unpaid"
+	# document that the ledger itself doesn't agree with.
+	if pi_return.is_paid and flt(pi_return.outstanding_amount) != 0:
+		pi_return.db_set("outstanding_amount", 0, update_modified=False)
+
+	true_up_je = _true_up_return_valuation_gap(pi_return, si_return, corporate_company)
+
+	return (dn_return.name, si_return.name, pi_return.name, true_up_je)
+
+
+def _true_up_return_valuation_gap(pi_return, si_return, corporate_company: str) -> str | None:
+	"""A stock-updating Purchase Invoice return is ALWAYS revalued by ERPNext at the
+	warehouse's current moving-average/FIFO cost (hardcoded for every return, for
+	correct COGS) -- it can't be pinned to the original intercompany transfer price.
+	The sister's credit note (Delivery Note / Sales Invoice side) has no such
+	revaluation and DOES settle at the original transfer price. True up the gap
+	between the two with a Journal Entry in the corporate company, against its
+	Unrealized Profit / Loss account (the same account every intercompany transfer
+	already requires -- exactly what it's for), so the two companies' books net to
+	zero after a return regardless of valuation drift. Returns the Journal Entry
+	name, or None if there was nothing material to true up."""
+	intended = abs(flt(si_return.grand_total))
+	actual = abs(flt(pi_return.grand_total))
+	gap = flt(intended - actual, 2)
+	if abs(gap) < 0.01:
+		return None
+
+	mop, account = _settlement(corporate_company)
+	if not account:
+		return None  # no cash/bank account configured -- nothing to true up against
+	unrealized = frappe.get_cached_value("Company", corporate_company, "unrealized_profit_loss_account")
+	cc = _company_cost_center(corporate_company)
+
+	je = frappe.new_doc("Journal Entry")
+	je.voucher_type = "Journal Entry"
+	je.company = corporate_company
+	je.posting_date = frappe.utils.nowdate()
+	je.user_remark = _(
+		"True-up for return of sister-sourced stock ({0}): the stock-valuation-based "
+		"refund ({1}) differs from the original transfer-price refund ({2}) the sister "
+		"actually credited back."
+	).format(pi_return.name, actual, intended)
+
+	cash_row = {"account": account, "cost_center": cc}
+	pl_row = {"account": unrealized, "cost_center": cc}
+	if gap > 0:
+		# Corporate's own books under-recognized the cash refund -- bring it up to
+		# the full amount the sister actually credited back.
+		cash_row["debit_in_account_currency"] = gap
+		pl_row["credit_in_account_currency"] = gap
+	else:
+		# Corporate's valuation-based refund OVER-recognized cash vs. what the
+		# sister actually sent back -- bring it back down.
+		cash_row["credit_in_account_currency"] = -gap
+		pl_row["debit_in_account_currency"] = -gap
+
+	je.append("accounts", cash_row)
+	je.append("accounts", pl_row)
+	je.flags.ignore_permissions = True
+	je.insert()
+	je.submit()
+	return je.name
+
+
+def _trim_to_returned_qty(return_doc, item_qtys: dict) -> None:
+	"""make_return_doc mirrors EVERY row of the source document, negated at its full
+	original quantity. Keep only the rows actually being returned, and scale each
+	down to the quantity actually returned (a partial return may cover less than the
+	original transfer did)."""
+	kept = []
+	for row in return_doc.items:
+		wanted = item_qtys.get(row.item_code)
+		if not wanted:
+			continue
+		row.qty = -wanted  # row.qty mirrors the source negated; wanted is already positive
+		# Purchase Invoice Item requires received_qty == qty + rejected_qty; both are
+		# mirrored from the source's full (untrimmed) quantity. Reset them so
+		# validate_accepted_rejected_qty's own auto-fill sets received_qty = qty.
+		if row.meta.has_field("received_qty"):
+			row.received_qty = 0
+		if row.meta.has_field("rejected_qty"):
+			row.rejected_qty = 0
+		kept.append(row)
+	return_doc.items = kept
+
+	# The source doc was auto-settled (_mark_si_paid / _mark_pi_paid), so
+	# make_return_doc also mirrors ITS full-amount payment/paid-amount fields --
+	# stale now that items are trimmed to a (possibly partial) returned amount.
+	# Clear them here so insert()'s own validation doesn't choke on the mismatch;
+	# _mark_si_paid / _mark_pi_paid re-settle correctly right after, against the
+	# freshly recalculated (trimmed) total.
+	if return_doc.meta.has_field("payments"):
+		return_doc.set("payments", [])
+		if return_doc.meta.has_field("is_pos"):
+			return_doc.is_pos = 0
+	if return_doc.meta.has_field("is_paid"):
+		return_doc.is_paid = 0
+		return_doc.paid_amount = 0
+		return_doc.base_paid_amount = 0

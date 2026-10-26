@@ -892,6 +892,24 @@ CUSTOM_FIELDS.setdefault("Sales Invoice", []).extend(
 			"print_hide": 1,
 			"description": "All sister transfers created for this invoice (one per sister company).",
 		},
+		{
+			"fieldname": "azzir_intercompany_return_done",
+			"label": "Intercompany Transfer Reversed",
+			"fieldtype": "Check",
+			"insert_after": "azzir_intercompany_refs",
+			"read_only": 1,
+			"print_hide": 1,
+		},
+		{
+			"fieldname": "azzir_intercompany_return_refs",
+			"label": "Intercompany Return Transfers",
+			"fieldtype": "Small Text",
+			"insert_after": "azzir_intercompany_return_done",
+			"read_only": 1,
+			"print_hide": 1,
+			"description": "Reversal documents created when a sister-sourced sale is returned "
+			"(one set per original sister transfer reversed).",
+		},
 	]
 )
 
