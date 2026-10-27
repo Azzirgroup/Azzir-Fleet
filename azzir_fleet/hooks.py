@@ -10,6 +10,8 @@ app_license = "mit"
 
 # required_apps = []
 
+
+
 # Each item in the list will be shown as an app in the apps page / app switcher.
 # This is what makes the Azzir Fleet workspaces (Sales, Procurement, HR,
 # Accounting, Director) appear in the desk sidebar.
