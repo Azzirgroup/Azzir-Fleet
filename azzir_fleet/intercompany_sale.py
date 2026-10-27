@@ -667,7 +667,20 @@ def _process_sister_return(doc):
 	frappe.set_user("Administrator")
 	try:
 		for dn_name, item_qtys in groups.items():
-			ret_dn, ret_si, ret_pi, true_up_je = _reverse_one_transfer(dn_name, item_qtys)
+			result = _reverse_one_transfer(dn_name, item_qtys)
+			if result is None:
+				# The original transfer never fully completed (e.g. the sister's own
+				# invoice was left as a draft) -- nothing to auto-reverse. Don't block
+				# the return itself; it just proceeds as an ordinary return (stock
+				# lands back in the landing warehouse), flagged here for manual
+				# follow-up on the sister company's side.
+				refs.append(
+					"DN {0}: could NOT auto-reverse -- the original sister transfer "
+					"never fully completed. Stock was returned normally; the sister "
+					"company's side needs manual review.".format(dn_name)
+				)
+				continue
+			ret_dn, ret_si, ret_pi, true_up_je = result
 			line = "reverses DN {0}: return DN {1} / return SI {2} / return PI {3}".format(
 				dn_name, ret_dn, ret_si, ret_pi
 			)
@@ -681,29 +694,26 @@ def _process_sister_return(doc):
 	doc.azzir_intercompany_return_refs = "\n".join(refs)
 
 
-def _reverse_one_transfer(dn_name: str, item_qtys: dict) -> tuple:
+def _reverse_one_transfer(dn_name: str, item_qtys: dict) -> tuple | None:
 	"""Reverse the given quantities of one original sister transfer: a return
 	Delivery Note (stock back into the sister's supply warehouse), the matching
 	return Sales Invoice / Credit Note in the sister (against their original SI),
 	and the matching return Purchase Invoice in the corporate company (against its
-	original PI, reversing stock out of the landing warehouse). Returns (dn, si, pi)
-	names of the three new return documents."""
+	original PI, reversing stock out of the landing warehouse). Returns (dn, si, pi,
+	true_up_je) names of the new documents, or None if the original transfer never
+	fully completed (its sister invoice was never submitted, or no Purchase Invoice
+	was ever created for it) -- there's nothing to auto-reverse in that case; the
+	caller lets the return proceed as an ordinary one instead of blocking on it."""
 	from erpnext.controllers.sales_and_purchase_return import make_return_doc
 
 	sister_si_name = frappe.db.get_value("Sales Invoice Item", {"delivery_note": dn_name}, "parent")
-	if not sister_si_name:
-		frappe.throw(
-			_("Could not find the sister Sales Invoice billed from Delivery Note {0} -- "
-			  "cannot reverse this return automatically.").format(dn_name)
-		)
+	if not sister_si_name or frappe.db.get_value("Sales Invoice", sister_si_name, "docstatus") != 1:
+		return None
 	corporate_pi_name = frappe.db.get_value(
-		"Purchase Invoice", {"inter_company_invoice_reference": sister_si_name}, "name"
+		"Purchase Invoice", {"inter_company_invoice_reference": sister_si_name, "docstatus": 1}, "name"
 	)
 	if not corporate_pi_name:
-		frappe.throw(
-			_("Could not find the corporate Purchase Invoice linked to sister invoice {0} -- "
-			  "cannot reverse this return automatically.").format(sister_si_name)
-		)
+		return None
 
 	sister_company = frappe.db.get_value("Delivery Note", dn_name, "company")
 	corporate_company = frappe.db.get_value("Purchase Invoice", corporate_pi_name, "company")
