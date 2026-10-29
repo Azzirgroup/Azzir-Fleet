@@ -85,11 +85,10 @@
   },
   {
    "depends_on": "eval:doc.azzir_paid_on_behalf_of_sister",
-   "description": "The outstanding Purchase Invoice, IN the sister company, that this expense payment settles.",
+   "description": "Optional: the outstanding Purchase Invoice, IN the sister company, that this expense payment settles. Leave blank for an operational expense with no Purchase Invoice (e.g. rent, fuel) -- it will post directly as an expense in the sister company's books instead.",
    "fieldname": "azzir_sister_purchase_invoice",
    "fieldtype": "Link",
    "label": "Sister Company's Purchase Invoice",
-   "mandatory_depends_on": "eval:doc.azzir_paid_on_behalf_of_sister",
    "options": "Purchase Invoice"
   },
   {

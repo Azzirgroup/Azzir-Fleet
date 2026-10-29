@@ -244,6 +244,12 @@ CUSTOM_FIELDS = {
 		 "insert_after": "azzir_tax_rate", "read_only": 1, "in_list_view": 1},
 		{"fieldname": "azzir_net_amount", "label": "Net (excl. Tax)", "fieldtype": "Currency",
 		 "insert_after": "azzir_tax_amount", "read_only": 1},
+		{"fieldname": "azzir_original_account", "label": "Original Account", "fieldtype": "Link",
+		 "options": "Account", "insert_after": "azzir_net_amount", "hidden": 1, "read_only": 1,
+		 "description": "Internal: the real expense account chosen before 'Paid On Behalf Of "
+		 "Sister Company' redirected this row to the Intercompany Clearing Account -- used to "
+		 "post the correct expense category in the sister company's books when no Purchase "
+		 "Invoice is linked."},
 	],
 	# Same helper on Journal Entry rows.
 	"Journal Entry Account": [
