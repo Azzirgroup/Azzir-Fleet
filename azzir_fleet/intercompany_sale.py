@@ -845,6 +845,13 @@ def _reverse_one_transfer(dn_name: str, item_qtys: dict) -> tuple | None:
 	pi_return = make_return_doc("Purchase Invoice", corporate_pi_name)
 	_trim_to_returned_qty(pi_return, item_qtys)
 	pi_return.flags.ignore_permissions = True
+	# Mirrored rows already carry the final (once-discounted) transfer price --
+	# without this flag, apply_intercompany_discount() (hooks.py before_validate)
+	# treats this as a fresh intercompany receipt and discounts it AGAIN on every
+	# single validate (insert, the settlement save, submit), compounding smaller
+	# each time and corrupting the refund amount. _build_one_transfer() sets this
+	# same flag for exactly this reason when it first creates a sister receipt.
+	pi_return.flags.azzir_intercompany_priced = True
 	pi_return.insert()
 	_mark_pi_paid(pi_return, corporate_company)  # refund the corporate's cash/bank
 	pi_return.submit()
