@@ -728,6 +728,74 @@ def process_sister_return_delivery(doc, method=None):
 			)
 
 
+def process_sister_return_credit_note(doc, method=None):
+	"""Sales Invoice on_submit: when a return Credit Note against a sister-sourced
+	sale is submitted, reverse the sister transfer right then -- directly off the
+	Credit Note, with no Delivery Note involved at all. Returns in this business
+	are always initiated from the Sales Invoice side; a Credit Note is itself the
+	complete trigger, not a precursor to some further manual step.
+
+	A Credit Note against a non-sister sale, or one already reversed, is left
+	alone."""
+	if not doc.is_return or not doc.return_against:
+		return
+	if doc.get("azzir_intercompany_return_done"):
+		return
+
+	orig = frappe.get_cached_doc("Sales Invoice", doc.return_against)
+	sister_dn_by_item = {
+		r.item_code: r.azzir_sister_delivery_note
+		for r in orig.get("items") or []
+		if r.get("azzir_row_from_sister") and r.get("azzir_sister_delivery_note")
+	}
+	if not sister_dn_by_item:
+		return  # the original sale wasn't sister-sourced -- an ordinary return
+
+	# Group the credit note's returned qty by the sister Delivery Note it should
+	# reverse against -- same grouping process_sister_return_delivery uses.
+	groups: dict[str, dict[str, float]] = {}
+	for row in doc.get("items") or []:
+		dn_name = sister_dn_by_item.get(row.item_code)
+		if not dn_name:
+			continue
+		qty = abs(flt(row.qty))
+		if qty <= 0:
+			continue
+		groups.setdefault(dn_name, {})
+		groups[dn_name][row.item_code] = groups[dn_name].get(row.item_code, 0) + qty
+
+	if not groups:
+		return
+
+	refs = []
+	_prev_user = frappe.session.user
+	frappe.set_user("Administrator")
+	try:
+		for dn_name, item_qtys in groups.items():
+			result = _reverse_one_transfer(dn_name, item_qtys)
+			if result is None:
+				refs.append(
+					"DN {0}: could NOT auto-reverse -- the original sister transfer "
+					"never fully completed. The sister company's side needs manual "
+					"review.".format(dn_name)
+				)
+				continue
+			ret_dn, ret_si, ret_pi, true_up_je = result
+			line = "reverses DN {0}: return DN {1} / return SI {2} / return PI {3}".format(
+				dn_name, ret_dn, ret_si, ret_pi
+			)
+			if true_up_je:
+				line += " / valuation true-up JE {0}".format(true_up_je)
+			refs.append(line)
+	finally:
+		frappe.set_user(_prev_user)
+
+	refs_text = "\n".join(refs)
+	if doc.meta.has_field("azzir_intercompany_return_done"):
+		doc.db_set("azzir_intercompany_return_done", 1, update_modified=False)
+		doc.db_set("azzir_intercompany_return_refs", refs_text, update_modified=False)
+
+
 def _reverse_one_transfer(dn_name: str, item_qtys: dict) -> tuple | None:
 	"""Reverse the given quantities of one original sister transfer: a return
 	Delivery Note (stock back into the sister's supply warehouse), the matching
@@ -859,7 +927,14 @@ def process_sister_sale_cancel_predelete(doc, method=None):
 	one step instead of forcing the user to cancel the Delivery Note separately first.
 
 	Only acts on sister-sourced sales (azzir_intercompany_done) -- an ordinary sale's
-	Delivery Note is left exactly as Frappe already requires (cancel it yourself)."""
+	Delivery Note is left exactly as Frappe already requires (cancel it yourself).
+
+	A return Credit Note carries the SAME azzir_intercompany_done flag and sister
+	item markers (make_return_doc copies every field from the original sale) --
+	cancelling a Credit Note must never be treated as voiding the original sale, so
+	bail out immediately for any return."""
+	if doc.is_return:
+		return
 	if not doc.get("azzir_intercompany_done"):
 		return
 	dn_names = frappe.get_all(
@@ -884,7 +959,13 @@ def process_sister_sale_cancel(doc, method=None):
 	just above, in before_cancel) and stock still sitting, undelivered, in the
 	landing warehouse (nothing else to cancel first) -- either way it all goes back
 	to the sister. Idempotent and safe to re-run; anything already cancelled is
-	skipped."""
+	skipped.
+
+	A return Credit Note carries the SAME azzir_intercompany_done flag and sister
+	item markers as the original sale -- cancelling a Credit Note must never be
+	treated as voiding the original sale, so bail out immediately for any return."""
+	if doc.is_return:
+		return
 	if not doc.get("azzir_intercompany_done"):
 		return
 	if doc.get("azzir_intercompany_cancel_done"):

@@ -513,7 +513,13 @@ doc_events = {
 			"azzir_fleet.intercompany_sale.process_sister_purchase",
 			"azzir_fleet.stock_reservation.check_stock_reservation",
 		],
-		"on_submit": "azzir_fleet.sales_invoice.mark_quotation_invoiced",
+		"on_submit": [
+			"azzir_fleet.sales_invoice.mark_quotation_invoiced",
+			# A return Credit Note against a sister-sourced sale is itself the
+			# complete trigger to reverse the sister transfer -- no separate
+			# Delivery Note step. No-ops for a non-return / non-sister invoice.
+			"azzir_fleet.intercompany_sale.process_sister_return_credit_note",
+		],
 		"before_cancel": "azzir_fleet.intercompany_sale.process_sister_sale_cancel_predelete",
 		"on_cancel": [
 			"azzir_fleet.sales_invoice.unmark_quotation_invoiced",
