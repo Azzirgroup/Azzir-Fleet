@@ -730,10 +730,21 @@ def process_sister_return_delivery(doc, method=None):
 
 def process_sister_return_credit_note(doc, method=None):
 	"""Sales Invoice on_submit: when a return Credit Note against a sister-sourced
-	sale is submitted, reverse the sister transfer right then -- directly off the
-	Credit Note, with no Delivery Note involved at all. Returns in this business
-	are always initiated from the Sales Invoice side; a Credit Note is itself the
-	complete trigger, not a precursor to some further manual step.
+	sale is submitted, reverse the whole transfer right then -- directly off the
+	Credit Note. Returns in this business are always initiated from the Sales
+	Invoice side; a Credit Note is itself the complete trigger, never a precursor
+	to some further manual step -- whatever else needs to happen is done here,
+	automatically, not asked of the user.
+
+	Covers both real-world cases:
+	  - stock still sitting, undelivered, in the landing warehouse -- nothing
+	    local to touch, reverse the sister side directly;
+	  - stock already delivered to the customer -- that physical delivery is
+	    reversed FIRST (silently, same as the sister-side documents this already
+	    creates without anyone touching them), because the sister-side purchase
+	    return can't pull stock out of a warehouse that no longer holds it. Its
+	    own submit then fires process_sister_return_delivery, which reverses the
+	    sister side exactly as it already does today.
 
 	A Credit Note against a non-sister sale, or one already reversed, is left
 	alone."""
@@ -751,49 +762,85 @@ def process_sister_return_credit_note(doc, method=None):
 	if not sister_dn_by_item:
 		return  # the original sale wasn't sister-sourced -- an ordinary return
 
-	# Group the credit note's returned qty by the sister Delivery Note it should
-	# reverse against -- same grouping process_sister_return_delivery uses.
-	groups: dict[str, dict[str, float]] = {}
+	returned_qtys: dict[str, float] = {}
 	for row in doc.get("items") or []:
-		dn_name = sister_dn_by_item.get(row.item_code)
-		if not dn_name:
+		if row.item_code not in sister_dn_by_item:
 			continue
 		qty = abs(flt(row.qty))
 		if qty <= 0:
 			continue
-		groups.setdefault(dn_name, {})
-		groups[dn_name][row.item_code] = groups[dn_name].get(row.item_code, 0) + qty
-
-	if not groups:
+		returned_qtys[row.item_code] = returned_qtys.get(row.item_code, 0) + qty
+	if not returned_qtys:
 		return
 
-	refs = []
+	# Was this stock actually delivered to the customer already? (SI -> DN, the
+	# same against_sales_invoice trace process_sister_return_delivery uses.)
+	customer_dn_rows = [
+		r
+		for r in frappe.db.sql(
+			"select parent, item_code from `tabDelivery Note Item` "
+			"where against_sales_invoice=%s and item_code in %s",
+			(orig.name, tuple(returned_qtys)),
+			as_dict=True,
+		)
+		if frappe.db.get_value("Delivery Note", r.parent, "docstatus") == 1
+	]
+
 	_prev_user = frappe.session.user
 	frappe.set_user("Administrator")
 	try:
-		for dn_name, item_qtys in groups.items():
-			result = _reverse_one_transfer(dn_name, item_qtys)
-			if result is None:
-				refs.append(
-					"DN {0}: could NOT auto-reverse -- the original sister transfer "
-					"never fully completed. The sister company's side needs manual "
-					"review.".format(dn_name)
+		if customer_dn_rows:
+			# Delivered -- reverse the physical customer delivery first (auto,
+			# invisible to the user), which in turn fires process_sister_return_
+			# delivery to reverse the sister side. No manual step either way.
+			from erpnext.controllers.sales_and_purchase_return import make_return_doc
+
+			by_dn: dict[str, dict[str, float]] = {}
+			for r in customer_dn_rows:
+				by_dn.setdefault(r.parent, {})[r.item_code] = returned_qtys[r.item_code]
+
+			for dn_name, qtys in by_dn.items():
+				dn_return = make_return_doc("Delivery Note", dn_name)
+				_trim_to_returned_qty(dn_return, qtys)
+				dn_return.flags.ignore_permissions = True
+				dn_return.insert()
+				dn_return.submit()
+			# process_sister_return_delivery (fired by each dn_return.submit() just
+			# above) sets azzir_intercompany_return_done/refs on this very Credit
+			# Note as part of its own "mirror onto the matching Credit Note" step.
+		else:
+			# Never delivered -- nothing local to touch, reverse the sister side
+			# directly.
+			groups: dict[str, dict[str, float]] = {}
+			for item_code, qty in returned_qtys.items():
+				dn_name = sister_dn_by_item[item_code]
+				groups.setdefault(dn_name, {})
+				groups[dn_name][item_code] = groups[dn_name].get(item_code, 0) + qty
+
+			refs = []
+			for dn_name, item_qtys in groups.items():
+				result = _reverse_one_transfer(dn_name, item_qtys)
+				if result is None:
+					refs.append(
+						"DN {0}: could NOT auto-reverse -- the original sister transfer "
+						"never fully completed. The sister company's side needs manual "
+						"review.".format(dn_name)
+					)
+					continue
+				ret_dn, ret_si, ret_pi, true_up_je = result
+				line = "reverses DN {0}: return DN {1} / return SI {2} / return PI {3}".format(
+					dn_name, ret_dn, ret_si, ret_pi
 				)
-				continue
-			ret_dn, ret_si, ret_pi, true_up_je = result
-			line = "reverses DN {0}: return DN {1} / return SI {2} / return PI {3}".format(
-				dn_name, ret_dn, ret_si, ret_pi
-			)
-			if true_up_je:
-				line += " / valuation true-up JE {0}".format(true_up_je)
-			refs.append(line)
+				if true_up_je:
+					line += " / valuation true-up JE {0}".format(true_up_je)
+				refs.append(line)
+
+			refs_text = "\n".join(refs)
+			if doc.meta.has_field("azzir_intercompany_return_done"):
+				doc.db_set("azzir_intercompany_return_done", 1, update_modified=False)
+				doc.db_set("azzir_intercompany_return_refs", refs_text, update_modified=False)
 	finally:
 		frappe.set_user(_prev_user)
-
-	refs_text = "\n".join(refs)
-	if doc.meta.has_field("azzir_intercompany_return_done"):
-		doc.db_set("azzir_intercompany_return_done", 1, update_modified=False)
-		doc.db_set("azzir_intercompany_return_refs", refs_text, update_modified=False)
 
 
 def _reverse_one_transfer(dn_name: str, item_qtys: dict) -> tuple | None:
