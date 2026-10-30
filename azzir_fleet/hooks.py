@@ -514,7 +514,11 @@ doc_events = {
 			"azzir_fleet.stock_reservation.check_stock_reservation",
 		],
 		"on_submit": "azzir_fleet.sales_invoice.mark_quotation_invoiced",
-		"on_cancel": "azzir_fleet.sales_invoice.unmark_quotation_invoiced",
+		"before_cancel": "azzir_fleet.intercompany_sale.process_sister_sale_cancel_predelete",
+		"on_cancel": [
+			"azzir_fleet.sales_invoice.unmark_quotation_invoiced",
+			"azzir_fleet.intercompany_sale.process_sister_sale_cancel",
+		],
 		# Sent-for-approval -> WhatsApp the approval recipients (desk + /sales).
 		"on_update": "azzir_fleet.approval_notify.notify_pending_approval",
 	},

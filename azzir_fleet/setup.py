@@ -916,6 +916,25 @@ CUSTOM_FIELDS.setdefault("Sales Invoice", []).extend(
 			"description": "Reversal documents created when a sister-sourced sale is returned "
 			"(one set per original sister transfer reversed).",
 		},
+		{
+			"fieldname": "azzir_intercompany_cancel_done",
+			"label": "Intercompany Transfer Cancelled",
+			"fieldtype": "Check",
+			"insert_after": "azzir_intercompany_return_refs",
+			"read_only": 1,
+			"print_hide": 1,
+		},
+		{
+			"fieldname": "azzir_intercompany_cancel_refs",
+			"label": "Intercompany Cancelled Transfers",
+			"fieldtype": "Small Text",
+			"insert_after": "azzir_intercompany_cancel_done",
+			"read_only": 1,
+			"print_hide": 1,
+			"description": "Sister transfer documents (Delivery Note / Sales Invoice / Purchase "
+			"Invoice) cancelled when this sister-sourced sale itself was cancelled (voided), "
+			"as opposed to returned.",
+		},
 	]
 )
 # Delivery Note: the RETURN delivery note is where a sister-sourced sale's transfer

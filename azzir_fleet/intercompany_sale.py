@@ -849,6 +849,125 @@ def _true_up_return_valuation_gap(pi_return, si_return, corporate_company: str) 
 	return je.name
 
 
+def process_sister_sale_cancel_predelete(doc, method=None):
+	"""Sales Invoice before_cancel: when a sister-sourced sale is being CANCELLED
+	(voided as a mistake, as opposed to returned via a Credit Note), cancel any
+	submitted customer Delivery Note(s) made from it FIRST. Frappe blocks cancelling
+	an invoice while a submitted Delivery Note still references it, and that check
+	runs AFTER on_cancel hooks fire -- clearing the Delivery Note here, in
+	before_cancel, lets a single "Cancel" on the Sales Invoice undo the whole sale in
+	one step instead of forcing the user to cancel the Delivery Note separately first.
+
+	Only acts on sister-sourced sales (azzir_intercompany_done) -- an ordinary sale's
+	Delivery Note is left exactly as Frappe already requires (cancel it yourself)."""
+	if not doc.get("azzir_intercompany_done"):
+		return
+	dn_names = frappe.get_all(
+		"Delivery Note Item",
+		filters={"against_sales_invoice": doc.name},
+		pluck="parent",
+		distinct=True,
+	)
+	for dn_name in dn_names:
+		if frappe.db.get_value("Delivery Note", dn_name, "docstatus") == 1:
+			dn = frappe.get_doc("Delivery Note", dn_name)
+			dn.flags.ignore_permissions = True
+			dn.cancel()
+
+
+def process_sister_sale_cancel(doc, method=None):
+	"""Sales Invoice on_cancel: when a sister-sourced sale is cancelled (voided, not
+	returned), automatically cancel the whole chain it created -- the corporate
+	Purchase Invoice, the sister's own Sales Invoice, and the sister Delivery Note --
+	undoing the transfer as if it had never happened. Covers BOTH real-world cases:
+	stock that was already delivered to the customer (its Delivery Note was cancelled
+	just above, in before_cancel) and stock still sitting, undelivered, in the
+	landing warehouse (nothing else to cancel first) -- either way it all goes back
+	to the sister. Idempotent and safe to re-run; anything already cancelled is
+	skipped."""
+	if not doc.get("azzir_intercompany_done"):
+		return
+	if doc.get("azzir_intercompany_cancel_done"):
+		return
+
+	sister_dns = {
+		r.azzir_sister_delivery_note
+		for r in doc.get("items") or []
+		if r.get("azzir_row_from_sister") and r.get("azzir_sister_delivery_note")
+	}
+	if not sister_dns:
+		return
+
+	refs = []
+	_prev_user = frappe.session.user
+	frappe.set_user("Administrator")
+	try:
+		for dn_name in sister_dns:
+			result = _cancel_one_transfer(dn_name)
+			if result is None:
+				refs.append(
+					"DN {0}: nothing left to cancel (already cancelled, or the original "
+					"transfer never fully completed).".format(dn_name)
+				)
+				continue
+			sister_si_name, corporate_pi_name = result
+			refs.append(
+				"cancelled sister DN {0}: sister SI {1} / corporate PI {2}".format(
+					dn_name, sister_si_name, corporate_pi_name
+				)
+			)
+	finally:
+		frappe.set_user(_prev_user)
+
+	refs_text = "\n".join(refs)
+	if doc.meta.has_field("azzir_intercompany_cancel_done"):
+		doc.db_set("azzir_intercompany_cancel_done", 1, update_modified=False)
+		doc.db_set("azzir_intercompany_cancel_refs", refs_text, update_modified=False)
+
+
+def _cancel_one_transfer(dn_name: str) -> tuple | None:
+	"""Cancel one completed sister transfer's chain -- the corporate Purchase
+	Invoice, then the sister Sales Invoice, then the sister Delivery Note -- in that
+	strict reverse order, the only order Frappe's own link-dependency checks allow
+	(each step is still referenced by the one before it until it's gone). Skips
+	anything already cancelled. Returns (sister_si, corporate_pi) names, or None if
+	there was nothing submitted left to cancel."""
+	sister_si_name = frappe.db.get_value("Sales Invoice Item", {"delivery_note": dn_name}, "parent")
+	corporate_pi_name = (
+		frappe.db.get_value(
+			"Purchase Invoice",
+			{"inter_company_invoice_reference": sister_si_name, "docstatus": 1},
+			"name",
+		)
+		if sister_si_name
+		else None
+	)
+
+	cancelled_anything = False
+
+	if corporate_pi_name:
+		pi = frappe.get_doc("Purchase Invoice", corporate_pi_name)
+		pi.flags.ignore_permissions = True
+		pi.cancel()
+		cancelled_anything = True
+
+	if sister_si_name and frappe.db.get_value("Sales Invoice", sister_si_name, "docstatus") == 1:
+		sister_si = frappe.get_doc("Sales Invoice", sister_si_name)
+		sister_si.flags.ignore_permissions = True
+		sister_si.cancel()
+		cancelled_anything = True
+
+	if frappe.db.get_value("Delivery Note", dn_name, "docstatus") == 1:
+		dn = frappe.get_doc("Delivery Note", dn_name)
+		dn.flags.ignore_permissions = True
+		dn.cancel()
+		cancelled_anything = True
+
+	if not cancelled_anything:
+		return None
+	return (sister_si_name or "-", corporate_pi_name or "-")
+
+
 def _trim_to_returned_qty(return_doc, item_qtys: dict) -> None:
 	"""make_return_doc mirrors EVERY row of the source document, negated at its full
 	original quantity. Keep only the rows actually being returned, and scale each
