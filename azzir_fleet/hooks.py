@@ -470,7 +470,13 @@ doc_events = {
 			"azzir_fleet.warehouse.require_warehouse_for_stock",
 		],
 		# Refresh the linked Sales Invoice's delivery % / status after a delivery.
-		"on_submit": "azzir_fleet.delivery_status.refresh_from_delivery_note",
+		# A RETURN delivery note is the point the physical stock is actually back --
+		# that's when a sister-sourced sale's transfer gets reversed (not on the
+		# Credit Note's own submit, which has no physical stock to send back yet).
+		"on_submit": [
+			"azzir_fleet.delivery_status.refresh_from_delivery_note",
+			"azzir_fleet.intercompany_sale.process_sister_return_delivery",
+		],
 		"on_cancel": "azzir_fleet.delivery_status.refresh_from_delivery_note",
 		# Sent-for-approval -> WhatsApp the approval recipients (desk + /sales).
 		"on_update": "azzir_fleet.approval_notify.notify_pending_approval",

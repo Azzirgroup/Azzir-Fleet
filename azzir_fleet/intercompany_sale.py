@@ -441,11 +441,11 @@ def process_sister_purchase(doc, method=None):
 	create one intercompany transfer (rows from the same sister share a transfer;
 	different sisters get separate transfers). Rows not marked are normal lines.
 
-	A RETURN (Credit Note) against a sister-sourced sale is handled separately --
-	see _process_sister_return(). Rows that were never sister-sourced are untouched
-	either way and return exactly as a normal sale always has."""
+	A RETURN (Credit Note) against a sister-sourced sale does NOT reverse anything
+	here -- a Credit Note has no physical stock to send back yet (update_stock=0;
+	the actual return happens via a separate return Delivery Note). See
+	process_sister_return_delivery() for where that reversal actually runs."""
 	if doc.is_return:
-		_process_sister_return(doc)
 		return
 
 	# Idempotent: already built for this invoice.
@@ -621,41 +621,60 @@ def _build_one_transfer(doc, corporate, sister, rows, ic_price_list, factor, cor
 	return (dn.name, sister_si.name, pi.name)
 
 
-def _process_sister_return(doc):
-	"""Sales Invoice before_submit, RETURN branch: for each returned row that was
-	originally sister-sourced, reverse the WHOLE original transfer -- stock goes
-	back to the sister (return Delivery Note), the sister's revenue is credited back
-	(return Sales Invoice against their original one), and the corporate company's
-	stock/cost is reversed too (return Purchase Invoice against its original one).
-	Both refunds settle via cash/bank, mirroring the forward flow.
+def process_sister_return_delivery(doc, method=None):
+	"""Delivery Note on_submit: when a RETURN delivery note (reversing a customer's
+	original delivery) is submitted, the physical stock is now ACTUALLY back in our
+	landing warehouse -- only at this point can the matching sister transfer be
+	reversed: stock sent back to the sister, both sides refunded, and a true-up for
+	any valuation drift. This deliberately runs here rather than on the Credit
+	Note's own submit, since a Credit Note (update_stock=0) never has physical stock
+	to send back -- that only exists once this return delivery actually posts.
 
-	A row that was never sister-sourced (no azzir_row_from_sister, or the original
-	row it traces to never completed a transfer) is left alone -- it returns exactly
-	like an ordinary sale always has, with no extra documents created."""
-	if not doc.return_against or doc.get("azzir_intercompany_return_done"):
+	A plain return (never sister-sourced, or nothing recorded to trace it to a
+	completed transfer) is left alone -- it returns exactly like an ordinary
+	delivery always has, with no extra documents created."""
+	if not doc.is_return or not doc.return_against:
+		return
+	if doc.get("azzir_intercompany_return_done"):
 		return
 
-	original = frappe.get_doc("Sales Invoice", doc.return_against)
-	orig_rows_by_item = {}
-	for r in original.items:
-		orig_rows_by_item.setdefault(r.item_code, []).append(r)
+	# Trace back: this return's original Delivery Note -> the Sales Invoice(s) it
+	# was created from (against_sales_invoice, set by ERPNext's own SI->DN mapper)
+	# -> whichever of THOSE rows were sister-sourced.
+	orig_rows = frappe.db.sql(
+		"select item_code, against_sales_invoice from `tabDelivery Note Item` where parent=%s",
+		(doc.return_against,),
+		as_dict=True,
+	)
+	si_names = {r.against_sales_invoice for r in orig_rows if r.against_sales_invoice}
+	if not si_names:
+		return  # this delivery was never made from a Sales Invoice -- nothing to trace
+
+	sister_dn_by_item = {}
+	for si_name in si_names:
+		rows = frappe.db.sql(
+			"select item_code, azzir_row_from_sister, azzir_sister_delivery_note "
+			"from `tabSales Invoice Item` where parent=%s",
+			(si_name,),
+			as_dict=True,
+		)
+		for r in rows:
+			if r.azzir_row_from_sister and r.azzir_sister_delivery_note:
+				sister_dn_by_item[r.item_code] = r.azzir_sister_delivery_note
+
+	if not sister_dn_by_item:
+		return  # the original sale wasn't sister-sourced -- an ordinary return
 
 	# Group the returned qty by the sister Delivery Note it should reverse against --
 	# everything sourced from the same original transfer reverses together.
 	groups: dict[str, dict[str, float]] = {}
 	for row in doc.get("items") or []:
-		if not row.get("azzir_row_from_sister"):
+		dn_name = sister_dn_by_item.get(row.item_code)
+		if not dn_name:
 			continue
 		qty = abs(flt(row.qty))
 		if qty <= 0:
 			continue
-		orig_row = next(
-			(r for r in orig_rows_by_item.get(row.item_code, []) if r.get("azzir_sister_delivery_note")),
-			None,
-		)
-		if not orig_row:
-			continue  # nothing recorded to reverse against -- behaves as a normal return
-		dn_name = orig_row.azzir_sister_delivery_note
 		groups.setdefault(dn_name, {})
 		groups[dn_name][row.item_code] = groups[dn_name].get(row.item_code, 0) + qty
 
@@ -671,9 +690,8 @@ def _process_sister_return(doc):
 			if result is None:
 				# The original transfer never fully completed (e.g. the sister's own
 				# invoice was left as a draft) -- nothing to auto-reverse. Don't block
-				# the return itself; it just proceeds as an ordinary return (stock
-				# lands back in the landing warehouse), flagged here for manual
-				# follow-up on the sister company's side.
+				# the return itself; it just proceeds as an ordinary return, flagged
+				# here for manual follow-up on the sister company's side.
 				refs.append(
 					"DN {0}: could NOT auto-reverse -- the original sister transfer "
 					"never fully completed. Stock was returned normally; the sister "
@@ -690,8 +708,24 @@ def _process_sister_return(doc):
 	finally:
 		frappe.set_user(_prev_user)
 
-	doc.azzir_intercompany_return_done = 1
-	doc.azzir_intercompany_return_refs = "\n".join(refs)
+	refs_text = "\n".join(refs)
+
+	if doc.meta.has_field("azzir_intercompany_return_done"):
+		doc.db_set("azzir_intercompany_return_done", 1, update_modified=False)
+		doc.db_set("azzir_intercompany_return_refs", refs_text, update_modified=False)
+
+	# Best-effort: also mirror onto the matching Credit Note, for visibility where
+	# users already look for this.
+	for si_name in si_names:
+		credit_note = frappe.db.get_value(
+			"Sales Invoice", {"is_return": 1, "return_against": si_name}, "name"
+		)
+		if credit_note:
+			frappe.db.set_value(
+				"Sales Invoice",
+				credit_note,
+				{"azzir_intercompany_return_done": 1, "azzir_intercompany_return_refs": refs_text},
+			)
 
 
 def _reverse_one_transfer(dn_name: str, item_qtys: dict) -> tuple | None:

@@ -918,6 +918,32 @@ CUSTOM_FIELDS.setdefault("Sales Invoice", []).extend(
 		},
 	]
 )
+# Delivery Note: the RETURN delivery note is where a sister-sourced sale's transfer
+# actually gets reversed (that's the point the physical stock is back) -- these mirror
+# the same-named fields on Sales Invoice, for visibility where the reversal is driven
+# from. Also best-effort mirrored onto the matching Credit Note.
+CUSTOM_FIELDS.setdefault("Delivery Note", []).extend(
+	[
+		{
+			"fieldname": "azzir_intercompany_return_done",
+			"label": "Intercompany Transfer Reversed",
+			"fieldtype": "Check",
+			"insert_after": "customer",
+			"read_only": 1,
+			"print_hide": 1,
+		},
+		{
+			"fieldname": "azzir_intercompany_return_refs",
+			"label": "Intercompany Return Transfers",
+			"fieldtype": "Small Text",
+			"insert_after": "azzir_intercompany_return_done",
+			"read_only": 1,
+			"print_hide": 1,
+			"description": "Reversal documents created when this return delivery note reverses "
+			"a sister-sourced sale (one set per original sister transfer reversed).",
+		},
+	]
+)
 
 # Quotation: the buy-from-sister choice starts here and carries to the Sales
 # Invoice. NO intercompany documents are created at quotation stage — the logic
