@@ -1108,6 +1108,7 @@ def after_migrate():
 		),
 		("print_formats", setup_print_formats),
 		("lock_print_formats", _lock_print_formats),
+		("ar_print_customer_column", _customize_accounts_receivable_print_format),
 		("packed_items_position", _position_packed_items),
 		("packed_item_grid", _configure_packed_item_grid),
 		(
@@ -1380,8 +1381,18 @@ def _exempt_cost_center_from_user_permissions():
 
 	The line cost_center is a system default the salesperson doesn't choose, so
 	exempt it from user-permission enforcement. The header/report-level scoping is
-	unaffected — this only stops the auto-filled child value from blocking saves."""
-	for dt in ("Quotation Item", "Sales Invoice Item", "Delivery Note Item"):
+	unaffected — this only stops the auto-filled child value from blocking saves.
+
+	Stock Entry Detail gets the same exemption, for the same reason: its row
+	cost_center is auto-filled from the selected warehouse, not chosen by the
+	user, and warehouse SELECTION is already policed, with its own opt-out, by
+	warehouse_cc.enforce_warehouse_selection() / azzir_permit_stock_entry -- that
+	is meant to be the single source of truth for Stock Entry's cost-centre
+	scoping. Leaving Frappe's generic cost_center check active in parallel let it
+	block a user whose cost centre had explicitly opted out via
+	azzir_permit_stock_entry, since that flag was never wired to this separate,
+	lower-level permission layer."""
+	for dt in ("Quotation Item", "Sales Invoice Item", "Delivery Note Item", "Stock Entry Detail"):
 		make_property_setter(
 			dt, "cost_center", "ignore_user_permissions", 1, "Check",
 			validate_fields_for_doctype=False,
@@ -1739,6 +1750,51 @@ def _lock_print_formats():
 			pluck="name",
 		):
 			frappe.db.set_value("Print Format", pf, "disabled", 1, update_modified=False)
+
+
+def _customize_accounts_receivable_print_format():
+	"""ERPNext's 'Accounts Receivable Standard' print format (Report-bound JS
+	format) only ever shows Date / Reference / Age / Invoiced / Outstanding --
+	the customer name is in the page header, not on each row. Users print this
+	for several customers' statements and want the name on every row without
+	having to go pick columns anywhere (picking columns in the report view
+	doesn't affect this print format at all -- it's a separate, hand-written
+	template). Re-applied every migrate since it's a standard document and a
+	vendor update could otherwise re-sync the stock HTML back over ours."""
+	name = "Accounts Receivable Standard"
+	if not frappe.db.exists("Print Format", name):
+		return
+	pf = frappe.get_doc("Print Format", name)
+	if "__(\"Customer Name\")" in (pf.html or ""):
+		return  # already customized
+	pf.html = pf.html.replace(
+		'<th style="text-align: left;">{%= __("Reference") %}</th>',
+		'<th style="text-align: left;">{%= __("Reference") %}</th>\n\t\t\t\t\t<th style="text-align: left;">{%= __("Customer Name") %}</th>',
+		1,
+	).replace(
+		"""\t\t\t\t\t\t<td class="{% if(i == data.length - 1) { %}text-left text-bold{% } %}">
+\t\t\t\t\t\t\t{% if(i == data.length - 1) { %}
+\t\t\t\t\t\t\t\t{%= __("Total") %}
+\t\t\t\t\t\t\t{% } else { %}
+\t\t\t\t\t\t\t\t{%= data[i]["voucher_no"] %}
+\t\t\t\t\t\t\t{% } %}
+\t\t\t\t\t\t</td>""",
+		"""\t\t\t\t\t\t<td class="{% if(i == data.length - 1) { %}text-left text-bold{% } %}">
+\t\t\t\t\t\t\t{% if(i == data.length - 1) { %}
+\t\t\t\t\t\t\t\t{%= __("Total") %}
+\t\t\t\t\t\t\t{% } else { %}
+\t\t\t\t\t\t\t\t{%= data[i]["voucher_no"] %}
+\t\t\t\t\t\t\t{% } %}
+\t\t\t\t\t\t</td>
+\t\t\t\t\t\t<td class="text-left">
+\t\t\t\t\t\t\t{% if(i != data.length - 1) { %}
+\t\t\t\t\t\t\t\t{%= data[i]["customer_name"] || data[i]["party"] %}
+\t\t\t\t\t\t\t{% } %}
+\t\t\t\t\t\t</td>""",
+		1,
+	)
+	pf.flags.ignore_permissions = True
+	pf.save(ignore_permissions=True)
 
 
 def _upsert_print_format(name, dt, html):
