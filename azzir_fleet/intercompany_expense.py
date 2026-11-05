@@ -181,7 +181,12 @@ def on_submit(doc, method=None):
 
 def on_cancel(doc, method=None):
 	"""Cancel the linked settlement Journal Entry too -- separate from Expense
-	Entry's own controller, which only cancels its own `journal_entry`."""
+	Entry's own controller, which only cancels its own `journal_entry`.
+
+	Must also CLEAR the field afterward (Expense Entry's own on_cancel does this
+	for `journal_entry`) -- otherwise it keeps pointing at a now-cancelled JE, and
+	Amend copies that value verbatim onto the new doc, which Frappe's core link
+	check then rejects with "Cannot link cancelled document" on save."""
 	if not doc.get("azzir_paid_on_behalf_of_sister"):
 		return
 	je_name = doc.get("azzir_settlement_journal_entry")
@@ -190,3 +195,4 @@ def on_cancel(doc, method=None):
 		if je.docstatus == 1:
 			je.flags.ignore_permissions = True
 			je.cancel()
+	doc.db_set("azzir_settlement_journal_entry", None, update_modified=False)

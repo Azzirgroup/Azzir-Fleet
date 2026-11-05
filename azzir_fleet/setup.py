@@ -1109,6 +1109,7 @@ def after_migrate():
 		("print_formats", setup_print_formats),
 		("lock_print_formats", _lock_print_formats),
 		("ar_print_customer_column", _customize_accounts_receivable_print_format),
+		("stale_settlement_je_backfill", _backfill_stale_settlement_journal_links),
 		("packed_items_position", _position_packed_items),
 		("packed_item_grid", _configure_packed_item_grid),
 		(
@@ -1795,6 +1796,27 @@ def _customize_accounts_receivable_print_format():
 	)
 	pf.flags.ignore_permissions = True
 	pf.save(ignore_permissions=True)
+
+
+def _backfill_stale_settlement_journal_links():
+	"""One-time cleanup for documents cancelled BEFORE the on_cancel fix above
+	existed: a cancelled Expense Entry / Payment Entry whose
+	azzir_settlement_journal_entry still points at a Journal Entry that is itself
+	cancelled (or gone) -- Amend copies that stale link onto the new doc, which
+	Frappe's core link check then rejects with "Cannot link cancelled document".
+	Safe to re-run: only touches rows where the link is actually stale."""
+	for dt in ("Expense Entry", "Payment Entry"):
+		rows = frappe.get_all(
+			dt,
+			filters={"docstatus": 2, "azzir_settlement_journal_entry": ["is", "set"]},
+			fields=["name", "azzir_settlement_journal_entry"],
+		)
+		for row in rows:
+			je_docstatus = frappe.db.get_value("Journal Entry", row.azzir_settlement_journal_entry, "docstatus")
+			if je_docstatus != 1:
+				frappe.db.set_value(
+					dt, row.name, "azzir_settlement_journal_entry", None, update_modified=False
+				)
 
 
 def _upsert_print_format(name, dt, html):
