@@ -22,6 +22,8 @@ Flow, all driven by data (no company names hardcoded):
   and keeps the margin (e.g. 30%).
 """
 
+from datetime import timedelta
+
 import frappe
 from frappe import _
 from frappe.utils import flt
@@ -1109,15 +1111,32 @@ def _cancel_one_transfer(dn_name: str) -> tuple | None:
 
 def _date_as_now(doc) -> None:
 	"""make_return_doc copies posting_date/posting_time from the ORIGINAL document
-	-- possibly hours or months ago. A reversal is happening NOW, not back then, and
-	dating it "now" also sidesteps a real class of bug: any OTHER transaction against
-	this same item/warehouse posted between the original and today would otherwise
-	sit chronologically AFTER a reversal backdated to the original's moment, so
-	replaying the ledger from that early point can come up short on stock the other
-	transaction already consumed -- an "Insufficient Stock" error that has nothing
-	to do with the return itself."""
-	doc.posting_date = frappe.utils.nowdate()
-	doc.posting_time = frappe.utils.nowtime()
+	-- possibly hours or months ago. A reversal is happening NOW, not back then.
+
+	"Now" alone isn't quite enough, though: this business reuses one generic item
+	code across many unrelated physical parts sharing one warehouse, so some OTHER,
+	completely unrelated document for the same item/warehouse pair may carry a
+	posting time later TODAY than right now (a data-entry mistake on someone else's
+	document, not something this return should ever have to wait on or depend on a
+	human going to fix). Walk this doc's own rows forward past the LATEST existing
+	ledger entry for each (item, warehouse) it touches, so it always posts strictly
+	after everything already there -- no "Insufficient Stock" collision, no manual
+	cleanup on some other document, ever, regardless of whose timestamp is off."""
+	dt = frappe.utils.now_datetime()
+	for row in doc.get("items") or []:
+		wh = row.get("warehouse")
+		if not wh or not row.get("item_code"):
+			continue
+		latest = frappe.db.get_value(
+			"Stock Ledger Entry",
+			{"item_code": row.item_code, "warehouse": wh, "is_cancelled": 0},
+			"posting_datetime",
+			order_by="posting_datetime desc",
+		)
+		if latest and latest >= dt:
+			dt = latest + timedelta(seconds=1)
+	doc.posting_date = dt.date()
+	doc.posting_time = dt.strftime("%H:%M:%S")
 	if doc.meta.has_field("set_posting_time"):
 		doc.set_posting_time = 1
 
