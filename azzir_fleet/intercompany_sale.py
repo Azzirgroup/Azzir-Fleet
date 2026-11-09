@@ -802,6 +802,7 @@ def process_sister_return_credit_note(doc, method=None):
 			for dn_name, qtys in by_dn.items():
 				dn_return = make_return_doc("Delivery Note", dn_name)
 				_trim_to_returned_qty(dn_return, qtys)
+				_date_as_now(dn_return)
 				dn_return.flags.ignore_permissions = True
 				dn_return.insert()
 				dn_return.submit()
@@ -870,6 +871,7 @@ def _reverse_one_transfer(dn_name: str, item_qtys: dict) -> tuple | None:
 	# 1) Return Delivery Note -- stock goes back into the sister's supply warehouse.
 	dn_return = make_return_doc("Delivery Note", dn_name)
 	_trim_to_returned_qty(dn_return, item_qtys)
+	_date_as_now(dn_return)
 	dn_return.flags.ignore_permissions = True
 	dn_return.insert()
 	dn_return.submit()
@@ -877,6 +879,7 @@ def _reverse_one_transfer(dn_name: str, item_qtys: dict) -> tuple | None:
 	# 2) Return Sales Invoice / Credit Note in the sister, against their original SI.
 	si_return = make_return_doc("Sales Invoice", sister_si_name)
 	_trim_to_returned_qty(si_return, item_qtys)
+	_date_as_now(si_return)
 	si_return.flags.ignore_permissions = True
 	si_return.insert()
 	_mark_si_paid(si_return, sister_company)  # refund the sister's cash/bank
@@ -891,6 +894,7 @@ def _reverse_one_transfer(dn_name: str, item_qtys: dict) -> tuple | None:
 	#    valuation_gap() below corrects for that against the Unrealized P/L account.
 	pi_return = make_return_doc("Purchase Invoice", corporate_pi_name)
 	_trim_to_returned_qty(pi_return, item_qtys)
+	_date_as_now(pi_return)
 	pi_return.flags.ignore_permissions = True
 	# Mirrored rows already carry the final (once-discounted) transfer price --
 	# without this flag, apply_intercompany_discount() (hooks.py before_validate)
@@ -1101,6 +1105,21 @@ def _cancel_one_transfer(dn_name: str) -> tuple | None:
 	if not cancelled_anything:
 		return None
 	return (sister_si_name or "-", corporate_pi_name or "-")
+
+
+def _date_as_now(doc) -> None:
+	"""make_return_doc copies posting_date/posting_time from the ORIGINAL document
+	-- possibly hours or months ago. A reversal is happening NOW, not back then, and
+	dating it "now" also sidesteps a real class of bug: any OTHER transaction against
+	this same item/warehouse posted between the original and today would otherwise
+	sit chronologically AFTER a reversal backdated to the original's moment, so
+	replaying the ledger from that early point can come up short on stock the other
+	transaction already consumed -- an "Insufficient Stock" error that has nothing
+	to do with the return itself."""
+	doc.posting_date = frappe.utils.nowdate()
+	doc.posting_time = frappe.utils.nowtime()
+	if doc.meta.has_field("set_posting_time"):
+		doc.set_posting_time = 1
 
 
 def _trim_to_returned_qty(return_doc, item_qtys: dict) -> None:
