@@ -1107,13 +1107,31 @@ def _trim_to_returned_qty(return_doc, item_qtys: dict) -> None:
 	"""make_return_doc mirrors EVERY row of the source document, negated at its full
 	original quantity. Keep only the rows actually being returned, and scale each
 	down to the quantity actually returned (a partial return may cover less than the
-	original transfer did)."""
+	original transfer did).
+
+	item_qtys is keyed by item_code alone -- but this business reuses one generic
+	item_code across several genuinely different lines on the SAME document (e.g.
+	three different filters all coded "0001006", at different rates/quantities).
+	Stamping the WHOLE wanted total onto every row sharing that item_code (the old
+	behaviour) overshoots every row but the last, and ERPNext's own return-qty cap
+	is per ROW, not per item_code -- "Row #1: Cannot return more than 5.0" was that
+	overshoot getting caught. Instead, draw the wanted pool down greedily, row by
+	row, capping each row at its own pre-trim (full mirrored) quantity -- as long as
+	the row order here matches the row order on every other document mirroring the
+	same original transfer (dn_return / si_return / pi_return all do), each row
+	still gets matched back to the right amount everywhere."""
+	remaining = dict(item_qtys)
 	kept = []
 	for row in return_doc.items:
-		wanted = item_qtys.get(row.item_code)
-		if not wanted:
+		pool = remaining.get(row.item_code)
+		if not pool:
 			continue
-		row.qty = -wanted  # row.qty mirrors the source negated; wanted is already positive
+		row_cap = abs(flt(row.qty))  # row.qty mirrors the source negated at its FULL qty
+		alloc = min(pool, row_cap)
+		if alloc <= 0:
+			continue
+		row.qty = -alloc
+		remaining[row.item_code] = pool - alloc
 		# Purchase Invoice Item requires received_qty == qty + rejected_qty; both are
 		# mirrored from the source's full (untrimmed) quantity. Reset them so
 		# validate_accepted_rejected_qty's own auto-fill sets received_qty = qty.
