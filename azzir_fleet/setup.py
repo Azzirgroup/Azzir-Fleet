@@ -1135,6 +1135,7 @@ def after_migrate():
 		# created by the 'custom_fields' step above). Runs after fields exist, unlike
 		# the post_model_sync patch which fires before fixtures create the columns.
 		("delivery_status_backfill", _backfill_delivery_status),
+		("delivery_status_dn_sourced_backfill", _backfill_delivery_note_sourced_status),
 		("material_issue_workflow", _setup_material_issue_workflow),
 		("session_limit", _enforce_session_limit),
 		("multicurrency", _enable_multicurrency),
@@ -1407,6 +1408,15 @@ def _backfill_delivery_status():
 	from azzir_fleet.delivery_status import backfill
 
 	backfill(only_empty=True)
+
+
+def _backfill_delivery_note_sourced_status():
+	"""Correct the (narrow, targeted) set of invoices made FROM an already-
+	submitted Delivery Note -- see delivery_status.backfill_delivery_note_sourced
+	for why only_empty=True above can never fix these on its own."""
+	from azzir_fleet.delivery_status import backfill_delivery_note_sourced
+
+	backfill_delivery_note_sourced()
 
 
 def _stock_entry_row_warehouses_readonly():

@@ -85,7 +85,18 @@ def check_stock_reservation(doc, method=None):
 def reserved_by_warehouse(item_code: str, exclude_invoice: str | None = None) -> dict:
 	"""{warehouse: reserved_qty} for an item across all open invoices (plain lines
 	AND bundle components), excluding `exclude_invoice`. Powers the "available
-	stock" shown in the warehouse dialog."""
+	stock" shown in the warehouse dialog.
+
+	A row billed FROM a Delivery Note (sii.delivery_note set) already moved its
+	stock on that DN -- same exclusion check_stock_reservation already applies to
+	the invoice being validated, but missing here, which was letting an already-
+	delivered row on SOME OTHER invoice keep counting as "reserved" forever (its
+	own delivered_qty is never populated for this direction -- the invoice was
+	made FROM the delivery, not the other way round, so there's no status-updater
+	relationship to fill it in). Packed Item has no delivery_note field of its own
+	to check per-row, so its query below instead excludes an invoice WHOLESALE
+	when any of its plain rows is DN-sourced -- check_stock_reservation does the
+	same (invoice_from_dn), skipping ALL packed items together, not per component."""
 	vals = {"it": item_code, "ex": exclude_invoice or ""}
 	rows = frappe.db.sql(
 		"""
@@ -96,12 +107,17 @@ def reserved_by_warehouse(item_code: str, exclude_invoice: str | None = None) ->
 			join `tabSales Invoice` si on si.name = sii.parent
 			where sii.item_code = %(it)s and si.name != %(ex)s
 			  and si.docstatus = 1 and si.update_stock = 0
+			  and (sii.delivery_note is null or sii.delivery_note = '')
 			union all
 			select pi.warehouse wh, pi.qty q
 			from `tabPacked Item` pi
 			join `tabSales Invoice` si on si.name = pi.parent
 			where pi.parenttype = 'Sales Invoice' and pi.item_code = %(it)s
 			  and si.name != %(ex)s and si.docstatus = 1 and si.update_stock = 0
+			  and not exists (
+				  select 1 from `tabSales Invoice Item` sii2
+				  where sii2.parent = si.name and ifnull(sii2.delivery_note, '') != ''
+			  )
 		) t
 		where t.wh is not null and t.wh != '' group by t.wh
 		""",
@@ -114,6 +130,9 @@ def _reserved_by_others(code: str, wh: str, current_name: str) -> float:
 	vals = {"code": code, "wh": wh, "cur": current_name or ""}
 
 	# Plain Sales Invoice lines: only SUBMITTED, no-stock-update, undelivered qty.
+	# Same delivery_note exclusion as check_stock_reservation's own row-skipping --
+	# a row billed FROM a Delivery Note already moved its stock on that DN, even
+	# though delivered_qty on it is never populated (see reserved_by_warehouse).
 	from_items = frappe.db.sql(
 		"""
 		select sum(greatest(sii.qty - ifnull(sii.delivered_qty, 0), 0))
@@ -121,11 +140,15 @@ def _reserved_by_others(code: str, wh: str, current_name: str) -> float:
 		join `tabSales Invoice` si on si.name = sii.parent
 		where sii.item_code = %(code)s and sii.warehouse = %(wh)s
 		  and si.name != %(cur)s and si.docstatus = 1 and si.update_stock = 0
+		  and (sii.delivery_note is null or sii.delivery_note = '')
 		""",
 		vals,
 	)
 
 	# Bundle components (Packed Items) on other SUBMITTED, no-stock-update invoices.
+	# No delivery_note field of their own -- exclude an invoice WHOLESALE when any
+	# of its plain rows is DN-sourced, same as check_stock_reservation's own
+	# invoice_from_dn (skips ALL packed items together, not per component).
 	from_components = frappe.db.sql(
 		"""
 		select sum(pi.qty)
@@ -134,6 +157,10 @@ def _reserved_by_others(code: str, wh: str, current_name: str) -> float:
 		where pi.parenttype = 'Sales Invoice' and pi.item_code = %(code)s
 		  and pi.warehouse = %(wh)s and si.name != %(cur)s
 		  and si.docstatus = 1 and si.update_stock = 0
+		  and not exists (
+			  select 1 from `tabSales Invoice Item` sii2
+			  where sii2.parent = si.name and ifnull(sii2.delivery_note, '') != ''
+		  )
 		""",
 		vals,
 	)
