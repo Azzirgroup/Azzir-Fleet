@@ -9,6 +9,9 @@
   "spreadsheet",
   "sheet_name",
   "mode",
+  "create_missing_items",
+  "default_item_group",
+  "default_stock_uom",
   "column_break_1",
   "status",
   "report",
@@ -19,7 +22,7 @@
   {
    "fieldname": "intro",
    "fieldtype": "HTML",
-   "options": "<p style='color:#666'>Upload a spreadsheet with columns <b>ID</b>, <b>azzir_alias_codes.code</b>, <b>azzir_alias_codes.is_primary</b>, <b>azzir_alias_codes.source</b>. Use <b>Dry Run</b> first to preview, then <b>Run Import</b> to apply (runs in the background). For each item its code table is replaced; the item's own code stays Primary so nothing is renamed.</p>"
+   "options": "<p style='color:#666'>Upload a spreadsheet with columns <b>ID</b>, <b>azzir_alias_codes.code</b>, <b>azzir_alias_codes.is_primary</b>, <b>azzir_alias_codes.source</b>, and optionally <b>item_name</b>, <b>item_group</b>, <b>stock_uom</b> (only used when creating new items). Use <b>Dry Run</b> first to preview, then <b>Run Import</b> to apply (runs in the background). For each item its code table is replaced; the item's own code stays Primary so nothing is renamed.</p>"
   },
   {
    "fieldname": "spreadsheet",
@@ -41,6 +44,30 @@
    "label": "Mode",
    "options": "Replace\nReconcile",
    "description": "Replace: match items by ID (exact code). Reconcile: match by ANY code and rename the item to its Primary code (fixes items that were manually renamed)."
+  },
+  {
+   "default": "0",
+   "fieldname": "create_missing_items",
+   "fieldtype": "Check",
+   "label": "Create Missing Items",
+   "description": "Replace mode only. If an ID in the file doesn't match any existing item, create it with that ID as its Item Code instead of skipping it.",
+   "depends_on": "eval:doc.mode != 'Reconcile'"
+  },
+  {
+   "fieldname": "default_item_group",
+   "fieldtype": "Link",
+   "options": "Item Group",
+   "label": "Default Item Group",
+   "description": "Used for a new item when the file has no item_group column/value for it.",
+   "depends_on": "eval:doc.create_missing_items"
+  },
+  {
+   "fieldname": "default_stock_uom",
+   "fieldtype": "Link",
+   "options": "UOM",
+   "label": "Default Stock UOM",
+   "description": "Used for a new item when the file has no stock_uom column/value for it.",
+   "depends_on": "eval:doc.create_missing_items"
   },
   {"fieldname": "column_break_1", "fieldtype": "Column Break"},
   {
