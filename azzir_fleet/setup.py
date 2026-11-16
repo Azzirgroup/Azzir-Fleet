@@ -190,6 +190,23 @@ CUSTOM_FIELDS = {
 			"allow_on_submit": 1,
 			"description": "Percentage of the invoice's stock items that has been delivered.",
 		},
+		# Derived, always kept as the exact opposite of Is Return (see
+		# sales_invoice_filters.sync_is_sales_invoice) -- exists purely so it can sit
+		# as its own checkbox in the list view's standard filter bar, next to "Is
+		# Return", letting a user filter to plain sales (no returns at all) as easily
+		# as filtering to returns. Hidden on the form; never hand-edited.
+		{
+			"fieldname": "azzir_is_sales_invoice",
+			"label": "Is Sales Invoice",
+			"fieldtype": "Check",
+			"insert_after": "is_return",
+			"hidden": 1,
+			"read_only": 1,
+			"no_copy": 1,
+			"in_standard_filter": 1,
+			"allow_on_submit": 1,
+			"description": "Always the opposite of Is Return — filter-only, kept in sync automatically.",
+		},
 	],
 	# Purchase Order raised below an item's Minimum Order Qty: the order is ALLOWED
 	# (ERPNext's hard block is switched off in overrides.AzzirPurchaseOrder) but
@@ -1136,6 +1153,7 @@ def after_migrate():
 		# the post_model_sync patch which fires before fixtures create the columns.
 		("delivery_status_backfill", _backfill_delivery_status),
 		("delivery_status_dn_sourced_backfill", _backfill_delivery_note_sourced_status),
+		("is_sales_invoice_backfill", _backfill_is_sales_invoice),
 		("material_issue_workflow", _setup_material_issue_workflow),
 		("session_limit", _enforce_session_limit),
 		("multicurrency", _enable_multicurrency),
@@ -1417,6 +1435,14 @@ def _backfill_delivery_note_sourced_status():
 	from azzir_fleet.delivery_status import backfill_delivery_note_sourced
 
 	backfill_delivery_note_sourced()
+
+
+def _backfill_is_sales_invoice():
+	"""Fill azzir_is_sales_invoice (always the opposite of is_return) on existing
+	invoices — the validate hook only keeps it in sync going forward."""
+	from azzir_fleet.sales_invoice_filters import backfill
+
+	backfill()
 
 
 def _stock_entry_row_warehouses_readonly():

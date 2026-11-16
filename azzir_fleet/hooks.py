@@ -508,6 +508,7 @@ doc_events = {
 			"azzir_fleet.below_cost.set_previous_price",
 			"azzir_fleet.customer_name.restore_override",
 			"azzir_fleet.delivery_status.apply",
+			"azzir_fleet.sales_invoice_filters.sync_is_sales_invoice",
 		],
 		"before_submit": [
 			"azzir_fleet.intercompany_sale.process_sister_purchase",

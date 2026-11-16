@@ -17,4 +17,46 @@ frappe.listview_settings["Sales Invoice"] = frappe.listview_settings["Sales Invo
 			return `<span class="indicator-pill ${color}">${label}</span>`;
 		},
 	});
+
+	// "Is Return" and "Is Sales Invoice" are opposites -- a document can never be
+	// both, so checking one disables (and force-unchecks) the other in the
+	// standard filter bar. Rebound on every refresh since the filter bar can be
+	// re-rendered; namespaced + always unbound first so handlers never stack.
+	function wire_mutual_exclusion(listview) {
+		const a = listview.page.fields_dict["is_return"];
+		const b = listview.page.fields_dict["azzir_is_sales_invoice"];
+		if (!a || !b) return; // filter bar not built yet -- next refresh will catch it
+
+		function sync() {
+			a.$input.prop("disabled", !!b.get_value());
+			b.$input.prop("disabled", !!a.get_value());
+		}
+
+		function bind(field, other) {
+			field.$input.off("change.azzir_mutex").on("change.azzir_mutex", function () {
+				if ($(this).is(":checked") && other.get_value()) {
+					other.set_value(0);
+				}
+				sync();
+			});
+		}
+
+		bind(a, b);
+		bind(b, a);
+		sync();
+	}
+
+	// Chain, don't clobber -- erpnext core's own sales_invoice_list.js already sets
+	// onload (adds the "Delivery Note" / "Payment" bulk-action buttons); whichever
+	// of the two files loads second would otherwise wipe the other's onload out.
+	const existing_onload = s.onload;
+	s.onload = function (listview) {
+		if (existing_onload) existing_onload(listview);
+		wire_mutual_exclusion(listview);
+	};
+	const existing_refresh = s.refresh;
+	s.refresh = function (listview) {
+		if (existing_refresh) existing_refresh(listview);
+		wire_mutual_exclusion(listview);
+	};
 })();
