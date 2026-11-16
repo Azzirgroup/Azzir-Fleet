@@ -18,6 +18,13 @@ frappe.listview_settings["Sales Invoice"] = frappe.listview_settings["Sales Invo
 		},
 	});
 
+	// Soft default: only applies until the user has their OWN saved filter state
+	// for this list view (Frappe's list_view.js checks view_user_settings.filters
+	// first, falling back to this). So it shows "Is Sales Invoice" ticked out of
+	// the box, but the moment a user ticks/unticks anything themselves, their own
+	// choice is what sticks from then on -- never locked, never re-forced.
+	s.filters = [["azzir_is_sales_invoice", "=", 1]];
+
 	// "Is Return" and "Is Sales Invoice" are opposites -- a document can never be
 	// both, so checking one disables (and force-unchecks) the other in the
 	// standard filter bar. Rebound on every refresh since the filter bar can be

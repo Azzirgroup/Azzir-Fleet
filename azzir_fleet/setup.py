@@ -195,11 +195,13 @@ CUSTOM_FIELDS = {
 		# as its own checkbox in the list view's standard filter bar, next to "Is
 		# Return", letting a user filter to plain sales (no returns at all) as easily
 		# as filtering to returns. Hidden on the form; never hand-edited.
+		# insert_after is_consolidated (the field right before is_return in core
+		# Sales Invoice) so this renders BEFORE "Is Return" in the filter bar.
 		{
 			"fieldname": "azzir_is_sales_invoice",
 			"label": "Is Sales Invoice",
 			"fieldtype": "Check",
-			"insert_after": "is_return",
+			"insert_after": "is_consolidated",
 			"hidden": 1,
 			"read_only": 1,
 			"no_copy": 1,
