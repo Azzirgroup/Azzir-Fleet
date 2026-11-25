@@ -582,6 +582,12 @@ def amend_sales_doc(doctype: str, name: str) -> dict:
 	amended = frappe.copy_doc(src)
 	amended.amended_from = name
 	amended.docstatus = 0
+	# The cancelled original still points at its own (now also cancelled) sister
+	# Delivery Note / Sister Invoice / Purchase Invoice -- carrying those Links
+	# forward would make this insert() fail with "Cannot link cancelled document".
+	from azzir_fleet.intercompany_sale import reset_intercompany_refs_for_amend
+
+	reset_intercompany_refs_for_amend(amended)
 	# Reset the workflow state so the amended DRAFT starts at the workflow's first
 	# (draft) state, not the cancelled doc's 'Approved' state (which would be an
 	# invalid Draft->Approved transition on insert).

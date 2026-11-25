@@ -1066,6 +1066,38 @@ def process_sister_sale_cancel(doc, method=None):
 		doc.db_set("azzir_intercompany_cancel_refs", refs_text, update_modified=False)
 
 
+_AMEND_RESET_FIELDS = {
+	"azzir_intercompany_delivery_note": "",
+	"azzir_intercompany_sister_invoice": "",
+	"azzir_intercompany_purchase_invoice": "",
+	"azzir_intercompany_done": 0,
+	"azzir_intercompany_refs": "",
+	"azzir_intercompany_return_done": 0,
+	"azzir_intercompany_return_refs": "",
+	"azzir_intercompany_cancel_done": 0,
+	"azzir_intercompany_cancel_refs": "",
+}
+
+
+def reset_intercompany_refs_for_amend(doc) -> None:
+	"""An amended Sales Invoice/Credit Note still points, via these Link fields, at
+	the CANCELLED original's sister Delivery Note / Sister Invoice / Purchase
+	Invoice -- Frappe's own link validation rejects saving any document that links
+	to a cancelled one, so the amendment would fail outright with "Cannot link
+	cancelled document" otherwise. Clearing them lets the amendment's own submit
+	regenerate a fresh set of sister documents from scratch (the per-row
+	azzir_row_from_sister / supply company / warehouse picks are kept, so the same
+	sister source is used again). Call this on the COPIED, not-yet-inserted doc,
+	before insert() -- Frappe validates links too early in insert() for a doc_event
+	hook to reach this in time."""
+	for fieldname, blank in _AMEND_RESET_FIELDS.items():
+		if doc.meta.has_field(fieldname):
+			doc.set(fieldname, blank)
+	for row in doc.get("items") or []:
+		if row.meta.has_field("azzir_sister_delivery_note") and row.azzir_sister_delivery_note:
+			row.azzir_sister_delivery_note = ""
+
+
 def _cancel_one_transfer(dn_name: str) -> tuple | None:
 	"""Cancel one completed sister transfer's chain -- the corporate Purchase
 	Invoice, then the sister Sales Invoice, then the sister Delivery Note -- in that
