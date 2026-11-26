@@ -734,6 +734,20 @@ CUSTOM_FIELDS.setdefault("Payment Entry", []).extend(
 			"description": "Auto-created on submit — settles the sister's invoice. Cancelled "
 			"automatically if this Payment Entry is cancelled.",
 		},
+		{
+			"fieldname": "azzir_local_settlement_journal_entry",
+			"label": "Local Settlement Journal Entry",
+			"fieldtype": "Link",
+			"options": "Journal Entry",
+			"insert_after": "azzir_settlement_journal_entry",
+			"read_only": 1,
+			"no_copy": 1,
+			"depends_on": "eval:doc.azzir_paid_on_behalf_of_sister",
+			"description": "Auto-created on submit — moves the balance this Payment Entry "
+			"posted against the party's own account, in THIS company, into the Intercompany "
+			"Clearing Account instead. Cancelled automatically if this Payment Entry is "
+			"cancelled.",
+		},
 	]
 )
 

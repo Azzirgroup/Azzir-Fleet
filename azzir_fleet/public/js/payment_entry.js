@@ -3,27 +3,13 @@
 // for Receive, Purchase Invoice for Pay) to only the chosen sister's invoices for this
 // exact party that still have something outstanding, and auto-fill the paid amount
 // from whichever invoice is picked -- instead of a plain unfiltered link field.
-
-// The checkbox's own account override only happens server-side (before_validate),
-// but the browser checks Paid To/Paid From for "mandatory" BEFORE it ever sends the
-// save request -- so a blank one blocks the save outright before that backend code
-// runs. Set it here too, client-side, the moment there's enough to know which field
-// and which account.
-function sync_clearing_account(frm) {
-	if (!frm.doc.azzir_paid_on_behalf_of_sister || !frm.doc.company) return;
-	const field = frm.doc.payment_type === "Pay" ? "paid_to"
-		: frm.doc.payment_type === "Receive" ? "paid_from"
-		: null;
-	if (!field) return;
-	frappe.db.get_value("Company", frm.doc.company, "azzir_intercompany_clearing_account").then((r) => {
-		const clearing = (r.message || {}).azzir_intercompany_clearing_account;
-		if (clearing) frm.set_value(field, clearing);
-	});
-}
+//
+// Paid From/Paid To are left completely alone here -- the Payment Entry posts against
+// the party's own normal account, same as any other payment. Two Journal Entries move
+// the money into the clearing accounts afterward (see intercompany_payment.py).
 
 frappe.ui.form.on("Payment Entry", {
 	onload(frm) {
-		sync_clearing_account(frm);
 		frm.set_query("azzir_sister_invoice", function () {
 			return {
 				filters: {
@@ -58,25 +44,19 @@ frappe.ui.form.on("Payment Entry", {
 			if (frm.doc[f]) frappe.model.set_value(frm.doctype, frm.docname, f, "");
 		});
 	},
-	company(frm) {
-		sync_clearing_account(frm);
-	},
 	// Switching Receive/Pay changes which invoice field is even relevant.
 	payment_type(frm) {
 		if (!frm.doc.azzir_paid_on_behalf_of_sister) return;
 		["azzir_sister_invoice", "azzir_sister_purchase_invoice"].forEach((f) => {
 			if (frm.doc[f]) frappe.model.set_value(frm.doctype, frm.docname, f, "");
 		});
-		sync_clearing_account(frm);
 	},
 	azzir_paid_on_behalf_of_sister(frm) {
 		if (!frm.doc.azzir_paid_on_behalf_of_sister) {
 			["azzir_sister_company", "azzir_sister_invoice", "azzir_sister_purchase_invoice"].forEach((f) => {
 				frappe.model.set_value(frm.doctype, frm.docname, f, "");
 			});
-			return;
 		}
-		sync_clearing_account(frm);
 	},
 	// Bring the paid/received amount down to match the picked invoice's own
 	// outstanding balance -- the whole point of this invoice is to settle exactly it.
