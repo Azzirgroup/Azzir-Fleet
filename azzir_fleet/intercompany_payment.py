@@ -108,17 +108,19 @@ def before_validate(doc, method=None):
 			"— it is required for 'Paid On Behalf Of Sister Company'."
 		).format(frappe.bold(doc.azzir_sister_company)))
 
-	# A clearing account carrying a Party only passes ERPNext's own validation when its
-	# Account Type is blank (or Receivable/Payable/Equity, which don't make sense here).
-	# "Fixed Asset", "Cash", "Accumulated Depreciation" etc. all look like reasonable
-	# balance-sheet accounts but fail that check with a confusing generic error -- catch
-	# it here with a clear one instead.
-	our_type = frappe.db.get_value("Account", our_clearing, "account_type")
-	if our_type and our_type not in ("Receivable", "Payable", "Equity"):
-		frappe.throw(_(
-			"{0}'s Intercompany Clearing Account ({1}) has Account Type '{2}' set — pick "
-			"a plain Balance Sheet account with NO Account Type instead (Company → Accounts)."
-		).format(frappe.bold(doc.company), frappe.bold(our_clearing), our_type))
+	# Neither clearing row we're about to post ever carries a Party -- it's a plain
+	# intercompany IOU line, not a real customer/supplier balance. ERPNext's own
+	# Journal Entry validation (validate_party) demands a Party on ANY row posted
+	# against a Receivable/Payable-type account, and would otherwise only fail later,
+	# confusingly, when on_submit() creates the settlement JE in the SISTER's books --
+	# check both sides' clearing accounts here, up front, with a clear message.
+	for company, clearing in ((doc.company, our_clearing), (doc.azzir_sister_company, sister_clearing)):
+		acc_type = frappe.db.get_value("Account", clearing, "account_type")
+		if acc_type:
+			frappe.throw(_(
+				"{0}'s Intercompany Clearing Account ({1}) has Account Type '{2}' set — pick "
+				"a plain Balance Sheet account with NO Account Type instead (Company → Accounts)."
+			).format(frappe.bold(company), frappe.bold(clearing), acc_type))
 
 	# Post the cash against the clearing account, not the real party's own ledger in
 	# THIS company — they owe/are-owed nothing here; the real debt is the sister's.
